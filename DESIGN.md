@@ -84,7 +84,7 @@ from `index.ts`.
 
 | Component                                                       | Purpose                                                                     |
 | --------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `AppSidebar`                                                    | Fixed workspace rail: identity, nav map, preference toggles, mobile drawer  |
+| `AppSidebar`                                                    | Fixed workspace rail: identity, nav map, primary navigation, mobile drawer  |
 | `Hero`, `HeroFrame`, `HeroPrimaryAction`, `HeroSecondaryAction` | Centered hero, browser frame, pill actions                                  |
 | `ProductStage`, `ProductDemo`                                   | Orange halo + CSS-only docs workspace                                       |
 | `LogoCloud`, `LogoWordmark`                                     | Masked marquee and text wordmarks                                           |
@@ -128,9 +128,11 @@ The CMS is a fixed left rail plus a scrolling content pane, not a top nav.
   folder contains `astro.config.*`. Selecting or adding one `POST`s to
   `/api/cms/projects` to repoint the project jail, remembers the root in
   `.data/projects.json`, and reloads.
-- **Primary nav** — the same top-level items, with expandable children. Website
-  can list Astro routes; Content can list CMS collections and counts. Both are
-  driven by persisted `localStorage` preferences in `src/hooks/use-ui-prefs.ts`.
+- **Primary nav** — the same top-level items, with expandable children. Pages
+  lists Astro routes with a kind icon (static, dynamic, utility), including
+  `404`/`500` and endpoint routes; Content lists CMS collections with counts.
+  Emails links to the synced email inventory when `src/emails` has templates.
+  Each expandable group keeps its open/closed state for the session.
 - **Rails** — a 264px (`w-sidebar`) fixed rail on `lg`; below that a 48px top bar
   and a slide-in drawer. Content is offset with `lg:pl-sidebar`.
 - **Theme** — the switcher lives in Settings → Appearance. The pre-paint script
@@ -163,22 +165,24 @@ App pages reuse the same language, denser:
 
 - Dashboard: project favicon, name, and git branch only. Screen items and
   design are planned separately.
-- Website: Astro page inventory plus a sticky SEO / page metadata / schema rail.
-- Content: collection cards, recent edits, optional SEO + schema rail, and the
-  CMS tree in the left rail.
+- Pages: Astro page inventory plus a sticky SEO / page metadata / schema rail.
+- Content: collection cards, recent edits, SEO + schema rail, and the CMS tree in
+  the left rail.
 - Assets: image grid with upload, copy-path, and a media proxy.
 - Components: surface gallery, template cards, and the primitive index.
 - Settings: sticky section rail + Cards, Appearance (theme switcher), typed form,
   danger-zone actions.
 - Editor: page header, action toolbar, three-column frontmatter/source/SEO,
-  Monaco themed to the resolved light/dark mode. SEO + schema cards honour the
-  Content rail preference.
+  Monaco themed to the resolved light/dark mode. SEO + schema cards always render.
 
 ## Motion
 
 - **Reveal** — `Reveal` + `.gb-reveal`; 750ms opacity/translate/blur, 70ms
   stagger. One-shot.
 - **Tab crossfade** — `.animate-gb-tab-in`, 420ms.
+- **Sidebar disclosure** — `.gb-accordion`, 500ms grid-track + deblur, 26ms
+  per-child stagger; the row lifts to `sidebar-accent` on hover and
+  `focus-within`, and the chevron leans right before it opens.
 - **Popover** — `.animate-gb-pop`, 220ms.
 - **Marquee** — `.animate-gb-marquee`, 38s linear, pauses on hover.
 - **Marching connectors** — `.dash-march`, 1.6s linear stroke offset.

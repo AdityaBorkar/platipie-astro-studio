@@ -1,12 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Code2Icon,
-	FileTextIcon,
-	GlobeIcon,
-	PanelRightIcon,
-	RefreshCwIcon,
-	SearchIcon,
-} from "lucide-react";
+import { Code2Icon, FileTextIcon, GlobeIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,7 +9,6 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#/components/ui/input-group";
 import { Skeleton } from "#/components/ui/skeleton";
-import { setUiPref, useUiPref } from "#/hooks/use-ui-prefs";
 import { cn } from "#/lib/utils";
 
 interface DbPage {
@@ -51,9 +43,9 @@ interface SettingsResponse {
 	values?: { SITE_URL?: string };
 }
 
-export const Route = createFileRoute("/website")({
-	component: WebsitePage,
-	head: () => ({ meta: [{ title: "Website · platipie-cms" }] }),
+export const Route = createFileRoute("/pages")({
+	component: PagesPage,
+	head: () => ({ meta: [{ title: "Pages · platipie-cms" }] }),
 	validateSearch: (search: Record<string, unknown>) => ({
 		page: typeof search.page === "string" ? search.page : undefined,
 	}),
@@ -74,9 +66,8 @@ function prerenderVariant(prerender: string): "success" | "secondary" | "outline
 	return "outline";
 }
 
-function WebsitePage() {
+function PagesPage() {
 	const search = Route.useSearch();
-	const showMeta = useUiPref("showWebsiteMeta");
 	const [inventory, setInventory] = useState<DbPage[] | null>(null);
 	const [lastSync, setLastSync] = useState<number | null>(null);
 	const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null);
@@ -145,7 +136,7 @@ function WebsitePage() {
 		);
 	}, [pages, query]);
 
-	const selectedPage = pages.find((page) => page.path === selected) ?? pages[0] ?? null;
+	const selectedPage = pages.find((page) => page.route === selected) ?? pages[0] ?? null;
 	const siteUrl = settings?.values?.SITE_URL?.replace(/\/$/u, "") ?? "";
 	const previewUrl = selectedPage ? `${siteUrl}${selectedPage.route}` : siteUrl;
 	const selectedKeywords = selectedPage ? parseList(selectedPage.seoKeywords) : [];
@@ -174,7 +165,7 @@ function WebsitePage() {
 		<div className="mx-auto w-page px-5 py-8 sm:py-10">
 			<div className="animate-rise flex flex-wrap items-end justify-between gap-5">
 				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Website</p>
+					<p className="text-11 font-bold tracking-14 text-brand uppercase">Pages</p>
 					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">
 						Pages, <span className="text-brand">kept in view.</span>
 					</h1>
@@ -202,18 +193,15 @@ function WebsitePage() {
 				<Badge className="font-mono" variant={lastSync ? "success" : "destructive"}>
 					{lastSync ? `synced ${new Date(lastSync).toLocaleString()}` : "never synced"}
 				</Badge>
-				<Badge variant={showMeta ? "brand" : "outline"}>
-					Metadata rail {showMeta ? "on" : "off"}
-				</Badge>
 			</div>
 
 			{error ? (
-				<Hint title="Failed to load the website" variant="danger">
+				<Hint title="Failed to load pages" variant="danger">
 					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
 				</Hint>
 			) : null}
 
-			<div className={cn("mt-6 grid items-start gap-4", showMeta && "lg:grid-cols-app-rail")}>
+			<div className="mt-6 grid items-start gap-4 lg:grid-cols-app-rail">
 				<Card className="overflow-hidden">
 					<CardHeader className="gap-3">
 						<div className="flex flex-wrap items-center justify-between gap-2">
@@ -255,10 +243,10 @@ function WebsitePage() {
 										<Link
 											className={cn(
 												"flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60",
-												selectedPage?.path === page.path && "bg-muted/60",
+												selectedPage?.route === page.route && "bg-muted/60",
 											)}
-											search={{ page: page.path }}
-											to="/website"
+											search={{ page: page.route }}
+											to="/pages"
 										>
 											<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
 												<GlobeIcon className="size-4" />
@@ -287,127 +275,110 @@ function WebsitePage() {
 					</CardContent>
 				</Card>
 
-				{showMeta ? (
-					<aside className="grid content-start gap-3 lg:sticky lg:top-6">
-						{selectedPage ? (
-							<>
-								<Card>
-									<CardHeader>
-										<CardTitle className="flex items-center gap-2">
-											<SearchIcon className="size-4 text-brand" />
-											SEO
-										</CardTitle>
-										<CardDescription>{selectedPage.route}</CardDescription>
-									</CardHeader>
-									<CardContent className="grid gap-2">
-										<Badge
-											className="w-fit font-mono"
-											variant={selectedPage.seoTitle ? "success" : "destructive"}
-										>
-											{selectedPage.seoTitle ?? "no title parsed"}
+				<aside className="grid content-start gap-3 lg:sticky lg:top-6">
+					{selectedPage ? (
+						<>
+							<Card>
+								<CardHeader>
+									<CardTitle className="flex items-center gap-2">
+										<SearchIcon className="size-4 text-brand" />
+										SEO
+									</CardTitle>
+									<CardDescription>{selectedPage.route}</CardDescription>
+								</CardHeader>
+								<CardContent className="grid gap-2">
+									<Badge
+										className="w-fit font-mono"
+										variant={selectedPage.seoTitle ? "success" : "destructive"}
+									>
+										{selectedPage.seoTitle ?? "no title parsed"}
+									</Badge>
+									<p className="text-xs text-muted-foreground">
+										{selectedPage.seoDescription ?? "No description const parsed from the page."}
+									</p>
+									{selectedKeywords.length > 0 ? (
+										<div className="flex flex-wrap gap-1">
+											{selectedKeywords.slice(0, 12).map((keyword) => (
+												<Badge className="font-mono" key={keyword} variant="outline">
+													{keyword}
+												</Badge>
+											))}
+										</div>
+									) : null}
+									<p className="font-mono text-11 break-all text-muted-foreground">
+										{previewUrl || "Set SITE_URL in Settings to preview the canonical URL."}
+									</p>
+								</CardContent>
+							</Card>
+
+							<Card>
+								<CardHeader>
+									<CardTitle className="flex items-center gap-2">
+										<FileTextIcon className="size-4 text-brand" />
+										Page metadata
+									</CardTitle>
+								</CardHeader>
+								<CardContent className="grid gap-1.5 text-xs">
+									<div className="flex items-center justify-between gap-2">
+										<span className="text-muted-foreground">Route</span>
+										<span className="font-mono">{selectedPage.route}</span>
+									</div>
+									<div className="flex items-center justify-between gap-2">
+										<span className="text-muted-foreground">Source</span>
+										<span className="truncate font-mono">{selectedPage.path}</span>
+									</div>
+									<div className="flex items-center justify-between gap-2">
+										<span className="text-muted-foreground">Type</span>
+										<Badge className="font-mono" variant="outline">
+											{selectedPage.type}
 										</Badge>
+									</div>
+									<div className="flex items-center justify-between gap-2">
+										<span className="text-muted-foreground">Prerender</span>
+										<Badge className="font-mono" variant={prerenderVariant(selectedPage.prerender)}>
+											{selectedPage.prerender}
+										</Badge>
+									</div>
+									<div className="flex items-center justify-between gap-2">
+										<span className="text-muted-foreground">Updated</span>
+										<span className="font-mono">
+											{new Date(selectedPage.mtime).toLocaleDateString()}
+										</span>
+									</div>
+								</CardContent>
+							</Card>
+
+							<Card>
+								<CardHeader>
+									<CardTitle className="flex items-center gap-2">
+										<Code2Icon className="size-4 text-brand" />
+										Schema markup
+									</CardTitle>
+									<CardDescription>Types referenced by this page.</CardDescription>
+								</CardHeader>
+								<CardContent>
+									{selectedSchema.length === 0 ? (
 										<p className="text-xs text-muted-foreground">
-											{selectedPage.seoDescription ?? "No description const parsed from the page."}
+											No <code>SchemaMarkup</code> references parsed.
 										</p>
-										{selectedKeywords.length > 0 ? (
-											<div className="flex flex-wrap gap-1">
-												{selectedKeywords.slice(0, 12).map((keyword) => (
-													<Badge className="font-mono" key={keyword} variant="outline">
-														{keyword}
-													</Badge>
-												))}
-											</div>
-										) : null}
-										<p className="font-mono text-11 break-all text-muted-foreground">
-											{previewUrl || "Set SITE_URL in Settings to preview the canonical URL."}
-										</p>
-									</CardContent>
-								</Card>
-
-								<Card>
-									<CardHeader>
-										<CardTitle className="flex items-center gap-2">
-											<FileTextIcon className="size-4 text-brand" />
-											Page metadata
-										</CardTitle>
-									</CardHeader>
-									<CardContent className="grid gap-1.5 text-xs">
-										<div className="flex items-center justify-between gap-2">
-											<span className="text-muted-foreground">Route</span>
-											<span className="font-mono">{selectedPage.route}</span>
+									) : (
+										<div className="flex flex-wrap gap-1">
+											{selectedSchema.map((type) => (
+												<Badge className="font-mono" key={type} variant="outline">
+													{type}
+												</Badge>
+											))}
 										</div>
-										<div className="flex items-center justify-between gap-2">
-											<span className="text-muted-foreground">Source</span>
-											<span className="truncate font-mono">{selectedPage.path}</span>
-										</div>
-										<div className="flex items-center justify-between gap-2">
-											<span className="text-muted-foreground">Type</span>
-											<Badge className="font-mono" variant="outline">
-												{selectedPage.type}
-											</Badge>
-										</div>
-										<div className="flex items-center justify-between gap-2">
-											<span className="text-muted-foreground">Prerender</span>
-											<Badge
-												className="font-mono"
-												variant={prerenderVariant(selectedPage.prerender)}
-											>
-												{selectedPage.prerender}
-											</Badge>
-										</div>
-										<div className="flex items-center justify-between gap-2">
-											<span className="text-muted-foreground">Updated</span>
-											<span className="font-mono">
-												{new Date(selectedPage.mtime).toLocaleDateString()}
-											</span>
-										</div>
-									</CardContent>
-								</Card>
-
-								<Card>
-									<CardHeader>
-										<CardTitle className="flex items-center gap-2">
-											<Code2Icon className="size-4 text-brand" />
-											Schema markup
-										</CardTitle>
-										<CardDescription>Types referenced by this page.</CardDescription>
-									</CardHeader>
-									<CardContent>
-										{selectedSchema.length === 0 ? (
-											<p className="text-xs text-muted-foreground">
-												No <code>SchemaMarkup</code> references parsed.
-											</p>
-										) : (
-											<div className="flex flex-wrap gap-1">
-												{selectedSchema.map((type) => (
-													<Badge className="font-mono" key={type} variant="outline">
-														{type}
-													</Badge>
-												))}
-											</div>
-										)}
-									</CardContent>
-								</Card>
-							</>
-						) : (
-							<Hint title="No page selected" variant="info">
-								Pick a page from the list to inspect its metadata.
-							</Hint>
-						)}
-
-						<Hint title="Rail toggle" variant="warning">
-							<button
-								className="inline-flex items-center gap-1 font-semibold text-brand"
-								onClick={() => setUiPref("showWebsiteMeta", false)}
-								type="button"
-							>
-								<PanelRightIcon className="size-3" />
-								Hide this rail
-							</button>{" "}
-							from Website → Show SEO / Page Metadata / Schema Markup.
+									)}
+								</CardContent>
+							</Card>
+						</>
+					) : (
+						<Hint title="No page selected" variant="info">
+							Pick a page from the list to inspect its metadata.
 						</Hint>
-					</aside>
-				) : null}
+					)}
+				</aside>
 			</div>
 		</div>
 	);

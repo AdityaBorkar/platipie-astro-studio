@@ -48,7 +48,6 @@ import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import { useTheme } from "#/hooks/use-theme";
-import { useUiPref } from "#/hooks/use-ui-prefs";
 
 export const Route = createFileRoute("/edit/$collection/$id")({
 	component: UnifiedEditor,
@@ -114,7 +113,6 @@ function useQueryPath(): string {
 function UnifiedEditor() {
 	const filePath = useQueryPath();
 	const { resolved } = useTheme();
-	const showContentSeo = useUiPref("showContentSeo");
 	const [loaded, setLoaded] = useState<Loaded | null>(null);
 	const [fm, setFm] = useState<Record<string, unknown>>({});
 	const [body, setBody] = useState("");
@@ -593,51 +591,47 @@ function UnifiedEditor() {
 								</Card>
 							)}
 						</div>
-						{showContentSeo ? (
-							<>
-								<Card>
-									<CardHeader>
-										<CardTitle>SEO assistant</CardTitle>
-									</CardHeader>
-									<CardContent>
-										<SeoPane
-											aiBusy={aiBusy}
-											body={body}
-											fm={fm}
-											seo={seo}
-											setAiBusy={setAiBusy}
-											setAiDraft={setAiDraft}
-											setFm={setFm}
-										/>
-									</CardContent>
-								</Card>
-								<Card>
-									<CardHeader>
-										<CardTitle>Schema markup</CardTitle>
-										<CardDescription>
-											{String(fm.schemaType ?? "No schemaType selected")}
-										</CardDescription>
-									</CardHeader>
-									<CardContent>
-										<pre className="code-surface p-3 font-mono text-10 whitespace-pre-wrap">
-											{JSON.stringify(
-												{
-													"@context": "https://schema.org",
-													"@type": String(fm.schemaType ?? "WebPage"),
-													...(typeof fm.schemaFields === "object" &&
-													fm.schemaFields !== null &&
-													!Array.isArray(fm.schemaFields)
-														? (fm.schemaFields as Record<string, unknown>)
-														: {}),
-												},
-												null,
-												2,
-											)}
-										</pre>
-									</CardContent>
-								</Card>
-							</>
-						) : null}
+						<Card>
+							<CardHeader>
+								<CardTitle>SEO assistant</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<SeoPane
+									aiBusy={aiBusy}
+									body={body}
+									fm={fm}
+									seo={seo}
+									setAiBusy={setAiBusy}
+									setAiDraft={setAiDraft}
+									setFm={setFm}
+								/>
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader>
+								<CardTitle>Schema markup</CardTitle>
+								<CardDescription>
+									{String(fm.schemaType ?? "No schemaType selected")}
+								</CardDescription>
+							</CardHeader>
+							<CardContent>
+								<pre className="code-surface p-3 font-mono text-10 whitespace-pre-wrap">
+									{JSON.stringify(
+										{
+											"@context": "https://schema.org",
+											"@type": String(fm.schemaType ?? "WebPage"),
+											...(typeof fm.schemaFields === "object" &&
+											fm.schemaFields !== null &&
+											!Array.isArray(fm.schemaFields)
+												? (fm.schemaFields as Record<string, unknown>)
+												: {}),
+										},
+										null,
+										2,
+									)}
+								</pre>
+							</CardContent>
+						</Card>
 					</div>
 				)}
 
@@ -1053,7 +1047,7 @@ function SeoPane({ seo, fm, setFm, setAiDraft, setAiBusy, aiBusy, body }: any) {
 				))}
 			</ul>
 			<details>
-				<summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
+				<summary className="text-xs font-medium text-muted-foreground hover:text-foreground">
 					JSON-LD preview
 				</summary>
 				<pre className="code-surface mt-2 max-h-45dvh overflow-auto p-3 font-mono text-xs">

@@ -12,10 +12,10 @@ bun run dev    # vite dev on 127.0.0.1:4000
 bun run build && bun run start
 ```
 
-- Fixed app rail: project + branch, nav map, expandable Website/Design/Components/Content groups, and persisted display toggles.
+- Fixed app rail: project + branch, nav map, expandable Pages/Content/Components/Design groups, and an Emails link when `src/emails` has templates.
 - Dashboard: `/` — 7 collection cards, counts, search, `New`, recent-edits, drift warnings.
-- Website: `/website` — Astro page inventory with optional SEO / metadata / schema rail.
-- Content: `/content` — collections, recent edits, optional SEO + schema rail.
+- Pages: `/pages?page=<route>` — Astro page inventory with optional SEO / metadata / schema rail.
+- Content: `/content` — collections, recent edits, SEO + schema rail.
 - Components: `/components` — surface gallery, templates, and the UI primitive index.
 - Assets: `/assets` — image library with upload, copy-path, and preview proxy.
 - Unified editor: `/edit/:collection/:id?path=<repo-rel>` — Markdown ⇄ Visual, frontmatter form, local + faithful previews, SEO + schema sidebar, one save pipeline.

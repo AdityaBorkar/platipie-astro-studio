@@ -461,7 +461,7 @@ function schemaTypesValue(text: string): string[] {
 /**
  * Pages under `<root>/src/pages` with SEO metadata + prerender settings.
  * Unlike the sidebar inventory, private `_` files and API routes are kept
- * and flagged so the Website page can show the full picture.
+ * and flagged so the Pages route can show the full picture.
  */
 export async function scanPages(projectRoot: string): Promise<PageScan[]> {
 	const entries: WalkEntry[] = [];

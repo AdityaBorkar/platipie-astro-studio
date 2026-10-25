@@ -5,6 +5,7 @@ import {
 	ArrowRightLeftIcon,
 	BlocksIcon,
 	BotIcon,
+	ChevronRightIcon,
 	CommandIcon,
 	GitBranchIcon,
 	GitPullRequestIcon,
@@ -20,6 +21,7 @@ import {
 	ZapIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import {
 	AgentNetworkArt,
@@ -787,12 +789,15 @@ function MotionSection() {
 				title="Spring ease, one-shot reveals, marching details"
 			/>
 
-			<div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			<div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
 				<MotionCard label="Reveal" note="750ms · translate + blur">
 					<div className="animate-gb-float rounded-xl border border-border bg-card p-4 shadow-soft">
 						<p className="text-xs font-bold">Resolves into place</p>
 						<p className="mt-1 text-10 text-muted-foreground">fade · rise · deblur</p>
 					</div>
+				</MotionCard>
+				<MotionCard label="Disclosure" note="500ms · track + deblur">
+					<DisclosureDemo />
 				</MotionCard>
 				<MotionCard label="Marching dash" note="1.6s · linear loop">
 					<svg className="h-20 w-full" viewBox="0 0 200 80">
@@ -984,6 +989,42 @@ function Panel({
 				<BrandMark className="size-4 text-muted-foreground" title="" />
 			</div>
 			{children}
+		</div>
+	);
+}
+
+function DisclosureDemo() {
+	const [open, setOpen] = useState(true);
+	return (
+		<div className="w-full max-w-52">
+			<button
+				aria-expanded={open}
+				className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-11 font-semibold text-muted-foreground transition-gb hover:bg-sidebar-accent hover:text-foreground"
+				onClick={() => setOpen((value) => !value)}
+				type="button"
+			>
+				<LayersIcon className="size-3.5 shrink-0" />
+				<span className="flex-1 truncate">Product</span>
+				<ChevronRightIcon
+					className={`size-3.5 shrink-0 transition-transform duration-300 ${open ? "rotate-90" : ""}`}
+				/>
+			</button>
+			<div
+				aria-hidden={open ? undefined : true}
+				className="gb-accordion"
+				data-open={open}
+				inert={!open}
+			>
+				<div className="min-h-0 overflow-hidden">
+					<ul className="gb-accordion-body gb-accordion-list mt-0.5 ml-3 grid gap-0.5 border-l border-sidebar-border pl-2">
+						{["Overview", "Changelog", "Roadmap"].map((label) => (
+							<li className="rounded-md px-2 py-1 text-10 text-muted-foreground" key={label}>
+								{label}
+							</li>
+						))}
+					</ul>
+				</div>
+			</div>
 		</div>
 	);
 }

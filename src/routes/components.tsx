@@ -4,8 +4,8 @@ import {
 	ArrowRightIcon,
 	BlocksIcon,
 	DatabaseIcon,
+	FileStackIcon,
 	FileTextIcon,
-	GlobeIcon,
 	LayoutDashboardIcon,
 	PaletteIcon,
 	RefreshCwIcon,
@@ -47,9 +47,9 @@ const templates = [
 	},
 	{
 		description: "Astro routes with optional metadata and schema rail.",
-		href: "/website",
-		icon: GlobeIcon,
-		label: "Website",
+		href: "/pages",
+		icon: FileStackIcon,
+		label: "Pages",
 	},
 	{
 		description: "Collections, entries, and optional SEO rail.",
@@ -152,6 +152,12 @@ function SyncedInventorySection() {
 		};
 	}, []);
 
+	useEffect(() => {
+		if (inventory === null) return;
+		const target = window.location.hash.slice(1);
+		if (target) document.querySelector(`#${target}`)?.scrollIntoView({ block: "start" });
+	}, [inventory]);
+
 	async function resync() {
 		setSyncing(true);
 		try {
@@ -200,7 +206,7 @@ function SyncedInventorySection() {
 					const files = inventory?.rows[group.scope] ?? [];
 					const synced = lastSyncFor(inventory?.status ?? [], group.scope);
 					return (
-						<Card key={group.scope}>
+						<Card className="scroll-mt-24" id={group.scope} key={group.scope}>
 							<CardHeader>
 								<div className="flex flex-wrap items-center justify-between gap-2">
 									<div>

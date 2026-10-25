@@ -26,8 +26,6 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table";
-import { useUiPref } from "#/hooks/use-ui-prefs";
-import { cn } from "#/lib/utils";
 
 interface CollectionSummary {
 	count: number;
@@ -79,7 +77,6 @@ export const Route = createFileRoute("/content")({
 });
 
 function ContentPage() {
-	const showSeo = useUiPref("showContentSeo");
 	const [data, setData] = useState<CollectionsResponse | null>(null);
 	const [model, setModel] = useState<DbCollection[] | null>(null);
 	const [modelSync, setModelSync] = useState<number | null>(null);
@@ -177,7 +174,6 @@ function ContentPage() {
 				<Badge variant={(data?.drift.length ?? 0) > 0 ? "brand" : "success"}>
 					{data?.drift.length ?? 0} drift signals
 				</Badge>
-				<Badge variant={showSeo ? "brand" : "outline"}>SEO rail {showSeo ? "on" : "off"}</Badge>
 			</div>
 
 			{error ? (
@@ -186,7 +182,7 @@ function ContentPage() {
 				</Hint>
 			) : null}
 
-			<div className={cn("mt-6 grid items-start gap-4", showSeo && "lg:grid-cols-app-rail")}>
+			<div className="mt-6 grid items-start gap-4 lg:grid-cols-app-rail">
 				<div className="grid min-w-0 gap-4">
 					<Card>
 						<CardHeader>
@@ -359,79 +355,68 @@ function ContentPage() {
 					</Card>
 				</div>
 
-				{showSeo ? (
-					<aside className="grid content-start gap-3 lg:sticky lg:top-6">
-						<Card>
-							<CardHeader>
-								<CardTitle className="flex items-center gap-2">
-									<SearchIcon className="size-4 text-brand" />
-									SEO
-								</CardTitle>
-								<CardDescription>Workspace-level signals.</CardDescription>
-							</CardHeader>
-							<CardContent className="grid gap-2">
-								<Badge className="w-fit font-mono" variant="outline">
-									ASTRO_URL {data?.env.astroUrl ?? "unset"}
-								</Badge>
-								<Badge className="w-fit" variant={data?.env.aiEnabled ? "brand" : "secondary"}>
-									<SparklesIcon className="size-3" />
-									AI {data?.env.aiEnabled ? "on · BYOK" : "off · heuristics"}
-								</Badge>
-								<p className="text-xs text-muted-foreground">
-									Open any entry to see title, description, keyword, and readability checks in the
-									editor&apos;s right rail.
-								</p>
-							</CardContent>
-						</Card>
+				<aside className="grid content-start gap-3 lg:sticky lg:top-6">
+					<Card>
+						<CardHeader>
+							<CardTitle className="flex items-center gap-2">
+								<SearchIcon className="size-4 text-brand" />
+								SEO
+							</CardTitle>
+							<CardDescription>Workspace-level signals.</CardDescription>
+						</CardHeader>
+						<CardContent className="grid gap-2">
+							<Badge className="w-fit font-mono" variant="outline">
+								ASTRO_URL {data?.env.astroUrl ?? "unset"}
+							</Badge>
+							<Badge className="w-fit" variant={data?.env.aiEnabled ? "brand" : "secondary"}>
+								<SparklesIcon className="size-3" />
+								AI {data?.env.aiEnabled ? "on · BYOK" : "off · heuristics"}
+							</Badge>
+							<p className="text-xs text-muted-foreground">
+								Open any entry to see title, description, keyword, and readability checks in the
+								editor&apos;s right rail.
+							</p>
+						</CardContent>
+					</Card>
 
-						<Card>
-							<CardHeader>
-								<CardTitle className="flex items-center gap-2">
-									<Code2Icon className="size-4 text-brand" />
-									Schema markup
-								</CardTitle>
-								<CardDescription>Types accepted by the editor.</CardDescription>
-							</CardHeader>
-							<CardContent className="flex flex-wrap gap-1">
-								{[
-									"BlogPosting",
-									"Article",
-									"HowTo",
-									"WebPage",
-									"SoftwareApplication",
-									"Review",
-								].map((type) => (
+					<Card>
+						<CardHeader>
+							<CardTitle className="flex items-center gap-2">
+								<Code2Icon className="size-4 text-brand" />
+								Schema markup
+							</CardTitle>
+							<CardDescription>Types accepted by the editor.</CardDescription>
+						</CardHeader>
+						<CardContent className="flex flex-wrap gap-1">
+							{["BlogPosting", "Article", "HowTo", "WebPage", "SoftwareApplication", "Review"].map(
+								(type) => (
 									<Badge className="font-mono" key={type} variant="outline">
 										{type}
 									</Badge>
+								),
+							)}
+						</CardContent>
+					</Card>
+
+					{data && data.drift.length > 0 ? (
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<TriangleAlertIcon className="size-4 text-brand" />
+									Drift
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="grid gap-2">
+								{data.drift.slice(0, 4).map((signal) => (
+									<div key={signal.code}>
+										<p className="font-mono text-10 font-semibold">{signal.code}</p>
+										<p className="text-xs text-muted-foreground">{signal.message}</p>
+									</div>
 								))}
 							</CardContent>
 						</Card>
-
-						{data && data.drift.length > 0 ? (
-							<Card>
-								<CardHeader>
-									<CardTitle className="flex items-center gap-2">
-										<TriangleAlertIcon className="size-4 text-brand" />
-										Drift
-									</CardTitle>
-								</CardHeader>
-								<CardContent className="grid gap-2">
-									{data.drift.slice(0, 4).map((signal) => (
-										<div key={signal.code}>
-											<p className="font-mono text-10 font-semibold">{signal.code}</p>
-											<p className="text-xs text-muted-foreground">{signal.message}</p>
-										</div>
-									))}
-								</CardContent>
-							</Card>
-						) : null}
-
-						<Hint title="Content rail" variant="info">
-							Toggle this rail from Content → Show SEO + Schema Markup in the sidebar menu.
-						</Hint>
-					</aside>
-				) : null}
+					) : null}
+				</aside>
 			</div>
 
 			<Card className="mt-6">

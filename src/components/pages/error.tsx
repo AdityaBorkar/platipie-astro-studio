@@ -34,7 +34,7 @@ export function ErrorPage({ error, reset }: { error: unknown; reset: () => void 
 					</p>
 					{stack ? (
 						<details className="mt-4 text-left">
-							<summary className="cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground">
+							<summary className="text-xs font-semibold text-muted-foreground hover:text-foreground">
 								Stack trace
 							</summary>
 							<pre className="code-surface mt-2 max-h-48 overflow-auto p-3 font-mono text-11 leading-relaxed">

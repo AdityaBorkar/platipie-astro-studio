@@ -7,22 +7,26 @@ import {
 	ChevronRightIcon,
 	ChevronsUpDownIcon,
 	DatabaseIcon,
+	FileCogIcon,
+	FileIcon,
+	FileStackIcon,
 	FileTextIcon,
 	FolderIcon,
 	FolderPlusIcon,
 	GitBranchIcon,
-	GlobeIcon,
 	HomeIcon,
 	ImageIcon,
 	LayoutDashboardIcon,
 	LayoutGridIcon,
 	ListIcon,
+	MailIcon,
 	MenuIcon,
 	PaletteIcon,
 	SearchIcon,
 	Settings2Icon,
 	ShapesIcon,
 	XIcon,
+	ZapIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -39,8 +43,6 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import { setUiPref, useUiPref, useUiPrefs } from "#/hooks/use-ui-prefs";
-import type { UiPrefKey } from "#/hooks/use-ui-prefs";
 import { cn } from "#/lib/utils";
 import { BrandMark } from "./brand";
 
@@ -52,8 +54,9 @@ interface ShellLink {
 
 interface WorkspacePayload {
 	branch: string;
+	emailCount: number;
 	pages: {
-		dynamic: boolean;
+		kind: "dynamic" | "static" | "utility";
 		path: string;
 		route: string;
 		title: string;
@@ -84,11 +87,7 @@ function overallLastSync(status: SyncScopeStatus[] | null): number | null {
 }
 
 const designLinks: ShellLink[] = [
-	{
-		description: "Overview of tokens, components, and patterns",
-		href: "/design",
-		label: "Design System",
-	},
+	{ href: "/design", label: "Design System" },
 	{ href: "/design#brand", label: "Brand Guidelines" },
 	{ href: "/design#style", label: "Style Guide" },
 	{ href: "/design#languages", label: "Design Languages" },
@@ -121,10 +120,9 @@ function useWorkspace() {
 	return workspace;
 }
 
-function useCollections(enabled: boolean) {
+function useCollections() {
 	const [collections, setCollections] = useState<CollectionSummary[]>([]);
 	useEffect(() => {
-		if (!enabled) return;
 		let alive = true;
 		fetch("/api/cms/collections")
 			.then((response) => response.json())
@@ -135,7 +133,7 @@ function useCollections(enabled: boolean) {
 		return () => {
 			alive = false;
 		};
-	}, [enabled]);
+	}, []);
 	return collections;
 }
 
@@ -191,11 +189,15 @@ function useSyncStatus() {
 }
 
 function AppLink({
+	"aria-controls": ariaControls,
+	"aria-expanded": ariaExpanded,
 	children,
 	className,
 	href,
 	onClick,
 }: {
+	"aria-controls"?: string;
+	"aria-expanded"?: boolean;
 	children: ReactNode;
 	className?: string;
 	href: string;
@@ -206,13 +208,26 @@ function AppLink({
 		const hash = href.slice(hashAt + 1);
 		const to = href.slice(0, hashAt) || "/dashboard";
 		return (
-			<Link className={className} hash={hash} onClick={onClick} to={to as LinkProps["to"]}>
+			<Link
+				aria-controls={ariaControls}
+				aria-expanded={ariaExpanded}
+				className={className}
+				hash={hash}
+				onClick={onClick}
+				to={to as LinkProps["to"]}
+			>
 				{children}
 			</Link>
 		);
 	}
 	return (
-		<Link className={className} onClick={onClick} to={href as LinkProps["to"]}>
+		<Link
+			aria-controls={ariaControls}
+			aria-expanded={ariaExpanded}
+			className={className}
+			onClick={onClick}
+			to={href as LinkProps["to"]}
+		>
 			{children}
 		</Link>
 	);
@@ -277,19 +292,21 @@ function SidebarChildLink({
 	description,
 	href,
 	label,
+	meta,
 	onClick,
 }: {
 	active: boolean;
 	description?: string;
 	href: string;
 	label: string;
+	meta?: number;
 	onClick?: () => void;
 }) {
 	return (
 		<li>
 			<AppLink
 				className={cn(
-					"block rounded-md px-2 py-1 text-12 transition-colors",
+					"flex items-center gap-2 rounded-md px-2 py-1 text-12 transition-colors",
 					active
 						? "bg-sidebar-accent font-semibold text-foreground"
 						: "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
@@ -297,39 +314,60 @@ function SidebarChildLink({
 				href={href}
 				onClick={onClick}
 			>
-				<span className="block truncate">{label}</span>
-				{description ? (
-					<span className="mt-0.5 block text-10 leading-snug text-muted-foreground">
-						{description}
-					</span>
-				) : null}
+				<span className="min-w-0 flex-1">
+					<span className="block truncate">{label}</span>
+					{description ? (
+						<span className="mt-0.5 block text-10 leading-snug text-muted-foreground">
+							{description}
+						</span>
+					) : null}
+				</span>
+				{meta === undefined ? null : (
+					<span className="shrink-0 font-mono text-10 text-muted-foreground">{meta}</span>
+				)}
 			</AppLink>
 		</li>
 	);
 }
 
-function SidebarToggle({ label, pref }: { label: string; pref: UiPrefKey }) {
-	const enabled = useUiPref(pref);
+const pageKindMeta = {
+	dynamic: { icon: ZapIcon, label: "Dynamic page" },
+	static: { icon: FileIcon, label: "Static page" },
+	utility: { icon: FileCogIcon, label: "Utility route" },
+} satisfies Record<
+	WorkspacePayload["pages"][number]["kind"],
+	{ icon: typeof FileIcon; label: string }
+>;
+
+const pageKindOrder = { dynamic: 1, static: 0, utility: 2 } satisfies Record<
+	WorkspacePayload["pages"][number]["kind"],
+	number
+>;
+
+function SidebarPageLink({
+	page,
+	onClick,
+}: {
+	onClick?: () => void;
+	page: WorkspacePayload["pages"][number];
+}) {
+	const { icon: Icon, label } = pageKindMeta[page.kind];
 	return (
 		<li>
-			<button
-				aria-checked={enabled}
-				className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
-				onClick={() => setUiPref(pref, !enabled)}
-				role="switch"
-				type="button"
+			<Link
+				aria-label={`${page.route} — ${label}`}
+				className="flex items-center gap-2 rounded-md px-2 py-1 text-12 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+				onClick={onClick}
+				search={{ page: page.route }}
+				title={`${label} · ${page.title}`}
+				to="/pages"
 			>
-				<span
+				<Icon
 					aria-hidden="true"
-					className={cn(
-						"mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded border",
-						enabled ? "border-brand bg-brand text-brand-foreground" : "border-input bg-background",
-					)}
-				>
-					{enabled ? <CheckIcon className="size-3" /> : null}
-				</span>
-				<span className="block text-12 leading-snug font-medium text-foreground">{label}</span>
-			</button>
+					className={cn("size-3.5 shrink-0", page.kind === "dynamic" && "text-brand")}
+				/>
+				<span className="truncate font-mono">{page.route}</span>
+			</Link>
 		</li>
 	);
 }
@@ -357,41 +395,44 @@ function SidebarGroup({
 }) {
 	return (
 		<li>
-			<div className={cn("flex items-center gap-0.5 rounded-lg", active && "bg-sidebar-accent")}>
-				<AppLink
+			<AppLink
+				aria-controls={`sidebar-${id}`}
+				aria-expanded={expanded}
+				className={cn(
+					"group/row flex items-center gap-2 rounded-lg px-2 py-1.5 text-13 font-semibold transition-gb hover:bg-sidebar-accent focus-visible:bg-sidebar-accent",
+					active
+						? "bg-sidebar-accent text-sidebar-accent-foreground"
+						: "text-muted-foreground hover:text-foreground focus-visible:text-foreground",
+				)}
+				href={href}
+				onClick={() => {
+					onClick?.();
+					onToggle();
+				}}
+			>
+				<Icon className="size-4 shrink-0" />
+				<span className="min-w-0 flex-1 truncate">{label}</span>
+				<ChevronRightIcon
+					aria-hidden="true"
 					className={cn(
-						"flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-13 font-semibold transition-colors",
-						active
-							? "text-sidebar-accent-foreground"
-							: "text-muted-foreground hover:text-foreground",
+						"size-3.5 shrink-0 transition-transform duration-300",
+						expanded ? "rotate-90" : "group-hover/row:translate-x-0.5",
 					)}
-					href={href}
-					onClick={onClick}
-				>
-					<Icon className="size-4 shrink-0" />
-					<span className="truncate">{label}</span>
-				</AppLink>
-				<button
-					aria-controls={`sidebar-${id}`}
-					aria-expanded={expanded}
-					aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
-					className="mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
-					onClick={onToggle}
-					type="button"
-				>
-					<ChevronRightIcon
-						className={cn("size-3.5 transition-transform", expanded && "rotate-90")}
-					/>
-				</button>
+				/>
+			</AppLink>
+			<div
+				aria-hidden={expanded ? undefined : true}
+				className="gb-accordion"
+				data-open={expanded}
+				id={`sidebar-${id}`}
+				inert={!expanded}
+			>
+				<div className="min-h-0 overflow-hidden">
+					<ul className="gb-accordion-body gb-accordion-list mt-0.5 ml-3 grid gap-0.5 border-l border-sidebar-border pl-2">
+						{children}
+					</ul>
+				</div>
 			</div>
-			{expanded ? (
-				<ul
-					className="mt-0.5 ml-3 grid gap-0.5 border-l border-sidebar-border pl-2"
-					id={`sidebar-${id}`}
-				>
-					{children}
-				</ul>
-			) : null}
 		</li>
 	);
 }
@@ -616,6 +657,10 @@ function WorkspaceMenu({
 										<LayoutGridIcon className="size-3.5" />
 									</button>
 								</div>
+								<Button className="shrink-0" onClick={startBrowse} size="sm" variant="brand">
+									<FolderPlusIcon />
+									Add project
+								</Button>
 							</div>
 
 							<div className="max-h-58vh min-h-40 overflow-y-auto pr-0.5">
@@ -742,16 +787,6 @@ function WorkspaceMenu({
 									</ul>
 								)}
 							</div>
-
-							<DialogFooter className="items-center gap-2">
-								<p className="min-w-0 flex-1 text-11 text-muted-foreground">
-									Only Astro projects are listed.
-								</p>
-								<Button onClick={startBrowse} size="sm" variant="outline">
-									<FolderPlusIcon />
-									Add project
-								</Button>
-							</DialogFooter>
 						</>
 					) : (
 						<>
@@ -906,8 +941,10 @@ function SidebarNav({
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
 	const hash = useHash();
 	const activeHref = `${pathname}${hash}`;
-	const prefs = useUiPrefs();
 	const [groups, setGroups] = useState<Record<string, boolean>>({});
+	const pages = (workspace?.pages ?? []).toSorted(
+		(a, b) => pageKindOrder[a.kind] - pageKindOrder[b.kind] || a.route.localeCompare(b.route),
+	);
 
 	function expanded(id: string, active: boolean) {
 		return groups[id] ?? active;
@@ -928,71 +965,67 @@ function SidebarNav({
 			/>
 
 			<SidebarGroup
-				active={pathname === "/website"}
-				expanded={expanded("website", pathname === "/website")}
-				href="/website"
-				icon={GlobeIcon}
-				id="website"
-				label="Website"
+				active={pathname === "/pages"}
+				expanded={expanded("pages", pathname === "/pages")}
+				href="/pages"
+				icon={FileStackIcon}
+				id="pages"
+				label="Pages"
 				onClick={onNavigate}
-				onToggle={() => toggleGroup("website", expanded("website", pathname === "/website"))}
+				onToggle={() => toggleGroup("pages", expanded("pages", pathname === "/pages"))}
 			>
-				<SidebarToggle label="Show pages in sidebar" pref="showPagesInSidebar" />
-				<SidebarToggle
-					label="Show SEO / Page Metadata / Schema Markup in right sidebar"
-					pref="showWebsiteMeta"
-				/>
-				{prefs.showPagesInSidebar && workspace?.pages.length ? (
-					<li className="mt-1 border-t border-sidebar-border pt-1">
-						<p className="px-2 pb-0.5 text-9 font-bold tracking-12 text-muted-foreground uppercase">
-							Pages
-						</p>
-						<ul className="grid gap-0.5">
-							{workspace.pages.map((page) => (
-								<li key={page.path}>
-									<Link
-										className={cn(
-											"flex items-center gap-1.5 rounded-md px-2 py-1 text-11 transition-colors",
-											"text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
-										)}
-										onClick={onNavigate}
-										search={{ page: page.path }}
-										to="/website"
-									>
-										<FileTextIcon className="size-3 shrink-0" />
-										<span className="truncate font-mono">{page.route}</span>
-										{page.dynamic ? (
-											<span className="ml-auto rounded bg-muted px-1 font-mono text-9">dyn</span>
-										) : null}
-									</Link>
-								</li>
-							))}
-						</ul>
-					</li>
-				) : null}
+				{pages.map((page) => (
+					<SidebarPageLink key={page.path} onClick={onNavigate} page={page} />
+				))}
 			</SidebarGroup>
 
+			{workspace?.emailCount ? (
+				<SidebarLink
+					active={isActive("/components#emails", pathname, activeHref, true)}
+					href="/components#emails"
+					icon={MailIcon}
+					label="Emails"
+					onClick={onNavigate}
+				/>
+			) : null}
+
 			<SidebarGroup
-				active={pathname === "/design"}
-				expanded={expanded("design", pathname === "/design")}
-				href="/design"
-				icon={PaletteIcon}
-				id="design"
-				label="Design"
+				active={pathname === "/content" || pathname.startsWith("/edit/")}
+				expanded={expanded("content", pathname === "/content" || pathname.startsWith("/edit/"))}
+				href="/content"
+				icon={DatabaseIcon}
+				id="content"
+				label="Content"
 				onClick={onNavigate}
-				onToggle={() => toggleGroup("design", expanded("design", pathname === "/design"))}
+				onToggle={() =>
+					toggleGroup(
+						"content",
+						expanded("content", pathname === "/content" || pathname.startsWith("/edit/")),
+					)
+				}
 			>
-				{designLinks.map((link) => (
+				{collections.map((collection) => (
 					<SidebarChildLink
-						active={isActive(link.href, pathname, activeHref, true)}
-						description={link.description}
-						href={link.href}
-						key={link.label}
-						label={link.label}
+						active={isActive(`/content#${collection.id}`, pathname, activeHref, true)}
+						href={`/content#${collection.id}`}
+						key={collection.id}
+						label={collection.label}
+						meta={collection.count}
 						onClick={onNavigate}
 					/>
 				))}
+				{collections.length === 0 ? (
+					<li className="px-2 py-1 text-12 text-muted-foreground">Loading collections…</li>
+				) : null}
 			</SidebarGroup>
+
+			<SidebarLink
+				active={pathname === "/assets"}
+				href="/assets"
+				icon={ImageIcon}
+				label="Assets"
+				onClick={onNavigate}
+			/>
 
 			<SidebarGroup
 				active={pathname === "/components"}
@@ -1017,56 +1050,26 @@ function SidebarNav({
 				))}
 			</SidebarGroup>
 
-			<SidebarLink
-				active={pathname === "/assets"}
-				href="/assets"
-				icon={ImageIcon}
-				label="Assets"
-				onClick={onNavigate}
-			/>
-
 			<SidebarGroup
-				active={pathname === "/content" || pathname.startsWith("/edit/")}
-				expanded={expanded("content", pathname === "/content" || pathname.startsWith("/edit/"))}
-				href="/content"
-				icon={DatabaseIcon}
-				id="content"
-				label="Content"
+				active={pathname === "/design"}
+				expanded={expanded("design", pathname === "/design")}
+				href="/design"
+				icon={PaletteIcon}
+				id="design"
+				label="Design"
 				onClick={onNavigate}
-				onToggle={() =>
-					toggleGroup(
-						"content",
-						expanded("content", pathname === "/content" || pathname.startsWith("/edit/")),
-					)
-				}
+				onToggle={() => toggleGroup("design", expanded("design", pathname === "/design"))}
 			>
-				<SidebarToggle label="Show CMS" pref="showCms" />
-				<SidebarToggle label="Show SEO + Schema Markup in right sidebar" pref="showContentSeo" />
-				{prefs.showCms ? (
-					<li className="mt-1 border-t border-sidebar-border pt-1">
-						<p className="px-2 pb-0.5 text-9 font-bold tracking-12 text-muted-foreground uppercase">
-							CMS
-						</p>
-						<ul className="grid gap-0.5">
-							{collections.map((collection) => (
-								<li key={collection.id}>
-									<Link
-										className="flex items-center gap-1.5 rounded-md px-2 py-1 text-11 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-										hash={collection.id}
-										onClick={onNavigate}
-										to="/content"
-									>
-										<span className="truncate">{collection.label}</span>
-										<span className="ml-auto font-mono text-10">{collection.count}</span>
-									</Link>
-								</li>
-							))}
-							{collections.length === 0 ? (
-								<li className="px-2 py-1 text-10 text-muted-foreground">Loading CMS…</li>
-							) : null}
-						</ul>
-					</li>
-				) : null}
+				{designLinks.map((link) => (
+					<SidebarChildLink
+						active={isActive(link.href, pathname, activeHref, true)}
+						description={link.description}
+						href={link.href}
+						key={link.label}
+						label={link.label}
+						onClick={onNavigate}
+					/>
+				))}
 			</SidebarGroup>
 
 			<SidebarLink
@@ -1127,8 +1130,7 @@ export function AppSidebar() {
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const workspace = useWorkspace();
 	const routerHref = useRouterState({ select: (state) => state.location.href });
-	const showCms = useUiPref("showCms");
-	const collections = useCollections(showCms);
+	const collections = useCollections();
 	const { resync, status, syncError, syncing } = useSyncStatus();
 	const handleResync = () => void resync();
 

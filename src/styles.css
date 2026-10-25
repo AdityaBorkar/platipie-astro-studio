@@ -574,7 +574,14 @@ p {
 		background: color-mix(in oklab, var(--brand) 14%, var(--muted));
 	}
 
-	button {
+	button,
+	a,
+	summary,
+	[role="button"] {
+		cursor: default;
+	}
+
+	a[target="_blank"] {
 		cursor: pointer;
 	}
 
@@ -895,6 +902,12 @@ pre {
 		transform: none;
 		filter: none;
 	}
+
+	.gb-accordion,
+	.gb-accordion-body,
+	.gb-accordion-list > li {
+		transition: none;
+	}
 }
 
 @layer base {
@@ -976,6 +989,89 @@ pre {
 			background-color 260ms var(--ease-spring),
 			box-shadow 260ms var(--ease-spring),
 			transform 260ms var(--ease-spring);
+	}
+
+	/* Sidebar disclosure. The track collapses to 0fr so height, opacity, and
+	   the content's own deblur resolve as one motion instead of snapping.
+	   Children stagger back in on a short cadence to keep the reveal soft. */
+	.gb-accordion {
+		display: grid;
+		grid-template-rows: 0fr;
+		opacity: 0;
+		transition:
+			grid-template-rows 420ms var(--ease-spring),
+			opacity 380ms var(--ease-out-quint);
+	}
+
+	.gb-accordion[data-open="true"] {
+		grid-template-rows: 1fr;
+		opacity: 1;
+		transition:
+			grid-template-rows 500ms var(--ease-spring),
+			opacity 340ms var(--ease-out-quint);
+	}
+
+	.gb-accordion > * {
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.gb-accordion-body {
+		transform: translateY(-5px) scale(0.985);
+		transform-origin: top left;
+		filter: blur(4px);
+		transition:
+			transform 440ms var(--ease-spring),
+			filter 440ms var(--ease-spring);
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-body {
+		transform: none;
+		filter: blur(0);
+		transition-duration: 540ms;
+	}
+
+	.gb-accordion-list > li {
+		opacity: 0;
+		transform: translateY(-3px);
+		transition:
+			opacity 240ms var(--ease-out-quint) 40ms,
+			transform 260ms var(--ease-out-quint) 40ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li {
+		opacity: 1;
+		transform: none;
+		transition-duration: 300ms;
+		transition-delay: 40ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li:nth-child(2) {
+		transition-delay: 66ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li:nth-child(3) {
+		transition-delay: 92ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li:nth-child(4) {
+		transition-delay: 118ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li:nth-child(5) {
+		transition-delay: 144ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li:nth-child(6) {
+		transition-delay: 170ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li:nth-child(7) {
+		transition-delay: 196ms;
+	}
+
+	.gb-accordion[data-open="true"] .gb-accordion-list > li:nth-child(8) {
+		transition-delay: 222ms;
 	}
 
 	.gb-frame {

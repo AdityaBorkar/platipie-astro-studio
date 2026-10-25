@@ -169,12 +169,14 @@ export function Footer({ brand = "platipie", className, columns = defaultColumns
 							{ href: "mailto:hello@adityab.tech", icon: MailIcon, label: "Email" },
 						].map((social) => {
 							const Icon = social.icon;
+							const isNewTab = social.href.startsWith("https://");
 							return (
 								<a
 									aria-label={social.label}
 									className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
 									href={social.href}
 									key={social.label}
+									{...(isNewTab ? { rel: "noreferrer", target: "_blank" as const } : {})}
 								>
 									<Icon className="size-4" />
 								</a>
