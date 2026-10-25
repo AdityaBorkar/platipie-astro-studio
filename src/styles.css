@@ -1,0 +1,665 @@
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/jetbrains-mono";
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+	/* TallyPrime light theme: white paper, blue ink, sparing amber accents. */
+	--brand-blue: #075593;
+	--brand-amber: #eda915;
+	--brand-sky: #328ab0;
+	--background: #ffffff;
+	--foreground: #0c2434;
+	--card: #ffffff;
+	--card-foreground: #0c2434;
+	--popover: #ffffff;
+	--popover-foreground: #0c2434;
+	--primary: #075593;
+	--primary-foreground: #ffffff;
+	--secondary: #eef5fa;
+	--secondary-foreground: #0c2434;
+	--muted: #f1f6fa;
+	--muted-foreground: #56707f;
+	--accent: #fdf4dc;
+	--accent-foreground: #8a5a06;
+	--destructive: #dc2626;
+	--destructive-foreground: #ffffff;
+	--border: #dbe7ef;
+	--input: #d3e1eb;
+	/* Amber focus/hover accents, kept out of primary blue. */
+	--ring: #b57a07;
+	--chart-1: #075593;
+	--chart-2: #328ab0;
+	--chart-3: #eda915;
+	--chart-4: #6bb4cf;
+	--chart-5: #f2c454;
+	/* TallyPrime draws every control with square corners. */
+	--radius: 0rem;
+	--sidebar: #f7fbfd;
+	--sidebar-foreground: #0c2434;
+	--sidebar-primary: #075593;
+	--sidebar-primary-foreground: #ffffff;
+	--sidebar-accent: #fdf3da;
+	--sidebar-accent-foreground: #8a5a06;
+	--sidebar-border: #e0eaf1;
+	--sidebar-ring: #b57a07;
+	--code-bg: #f8fbfd;
+	--code-border: #dbe7ef;
+	--code-foreground: #12293a;
+	--scrim: #000000;
+	--secondary-hover: color-mix(in oklch, var(--secondary), var(--foreground) 5%);
+}
+
+.dark {
+	/* Completely dark: neutral black paper, blue ink, sparing amber accents. */
+	--brand-amber: #f2c14e;
+	--brand-sky: #86c6dd;
+	--background: #0a0a0a;
+	--foreground: #ededed;
+	--card: #101010;
+	--card-foreground: #ededed;
+	--popover: #151515;
+	--popover-foreground: #ededed;
+	--primary: #5cb2d6;
+	--primary-foreground: #061318;
+	--secondary: #181818;
+	--secondary-foreground: #ededed;
+	--muted: #141414;
+	--muted-foreground: #9ba6ab;
+	--accent: #241d0b;
+	--accent-foreground: #f2c14e;
+	--destructive: #f87171;
+	--destructive-foreground: #0a0a0a;
+	--border: #272727;
+	--input: #303030;
+	--ring: #e0a92e;
+	--chart-1: #5cb2d6;
+	--chart-2: #8fd0e8;
+	--chart-3: #e0a92e;
+	--chart-4: #f5d16b;
+	--chart-5: #2b7ba8;
+	--sidebar: #0b0b0b;
+	--sidebar-foreground: #ededed;
+	--sidebar-primary: #5cb2d6;
+	--sidebar-primary-foreground: #061318;
+	--sidebar-accent: #1f1a0f;
+	--sidebar-accent-foreground: #f2c14e;
+	--sidebar-border: #242424;
+	--sidebar-ring: #e0a92e;
+	--code-bg: #0e0e0e;
+	--code-border: #272727;
+	--code-foreground: #e8e8e8;
+	--scrim: #000000;
+	--secondary-hover: color-mix(in oklch, var(--secondary), var(--foreground) 5%);
+}
+
+@theme inline {
+	--font-sans:
+		"Instrument Sans Variable", "Instrument Sans", ui-sans-serif, system-ui, -apple-system,
+		"Segoe UI", sans-serif;
+	--font-mono:
+		"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+		Consolas, "Liberation Mono", monospace;
+	--color-background: var(--background);
+	--color-brand-amber: var(--brand-amber);
+	--color-brand-blue: var(--brand-blue);
+	--color-brand-sky: var(--brand-sky);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--color-scrim: var(--scrim);
+	--color-secondary-hover: var(--secondary-hover);
+	--text-9: 0.5625rem;
+	--text-10: 0.625rem;
+	--text-11: 0.6875rem;
+	--text-12: 0.75rem;
+	--text-13: 0.8125rem;
+	--text-15: 0.9375rem;
+	--text-btn-sm: 0.8rem;
+	--text-display-sm: 2.15rem;
+	--text-display: 2.6rem;
+	--text-display-lg: 3.4rem;
+	--tracking-12: 0.12em;
+	--tracking-14: 0.14em;
+	--tracking-neg-35: -0.035em;
+	--tracking-neg-45: -0.045em;
+	--leading-102: 1.02;
+	--leading-108: 1.08;
+	--radius-sm: 0rem;
+	--radius-md: 0rem;
+	--radius-lg: 0rem;
+	--radius-xl: 0rem;
+	--radius-2xl: 0rem;
+	--radius-3xl: 0rem;
+	--radius-4xl: 0rem;
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Design-system utilities replacing arbitrary Tailwind values. Each maps
+   exactly to the arbitrary value it replaces so `no-arbitrary-value` passes
+   without visual changes. */
+@utility origin-transform {
+	transform-origin: var(--transform-origin);
+}
+
+@utility max-h-available {
+	max-height: var(--available-height);
+}
+
+@utility w-anchor {
+	width: var(--anchor-width);
+}
+
+@utility transition-color-shadow {
+	transition-property: color, box-shadow;
+}
+
+@utility translate-y-tooltip-arrow {
+	translate: 0 calc(-50% - 2px);
+}
+
+@utility h-switch {
+	height: 18.4px;
+}
+
+@utility translate-switch-checked {
+	translate: calc(100% - 2px) 0;
+}
+
+@utility h-84dvh {
+	height: 84dvh;
+}
+
+@utility max-h-84dvh {
+	max-height: 84dvh;
+}
+
+@utility w-dialog-narrow {
+	width: calc(100vw - 2rem);
+}
+
+@utility max-h-30dvh {
+	max-height: 30dvh;
+}
+
+@utility max-h-45dvh {
+	max-height: 45dvh;
+}
+
+@utility max-h-58vh {
+	max-height: 58vh;
+}
+
+@utility min-h-60vh {
+	min-height: 60vh;
+}
+
+@utility max-w-85vw {
+	max-width: 85vw;
+}
+
+@utility top-12p {
+	top: 12%;
+}
+
+@utility max-h-dialog {
+	max-height: calc(100dvh - 2rem);
+}
+
+@utility max-w-dialog {
+	max-width: calc(100% - 2rem);
+}
+
+@utility tabs-trigger-h {
+	height: calc(100% - 1px);
+}
+
+@utility grid-cols-fields {
+	grid-template-columns: minmax(0, 8rem) minmax(0, 4.5rem) minmax(0, 1fr);
+}
+
+@utility grid-cols-fields-wide {
+	grid-template-columns: minmax(0, 14rem) minmax(0, 7rem) minmax(0, 1fr);
+}
+
+@utility grid-cols-history {
+	grid-template-columns: 320px minmax(0, 1fr);
+}
+
+@utility grid-cols-docs {
+	grid-template-columns: minmax(0, 1fr) 600px;
+}
+
+@utility grid-cols-card-action {
+	grid-template-columns: 1fr auto;
+}
+
+@utility grid-rows-card-desc {
+	grid-template-rows: auto auto;
+}
+
+@utility gap-card {
+	gap: var(--card-spacing);
+}
+
+@utility py-card {
+	padding-block: var(--card-spacing);
+}
+
+@utility px-card {
+	padding-inline: var(--card-spacing);
+}
+
+@utility p-card {
+	padding: var(--card-spacing);
+}
+
+@utility pb-card {
+	padding-bottom: var(--card-spacing);
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+html,
+body,
+#app {
+	min-height: 100%;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	color: var(--foreground);
+	background-color: var(--background);
+}
+
+h1,
+h2,
+h3,
+h4 {
+	letter-spacing: -0.025em;
+}
+
+::selection {
+	background-color: color-mix(in oklab, var(--brand-amber) 28%, transparent);
+}
+
+/* Square corners are the default for every box, matching TallyPrime. */
+@layer base {
+	*,
+	*::before,
+	*::after {
+		border-radius: 0;
+	}
+
+	a {
+		color: var(--primary);
+		text-decoration: none;
+	}
+
+	a:hover {
+		text-decoration: none;
+	}
+}
+
+/* A crisp ledger-grid wash behind the top of the docs pages. */
+.page-glow {
+	position: absolute;
+	inset: 0 0 auto;
+	height: 520px;
+	overflow: hidden;
+	pointer-events: none;
+	background-image:
+		linear-gradient(
+			to bottom,
+			color-mix(in oklab, var(--brand-amber) 6%, transparent),
+			transparent 72%
+		),
+		linear-gradient(
+			to right,
+			color-mix(in oklab, var(--border) 80%, transparent) 1px,
+			transparent 1px
+		),
+		linear-gradient(
+			to bottom,
+			color-mix(in oklab, var(--border) 80%, transparent) 1px,
+			transparent 1px
+		);
+	/* Shift the grid origin by one rule width so its lines sit on the sidebar's
+	   right border (272px) and header rule (48px) instead of 8px past them. */
+	background-position:
+		0 0,
+		-9px -9px,
+		-9px -9px;
+	background-size:
+		auto,
+		56px 56px,
+		56px 56px;
+	mask-image: linear-gradient(to bottom, #000 0%, transparent 92%);
+}
+
+.dark .page-glow {
+	background-image:
+		linear-gradient(
+			to bottom,
+			color-mix(in oklab, var(--brand-amber) 7%, transparent),
+			transparent 60%
+		),
+		linear-gradient(
+			to right,
+			color-mix(in oklab, var(--border) 70%, transparent) 1px,
+			transparent 1px
+		),
+		linear-gradient(
+			to bottom,
+			color-mix(in oklab, var(--border) 70%, transparent) 1px,
+			transparent 1px
+		);
+}
+
+/* Faint square grid used behind hero content. */
+.grid-fade {
+	background-image:
+		linear-gradient(to right, var(--border) 1px, transparent 1px),
+		linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+	background-size: 48px 48px;
+	opacity: 0.4;
+	mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 20%, transparent 75%);
+}
+
+/* Inline code — quiet chip, no border. Scoped away from code blocks so
+   Highlights' <pre><code> never inherits the chip surface. Kept in the base
+   layer so per-instance utilities can restyle individual chips. */
+@layer base {
+	:not(pre) > code {
+		padding: 2px 6px;
+		font-family: var(--font-mono);
+		font-size: 0.84em;
+		color: var(--foreground);
+		background: color-mix(in oklab, var(--brand-amber) 14%, var(--muted));
+	}
+
+	a :not(pre) > code {
+		color: inherit;
+	}
+
+	.dark :not(pre) > code {
+		background: color-mix(in oklab, var(--brand-amber) 10%, var(--muted));
+	}
+}
+
+pre {
+	margin: 0;
+	tab-size: 2;
+}
+
+/* Code surface — light paper in light mode, near-black in dark mode. */
+@layer components {
+	.card-spacing {
+		--card-spacing: calc(var(--spacing) * 3);
+	}
+
+	.card-spacing[data-size="sm"] {
+		--card-spacing: calc(var(--spacing) * 2.5);
+	}
+
+	.code-surface {
+		overflow: auto;
+		overscroll-behavior-x: contain;
+		color: var(--code-foreground);
+		background-color: var(--code-bg);
+		border: 1px solid var(--code-border);
+	}
+
+	.code-surface pre {
+		font-family: var(--font-mono);
+		font-size: 12px;
+		line-height: 1.7;
+		white-space: pre;
+	}
+
+	/* Editable request surface: same paper/near-black treatment as CodeBlock.
+	   A highlighted copy sits under a transparent textarea. */
+	.code-editor {
+		position: relative;
+		overflow: hidden;
+		color: var(--code-foreground);
+		background-color: var(--code-bg);
+		border: 1px solid var(--code-border);
+	}
+
+	.code-editor:focus-within {
+		outline: 1px solid var(--ring);
+		outline-offset: 0;
+		border-color: var(--ring);
+	}
+
+	.code-editor-highlight,
+	.code-editor-input {
+		position: absolute;
+		inset: 0;
+		padding: 12px;
+		margin: 0;
+		overflow: auto;
+		overscroll-behavior: contain;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		line-height: 1.7;
+		tab-size: 2;
+		white-space: pre;
+	}
+
+	.code-editor-highlight {
+		overflow: hidden;
+		color: var(--code-foreground);
+		pointer-events: none;
+	}
+
+	.code-editor-input {
+		color: transparent;
+		caret-color: var(--code-foreground);
+		resize: none;
+		outline: none;
+		background: transparent;
+		border: 0;
+	}
+
+	.code-editor .highlights,
+	.code-editor .highlights span {
+		font-style: var(--hls-light-font-style, inherit);
+		font-weight: var(--hls-light-font-weight, inherit);
+		color: var(--hls-light);
+		text-decoration: var(--hls-light-text-decoration, none);
+		background-color: transparent;
+	}
+
+	.dark .code-editor .highlights,
+	.dark .code-editor .highlights span {
+		font-style: var(--hls-dark-font-style, inherit);
+		font-weight: var(--hls-dark-font-weight, inherit);
+		color: var(--hls-dark);
+		text-decoration: var(--hls-dark-text-decoration, none);
+		background-color: transparent;
+	}
+
+	/* Plain-text payloads (error messages) should wrap instead of scrolling. */
+	.code-surface[data-language="text"] pre {
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+	}
+
+	/* On phones, let code wrap rather than hide half a line off-screen. */
+	@media (max-width: 639px) {
+		.code-surface pre {
+			overflow-wrap: anywhere;
+			white-space: pre-wrap;
+		}
+	}
+
+	.code-surface .highlights span,
+	.code-surface .highlights {
+		font-style: var(--hls-light-font-style, inherit);
+		font-weight: var(--hls-light-font-weight, inherit);
+		color: var(--hls-light);
+		text-decoration: var(--hls-light-text-decoration, none);
+		background-color: transparent;
+	}
+
+	.dark .code-surface .highlights,
+	.dark .code-surface .highlights span {
+		font-style: var(--hls-dark-font-style, inherit);
+		font-weight: var(--hls-dark-font-weight, inherit);
+		color: var(--hls-dark);
+		text-decoration: var(--hls-dark-text-decoration, none);
+	}
+}
+
+/* Thin, unobtrusive scrollbars. */
+* {
+	scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent;
+	scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: color-mix(in oklab, var(--foreground) 16%, transparent);
+	background-clip: padding-box;
+	border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in oklab, var(--foreground) 28%, transparent);
+	background-clip: padding-box;
+	border: 2px solid transparent;
+}
+
+@keyframes rise-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.animate-rise {
+	animation: rise-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-rise-delayed {
+	animation: rise-in 650ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+
+	.animate-rise,
+	.animate-rise-delayed {
+		animation: none;
+	}
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		color: var(--foreground);
+		background-color: var(--background);
+	}
+}
+
+/* platipie-cms content surface: faithful markdown preview + three-column
+   editor layout (collapses to one column on narrow screens). */
+@layer components {
+	.grid-cols-editor {
+		grid-template-columns: minmax(0, 19rem) minmax(0, 1fr) minmax(0, 19rem);
+	}
+
+	@media (max-width: 1100px) {
+		.grid-cols-editor {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	.prose-preview {
+		padding: 16px;
+		background-color: var(--card);
+		border: 1px solid var(--border);
+	}
+
+	.prose-preview h1,
+	.prose-preview h2 {
+		margin-top: 0.5em;
+	}
+}
+
+@layer base {
+	input,
+	select,
+	textarea {
+		padding: 8px;
+		font-size: 14px;
+		background-color: var(--card);
+		border: 1px solid var(--input);
+		color: var(--foreground);
+	}
+
+	button {
+		padding: 8px 12px;
+		cursor: pointer;
+		background-color: var(--card);
+		border: 1px solid var(--input);
+		color: var(--foreground);
+	}
+
+	button:disabled {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+}

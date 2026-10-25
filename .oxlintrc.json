@@ -1,0 +1,142 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"categories": {
+		"correctness": "error",
+		"pedantic": "error",
+		"perf": "error",
+		"suspicious": "error"
+	},
+	"env": {
+		"browser": true,
+		"es2022": true,
+		"node": true
+	},
+	"overrides": [
+		{
+			"files": ["src/components/ui/**/*"],
+			"rules": {
+				"eqeqeq": "off",
+				"jsx-a11y/click-events-have-key-events": "off",
+				"jsx-a11y/label-has-associated-control": "off",
+				"jsx-a11y/no-noninteractive-element-interactions": "off",
+				"jsx-a11y/prefer-tag-over-role": "off",
+				"react/no-array-index-key": "off",
+				"sort-keys": "off",
+				"tailwindcss/consistent-variant-order": "off",
+				"tailwindcss/max-class-count": "off",
+				"tailwindcss/no-arbitrary-value": "off",
+				"tailwindcss/no-conflicting-classes": "off",
+				"tailwindcss/no-unnecessary-arbitrary-value": "off"
+			}
+		},
+		{
+			"files": ["src/routes/edit.$collection.$id.tsx"],
+			"rules": { "react/no-danger": "off" }
+		},
+		{
+			"files": ["src/lib/cms/**/*.ts", "scripts/**/*.ts"],
+			"rules": { "no-await-in-loop": "off" }
+		},
+		{
+			"files": ["scripts/**/*.ts"],
+			"rules": { "max-depth": "off" }
+		}
+	],
+	"plugins": [
+		"eslint",
+		"import",
+		"jsx-a11y",
+		"node",
+		"oxc",
+		"promise",
+		"react",
+		"react-perf",
+		"typescript",
+		"unicorn"
+	],
+	"jsPlugins": ["oxlint-tailwindcss"],
+	"settings": {
+		"tailwindcss": {
+			"entryPoint": "src/styles.css"
+		}
+	},
+	"rules": {
+		"import/max-dependencies": "off",
+		"import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+		"max-lines": "off",
+		"max-lines-per-function": "off",
+		"no-restricted-imports": [
+			"error",
+			{
+				"patterns": [
+					{
+						"group": ["https://**", "http://**"],
+						"message": "URL imports are banned."
+					},
+					{
+						"group": [
+							"npm:*",
+							"npm:*/*",
+							"npm:*/*/*",
+							"npm:*/*/*/*",
+							"jsr:*",
+							"jsr:*/*",
+							"jsr:*/*/*",
+							"jsr:*/*/*/*"
+						],
+						"message": "Package-protocol imports are banned."
+					}
+				]
+			}
+		],
+		"sort-keys": [
+			"error",
+			"asc",
+			{
+				"caseSensitive": true,
+				"natural": true,
+				"minKeys": 2,
+				"allowLineSeparatedGroups": false
+			}
+		],
+		"no-underscore-dangle": ["warn", { "allow": ["_splat"] }],
+		"react/self-closing-comp": ["error", { "component": true, "html": true }],
+		"promise/always-return": "off",
+		"promise/no-callback-in-promise": "off",
+		"react/no-danger": "error",
+		"react/purity": "off",
+		"react/react-in-jsx-scope": "off",
+		"react-perf/jsx-no-jsx-as-prop": "off",
+		"react-perf/jsx-no-new-array-as-prop": "off",
+		"react-perf/jsx-no-new-object-as-prop": "off",
+		"react-perf/jsx-no-new-function-as-prop": "off",
+		"react/set-state-in-effect": "off",
+		"sort-imports": "off",
+		"tailwindcss/no-conflicting-classes": "error",
+		"tailwindcss/no-contradicting-variants": "error",
+		"tailwindcss/no-dark-without-light": "error",
+		"tailwindcss/no-duplicate-classes": "error",
+		"tailwindcss/no-dynamic-classes": "error",
+		"tailwindcss/no-unknown-classes": "error",
+		"tailwindcss/enforce-canonical": "error",
+		"tailwindcss/enforce-negative-arbitrary-values": "error",
+		"tailwindcss/no-deprecated-classes": "error",
+		"tailwindcss/no-unnecessary-arbitrary-value": "error",
+		"tailwindcss/prefer-scale-token": "error",
+		"tailwindcss/prefer-theme-tokens": "error",
+		"tailwindcss/consistent-variant-order": "error",
+		"tailwindcss/enforce-consistent-important-position": "error",
+		"tailwindcss/enforce-consistent-variable-syntax": "error",
+		"tailwindcss/enforce-logical": "off",
+		"tailwindcss/enforce-physical": "error",
+		"tailwindcss/enforce-shorthand": "error",
+		"tailwindcss/enforce-sort-order": "off",
+		"tailwindcss/no-unnecessary-whitespace": "error",
+		"tailwindcss/max-class-count": "error",
+		"tailwindcss/no-arbitrary-value": "error",
+		"tailwindcss/no-borrowed-component-styles": "error",
+		"tailwindcss/no-default-palette": "error",
+		"tailwindcss/no-hardcoded-colors": "error",
+		"tailwindcss/no-restricted-classes": "error"
+	}
+}

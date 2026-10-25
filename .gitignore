@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.output/
+.nitro/
+.cms-trash/
+*.bak
+*.bak.*
+*.tmp-*
+
+# from tally-docs
+.local
+.tanstack/tmp/
+
+.env*
+*.env
+*.gen.ts
+*.tsbuildinfo
+*.tgz
+.DS_Store
+
+.agents/skills
+codedb.snapshot
+
+.certs
