@@ -28,7 +28,7 @@ interface FooterProps {
 const defaultColumns: FooterColumn[] = [
 	{
 		links: [
-			{ href: "/", label: "Dashboard" },
+			{ href: "/dashboard", label: "Dashboard" },
 			{ href: "/design", label: "Design system" },
 			{ href: "/settings", label: "Settings" },
 		],

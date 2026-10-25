@@ -1,6 +1,5 @@
 export { AgentRow } from "./agent-row";
 export type { AgentButton } from "./agent-row";
-export { AskWidget } from "./ask-widget";
 export { BrandMark, Wordmark } from "./brand";
 export { Customers } from "./customers";
 export { DocsNav, DocsShell, DocsToc } from "./docs-shell";
@@ -27,6 +26,5 @@ export type { LinkCardItem } from "./link-cards";
 export { LogoCloud, LogoWordmark } from "./logo-cloud";
 export { Reveal } from "./motion";
 export { ProductDemo, ProductStage } from "./product-preview";
-export { SearchTrigger } from "./search-trigger";
 export { ShowcaseTabs } from "./showcase-tabs";
 export { Testimonial } from "./testimonial";

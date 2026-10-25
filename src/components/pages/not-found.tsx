@@ -26,7 +26,7 @@ export function NotFoundPage() {
 						This page doesn&apos;t exist or was moved. Head back to the dashboard to keep editing.
 					</p>
 					<div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-						<Button nativeButton={false} render={<Link to="/" />} size="sm">
+						<Button nativeButton={false} render={<Link to="/dashboard" />} size="sm">
 							Back to dashboard
 							<ArrowRightIcon className="size-3.5" />
 						</Button>

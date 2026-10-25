@@ -2,7 +2,7 @@
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 
-import { getAstroRoot, resolveRepoPath } from "./config.ts";
+import { getProjectRoot, resolveRepoPath } from "./config.ts";
 import { parseFileContent } from "./frontmatter.ts";
 import type { CollectionId } from "./schemas.ts";
 
@@ -179,32 +179,8 @@ export interface DriftWarning {
 
 export async function driftWarnings(): Promise<DriftWarning[]> {
 	const out: DriftWarning[] = [];
-	const root = getAstroRoot();
-	// 1. Unregistered blog.
-	try {
-		const cfgPath = existsSync(path.join(root, "src/content.config.ts"))
-			? path.join(root, "src/content.config.ts")
-			: path.join(root, "content.config.ts");
-		const text = await fs.readFile(cfgPath, "utf8").catch(() => "");
-		if (!/(const|let|var)\s+blog\b/u.test(text) || !text.includes("cms/blog")) {
-			out.push({
-				code: "blog-unregistered",
-				hint: "Use Settings → Register blog collection (§5.1).",
-				message: "Blog collection is not registered in content.config.ts",
-			});
-		}
-		// Projects additive extension present?
-		if (!text.includes("excerpt") || !text.includes("schemaType")) {
-			out.push({
-				code: "projects-extension-missing",
-				hint: "Register blog collection also extends projects additively.",
-				message: "Projects schema lacks WP-parity additive fields",
-			});
-		}
-	} catch {
-		/* ignore */
-	}
-	// 2. Testimonials `project` drift.
+	const root = getProjectRoot();
+	// 1. Testimonials `project` drift.
 	try {
 		const t = await fs.readFile(resolveRepoPath("cms/testimonials.json"), "utf8");
 		const arr = JSON.parse(t);
@@ -221,7 +197,7 @@ export async function driftWarnings(): Promise<DriftWarning[]> {
 	} catch {
 		/* ignore */
 	}
-	// 3. -template oddity.
+	// 2. -template oddity.
 	try {
 		const names = await fs.readdir(resolveRepoPath("cms/projects")).catch(() => [] as string[]);
 		const odd = names.filter((n) => n.startsWith("-template"));
@@ -235,14 +211,14 @@ export async function driftWarnings(): Promise<DriftWarning[]> {
 	} catch {
 		/* ignore */
 	}
-	// 4. Missing blog routes.
+	// 3. Missing blog routes.
 	try {
 		const candidates = ["src/pages/blog", "src/pages/writings", "src/pages/craft"];
 		const missing = candidates.filter((c) => !existsSync(path.join(root, c)));
 		if (missing.length >= 2) {
 			out.push({
 				code: "blog-route-missing",
-				hint: "CMS registers data layer only; route creation stays in the Astro repo. Previews fall back to local render.",
+				hint: "Route creation stays in the Astro repo. Previews fall back to local render.",
 				message:
 					"No blog/writings/craft route renders cms/blog/ (NAV links have no matching pages)",
 			});

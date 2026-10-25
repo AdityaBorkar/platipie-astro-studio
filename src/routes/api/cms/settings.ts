@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { fail, ok, readJson } from "#cms/api-helpers.ts";
-import { blogRegistrationStatus } from "#cms/blog-register.ts";
 import { envStatus } from "#cms/config.ts";
 import {
 	parseSettingsValues,
@@ -15,16 +14,11 @@ export const Route = createFileRoute("/api/cms/settings")({
 		handlers: {
 			GET: async () => {
 				try {
-					const [{ raw, mtime }, env, blog] = await Promise.all([
+					const [{ raw, mtime }, env] = await Promise.all([
 						readSettingsRaw(),
 						Promise.resolve(envStatus()),
-						blogRegistrationStatus().catch(() => ({
-							path: "",
-							projectsExtended: false,
-							registered: false,
-						})),
 					]);
-					return ok({ blog, env, mtime, raw, values: parseSettingsValues(raw) });
+					return ok({ env, mtime, raw, values: parseSettingsValues(raw) });
 				} catch (e) {
 					return fail(e);
 				}

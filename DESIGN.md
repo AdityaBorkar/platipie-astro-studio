@@ -18,9 +18,8 @@ our shadcn variable layer.
    (`#fafaf9`, `#efeeed`); text is warm stone (`#1c1917` / `#79716b`).
 3. **Hairlines, not heavy borders.** Surfaces use `1px` borders and soft,
    layered shadows. Cards lift 4px on hover, never bounce.
-4. **Pills for actions, rounded rectangles for content.** Buttons, badges,
-   segmented controls, and the Ask launcher are pills. Cards are 16px,
-   illustration panels 24px.
+4. **Pills for actions, rounded rectangles for content.** Buttons, badges, and
+   segmented controls are pills. Cards are 16px, illustration panels 24px.
 5. **Motion resolves content.** Every entrance is transform + opacity, one-shot,
    under 750ms. Everything is disabled under `prefers-reduced-motion`.
 
@@ -101,8 +100,6 @@ from `index.ts`.
 | `Hint`                                                          | Docs callouts: info (orange), success (mint), warning (amber), danger (red) |
 | `LinkCards`                                                     | Two-up docs link table                                                      |
 | `ShowcaseTabs`                                                  | Pill switcher with crossfade panels                                         |
-| `SearchTrigger`                                                 | Rounded docs search affordance with kbd chips                               |
-| `AskWidget`                                                     | Floating Ask / quick-jump palette, `⌘K` / `Ctrl-K`                          |
 | `Reveal`                                                        | IntersectionObserver fade-rise-deblur                                       |
 | `BrandMark`, `Wordmark`                                         | Layered-page mark and lockup                                                |
 
@@ -120,11 +117,17 @@ UI primitives in `src/components/ui/` were retuned:
 
 The CMS is a fixed left rail plus a scrolling content pane, not a top nav.
 
-- **Workspace block** — project name (`package.json` in `ASTRO_ROOT`) and current
-  git branch, read from `GET /api/cms/workspace`. Clicking it opens the nav map:
-  Dashboard, Website (page + metadata toggles), Design (system, brand, style,
-  languages, animations, viewports, tokens), Components (components, templates,
-  UI), Assets (list), Content (CMS + SEO toggles), Settings.
+- **Workspace block** — project name (`package.json` in the project root) and current
+  git branch, read from `GET /api/cms/workspace`. Clicking it opens the project
+  selector dialog: `GET /api/cms/projects` lists Astro projects (siblings of the
+  current root plus previously added roots) with per-project branch, favicon
+  (data URL when found), and `~/`-rooted path, plus a list / card view toggle.
+  Non-Astro directories are omitted. **Add project** switches the dialog to a
+  folder-picker (`GET /api/cms/projects/browse`) with places, breadcrumbs and an
+  Astro badge per folder; its primary action stays disabled until the selected
+  folder contains `astro.config.*`. Selecting or adding one `POST`s to
+  `/api/cms/projects` to repoint the project jail, remembers the root in
+  `.data/projects.json`, and reloads.
 - **Primary nav** — the same top-level items, with expandable children. Website
   can list Astro routes; Content can list CMS collections and counts. Both are
   driven by persisted `localStorage` preferences in `src/hooks/use-ui-prefs.ts`.
@@ -132,6 +135,9 @@ The CMS is a fixed left rail plus a scrolling content pane, not a top nav.
   and a slide-in drawer. Content is offset with `lg:pl-sidebar`.
 - **Theme** — the switcher lives in Settings → Appearance. The pre-paint script
   still applies the stored mode, so the rail and content paint together.
+- **Sync footer** — the rail's bottom bar shows read-model freshness (status dot,
+  label, relative age). Hovering or clicking it reveals the exact last-sync
+  timestamp and a `Sync now` action.
 
 ## Patterns and page flow
 
@@ -155,8 +161,8 @@ The `/design` route mirrors GitBook's marketing order:
 
 App pages reuse the same language, denser:
 
-- Dashboard: workspace eyebrow, display heading, four stat cards, content
-  health list, collection cards, recent edits table.
+- Dashboard: project favicon, name, and git branch only. Screen items and
+  design are planned separately.
 - Website: Astro page inventory plus a sticky SEO / page metadata / schema rail.
 - Content: collection cards, recent edits, optional SEO + schema rail, and the
   CMS tree in the left rail.

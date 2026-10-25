@@ -79,7 +79,7 @@ const footerColumns = [
 	},
 	{
 		links: [
-			{ href: "/", label: "Dashboard" },
+			{ href: "/dashboard", label: "Dashboard" },
 			{ href: "/settings", label: "Settings" },
 			{ href: "/design", label: "Reference" },
 		],
@@ -100,7 +100,7 @@ function DesignSystemPage() {
 					}}
 					actions={
 						<>
-							<HeroPrimaryAction href="/" label="Open dashboard" />
+							<HeroPrimaryAction href="/dashboard" label="Open dashboard" />
 							<HeroSecondaryAction
 								href="#tokens"
 								icon={<PaletteIcon className="size-4" />}
@@ -668,7 +668,7 @@ function ComponentsGallery() {
 							Two pages reference a flag that no longer exists.
 						</Hint>
 						<Hint title="Write blocked" variant="danger">
-							The path sits outside the <code>ASTRO_ROOT</code> jail.
+							The path sits outside the <code>project</code> jail.
 						</Hint>
 					</div>
 				</Panel>

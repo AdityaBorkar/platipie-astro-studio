@@ -1,26 +1,44 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { LinkProps } from "@tanstack/react-router";
 import {
+	ArrowLeftIcon,
+	ArrowUpIcon,
 	CheckIcon,
-	ChevronDownIcon,
 	ChevronRightIcon,
+	ChevronsUpDownIcon,
 	DatabaseIcon,
 	FileTextIcon,
+	FolderIcon,
+	FolderPlusIcon,
 	GitBranchIcon,
 	GlobeIcon,
+	HomeIcon,
 	ImageIcon,
 	LayoutDashboardIcon,
+	LayoutGridIcon,
+	ListIcon,
 	MenuIcon,
 	PaletteIcon,
+	SearchIcon,
 	Settings2Icon,
 	ShapesIcon,
 	XIcon,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 
+import { SyncStatusBar } from "#/components/sync-status-bar";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
 import { setUiPref, useUiPref, useUiPrefs } from "#/hooks/use-ui-prefs";
 import type { UiPrefKey } from "#/hooks/use-ui-prefs";
 import { cn } from "#/lib/utils";
@@ -43,7 +61,6 @@ interface WorkspacePayload {
 	}[];
 	project: string;
 	reachable: boolean;
-	root: string;
 }
 
 interface CollectionSummary {
@@ -51,6 +68,19 @@ interface CollectionSummary {
 	id: string;
 	label: string;
 	source: string;
+}
+
+interface SyncScopeStatus {
+	fileCount: number;
+	lastSync: number | null;
+	scope: string;
+}
+
+function overallLastSync(status: SyncScopeStatus[] | null): number | null {
+	if (status === null || status.length === 0) return null;
+	const stamps = status.map((entry) => entry.lastSync);
+	if (stamps.some((stamp) => stamp === null)) return null;
+	return Math.min(...(stamps as number[]));
 }
 
 const designLinks: ShellLink[] = [
@@ -109,6 +139,57 @@ function useCollections(enabled: boolean) {
 	return collections;
 }
 
+function useSyncStatus() {
+	const [status, setStatus] = useState<SyncScopeStatus[] | null>(null);
+	const [syncError, setSyncError] = useState(false);
+	const [syncing, setSyncing] = useState(false);
+
+	useEffect(() => {
+		let alive = true;
+		fetch("/api/cms/sync")
+			.then(async (response) => {
+				const json = await response.json();
+				if (!response.ok) throw new Error(json.message ?? "Failed to load sync status");
+				return json as { status?: SyncScopeStatus[] };
+			})
+			.then((json) => {
+				if (alive) {
+					setStatus(json.status ?? []);
+					setSyncError(false);
+				}
+			})
+			.catch(() => {
+				if (alive) setSyncError(true);
+			});
+		return () => {
+			alive = false;
+		};
+	}, []);
+
+	async function resync() {
+		setSyncing(true);
+		try {
+			const response = await fetch("/api/cms/sync", {
+				body: JSON.stringify({}),
+				headers: { "Content-Type": "application/json" },
+				method: "POST",
+			});
+			const json = await response.json();
+			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
+			setStatus((json as { status?: SyncScopeStatus[] }).status ?? []);
+			setSyncError(false);
+			toast.success("Inventory re-synced");
+		} catch (e: unknown) {
+			if (e instanceof Error) toast.error(e.message);
+			setSyncError(true);
+		} finally {
+			setSyncing(false);
+		}
+	}
+
+	return { resync, status, syncError, syncing };
+}
+
 function AppLink({
 	children,
 	className,
@@ -123,7 +204,7 @@ function AppLink({
 	const hashAt = href.indexOf("#");
 	if (hashAt >= 0) {
 		const hash = href.slice(hashAt + 1);
-		const to = href.slice(0, hashAt) || "/";
+		const to = href.slice(0, hashAt) || "/dashboard";
 		return (
 			<Link className={className} hash={hash} onClick={onClick} to={to as LinkProps["to"]}>
 				{children}
@@ -315,117 +396,157 @@ function SidebarGroup({
 	);
 }
 
-function MenuLink({
-	description,
-	href,
-	icon: Icon,
-	label,
-	onClick,
-}: {
-	description?: string;
-	href: string;
-	icon: typeof LayoutDashboardIcon;
-	label: string;
-	onClick?: () => void;
-}) {
-	return (
-		<li>
-			<AppLink
-				className="flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted"
-				href={href}
-				onClick={onClick}
-			>
-				<Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-				<span className="min-w-0">
-					<span className="block text-12 font-semibold text-foreground">{label}</span>
-					{description ? (
-						<span className="mt-0.5 block text-10 leading-snug text-muted-foreground">
-							{description}
-						</span>
-					) : null}
-				</span>
-			</AppLink>
-		</li>
-	);
+interface ProjectEntry {
+	branch: string;
+	current: boolean;
+	displayPath: string;
+	favicon: string | null;
+	name: string;
+	root: string;
 }
 
-function MenuGroup({
-	children,
-	description,
-	href,
-	icon: Icon,
-	label,
-	onClick,
-}: {
-	children: ReactNode;
-	description: string;
-	href: string;
-	icon: typeof LayoutDashboardIcon;
-	label: string;
-	onClick?: () => void;
-}) {
-	return (
-		<li>
-			<AppLink
-				className="flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted"
-				href={href}
-				onClick={onClick}
-			>
-				<Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-				<span className="min-w-0">
-					<span className="block text-12 font-semibold text-foreground">{label}</span>
-					<span className="mt-0.5 block text-10 leading-snug text-muted-foreground">
-						{description}
-					</span>
-				</span>
-			</AppLink>
-			<ul className="mb-1 ml-3 grid gap-0.5 border-l border-border pl-2">{children}</ul>
-		</li>
-	);
+interface BrowseFolder {
+	isAstro: boolean;
+	name: string;
+	path: string;
 }
+
+interface BrowsePlace {
+	label: string;
+	path: string;
+}
+
+interface BrowseView {
+	displayPath: string;
+	entries: BrowseFolder[];
+	isAstro: boolean;
+	name: string;
+	parent: string | null;
+	path: string;
+	places: BrowsePlace[];
+	truncated: boolean;
+}
+
+const browsePlaceIcons: Record<string, typeof FolderIcon> = {
+	Home: HomeIcon,
+};
 
 function WorkspaceMenu({
-	collections,
 	onNavigate,
 	workspace,
 }: {
-	collections: CollectionSummary[];
 	onNavigate?: () => void;
 	workspace: WorkspacePayload | null;
 }) {
+	const [entries, setEntries] = useState<ProjectEntry[] | null>(null);
 	const [open, setOpen] = useState(false);
-	const prefs = useUiPrefs();
-	const menuId = useId();
-	const rootRef = useRef<HTMLDivElement>(null);
+	const [query, setQuery] = useState("");
+	const [switching, setSwitching] = useState<string | null>(null);
+	const [view, setView] = useState<"cards" | "list">("list");
+	const [mode, setMode] = useState<"browse" | "select">("select");
+	const [browse, setBrowse] = useState<BrowseView | null>(null);
+	const [browseError, setBrowseError] = useState<string | null>(null);
+	const [browseLoading, setBrowseLoading] = useState(false);
 
 	useEffect(() => {
 		if (!open) return;
-		function onPointerDown(event: PointerEvent) {
-			if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
-		}
-		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "Escape") setOpen(false);
-		}
-		document.addEventListener("pointerdown", onPointerDown);
-		window.addEventListener("keydown", onKeyDown);
+		let alive = true;
+		setEntries(null);
+		setSwitching(null);
+		fetch("/api/cms/projects")
+			.then(async (response) => ({ body: await response.json(), ok: response.ok }))
+			.then(({ body, ok }) => {
+				if (!alive || !ok) return;
+				setEntries((body.projects ?? []) as ProjectEntry[]);
+			})
+			.catch(() => {
+				if (alive) setEntries([]);
+			});
 		return () => {
-			document.removeEventListener("pointerdown", onPointerDown);
-			window.removeEventListener("keydown", onKeyDown);
+			alive = false;
 		};
 	}, [open]);
 
-	function navigate() {
-		setOpen(false);
-		onNavigate?.();
+	useEffect(() => {
+		if (open) return;
+		setMode("select");
+		setBrowse(null);
+		setBrowseError(null);
+		setQuery("");
+	}, [open]);
+
+	const needle = query.trim().toLowerCase();
+	const filtered = (entries ?? []).filter(
+		(entry) =>
+			needle.length === 0 ||
+			entry.name.toLowerCase().includes(needle) ||
+			entry.branch.toLowerCase().includes(needle) ||
+			entry.displayPath.toLowerCase().includes(needle),
+	);
+
+	async function openFolder(target?: string) {
+		setBrowseLoading(true);
+		setBrowseError(null);
+		try {
+			const queryString = target ? `?path=${encodeURIComponent(target)}` : "";
+			const response = await fetch(`/api/cms/projects/browse${queryString}`);
+			const json = await response.json();
+			if (!response.ok) throw new Error(json.message ?? "Could not open folder");
+			setBrowse(json as BrowseView);
+		} catch (e: unknown) {
+			setBrowse(null);
+			setBrowseError(e instanceof Error ? e.message : "Could not open folder");
+		} finally {
+			setBrowseLoading(false);
+		}
+	}
+
+	function startBrowse() {
+		setMode("browse");
+		setBrowseError(null);
+		void openFolder(browse?.path);
+	}
+
+	async function switchProject(root: string) {
+		if (switching !== null) return;
+		setSwitching(root);
+		try {
+			const response = await fetch("/api/cms/projects", {
+				body: JSON.stringify({ root }),
+				headers: { "Content-Type": "application/json" },
+				method: "POST",
+			});
+			const json = await response.json();
+			if (!response.ok) throw new Error(json.message ?? "Project switch failed");
+			setOpen(false);
+			window.location.reload();
+		} catch (e: unknown) {
+			setSwitching(null);
+			toast.error(e instanceof Error ? e.message : "Project switch failed");
+		}
+	}
+
+	function selectProject(entry: ProjectEntry) {
+		if (switching !== null) return;
+		if (entry.current) {
+			setOpen(false);
+			onNavigate?.();
+			return;
+		}
+		void switchProject(entry.root);
+	}
+
+	function addProject() {
+		if (!browse?.isAstro || browseLoading) return;
+		void switchProject(browse.path);
 	}
 
 	return (
-		<div className="relative" ref={rootRef}>
+		<>
 			<button
-				aria-controls={menuId}
-				aria-expanded={open}
+				aria-haspopup="dialog"
 				className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-sidebar-accent"
-				onClick={() => setOpen((value) => !value)}
+				onClick={() => setOpen(true)}
 				type="button"
 			>
 				<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -443,118 +564,333 @@ function WorkspaceMenu({
 						) : null}
 					</span>
 				</span>
-				<ChevronDownIcon
-					className={cn(
-						"size-4 shrink-0 text-muted-foreground transition-transform duration-300",
-						open && "rotate-180",
-					)}
-				/>
+				<ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" />
 			</button>
 
-			{open ? (
-				<div
-					className="animate-gb-pop absolute inset-x-0 top-full z-50 mt-1 max-h-workspace-menu overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-lift"
-					id={menuId}
-				>
-					<p className="px-2 pt-1 pb-1.5 text-9 font-bold tracking-12 text-brand uppercase">
-						Navigate
-					</p>
-					<ul className="grid gap-0.5">
-						<MenuLink href="/" icon={LayoutDashboardIcon} label="Dashboard" onClick={navigate} />
-						<MenuGroup
-							description="Pages, SEO, page metadata, schema markup"
-							href="/website"
-							icon={GlobeIcon}
-							label="Website"
-							onClick={navigate}
-						>
-							<SidebarToggle label="Show pages in sidebar" pref="showPagesInSidebar" />
-							<SidebarToggle
-								label="Show SEO / Page Metadata / Schema Markup in right sidebar"
-								pref="showWebsiteMeta"
-							/>
-						</MenuGroup>
-						<MenuGroup
-							description="Design System + Brand Guidelines + Style Guide + Design Languages + Animations + Viewports + Tokens"
-							href="/design"
-							icon={PaletteIcon}
-							label="Design"
-							onClick={navigate}
-						>
-							{designLinks.map((link) => (
-								<SidebarChildLink
-									active={false}
-									href={link.href}
-									key={link.label}
-									label={link.label}
-									onClick={navigate}
-								/>
-							))}
-						</MenuGroup>
-						<MenuGroup
-							description="Components + Templates + UI"
-							href="/components"
-							icon={ShapesIcon}
-							label="Components"
-							onClick={navigate}
-						>
-							{componentLinks.map((link) => (
-								<SidebarChildLink
-									active={false}
-									href={link.href}
-									key={link.label}
-									label={link.label}
-									onClick={navigate}
-								/>
-							))}
-						</MenuGroup>
-						<MenuLink
-							description="List of assets"
-							href="/assets"
-							icon={ImageIcon}
-							label="Assets"
-							onClick={navigate}
-						/>
-						<MenuGroup
-							description="CMS entries, SEO, schema markup"
-							href="/content"
-							icon={DatabaseIcon}
-							label="Content"
-							onClick={navigate}
-						>
-							<SidebarToggle label="Show CMS" pref="showCms" />
-							<SidebarToggle
-								label="Show SEO + Schema Markup in right sidebar"
-								pref="showContentSeo"
-							/>
-						</MenuGroup>
-						<MenuLink href="/settings" icon={Settings2Icon} label="Settings" onClick={navigate} />
-					</ul>
-					{prefs.showCms && collections.length > 0 ? (
-						<div className="mt-1 border-t border-border px-2 pt-2">
-							<p className="pb-1 text-9 font-bold tracking-12 text-muted-foreground uppercase">
-								CMS
-							</p>
-							<ul className="grid gap-0.5">
-								{collections.map((collection) => (
-									<li key={collection.id}>
-										<Link
-											className="flex items-center gap-1.5 rounded-md p-1 text-11 text-muted-foreground hover:bg-muted hover:text-foreground"
-											hash={collection.id}
-											onClick={navigate}
-											to="/content"
-										>
-											<span className="truncate">{collection.label}</span>
-											<span className="ml-auto font-mono text-10">{collection.count}</span>
-										</Link>
-									</li>
-								))}
-							</ul>
-						</div>
-					) : null}
-				</div>
-			) : null}
-		</div>
+			<Dialog onOpenChange={setOpen} open={open}>
+				<DialogContent className="gap-3 sm:max-w-xl">
+					<DialogHeader>
+						<DialogTitle>{mode === "select" ? "Select project" : "Add project"}</DialogTitle>
+					</DialogHeader>
+
+					{mode === "select" ? (
+						<>
+							<div className="flex items-center gap-2">
+								<div className="relative min-w-0 flex-1">
+									<SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										aria-label="Search projects"
+										className="h-8 pl-8 text-13"
+										onChange={(event) => setQuery(event.target.value)}
+										placeholder="Search projects…"
+										value={query}
+									/>
+								</div>
+								<div className="flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-muted p-0.5">
+									<button
+										aria-label="List view"
+										aria-pressed={view === "list"}
+										className={cn(
+											"inline-flex size-7 items-center justify-center rounded-full transition-colors",
+											view === "list"
+												? "bg-card text-foreground shadow-soft"
+												: "text-muted-foreground hover:text-foreground",
+										)}
+										onClick={() => setView("list")}
+										type="button"
+									>
+										<ListIcon className="size-3.5" />
+									</button>
+									<button
+										aria-label="Card view"
+										aria-pressed={view === "cards"}
+										className={cn(
+											"inline-flex size-7 items-center justify-center rounded-full transition-colors",
+											view === "cards"
+												? "bg-card text-foreground shadow-soft"
+												: "text-muted-foreground hover:text-foreground",
+										)}
+										onClick={() => setView("cards")}
+										type="button"
+									>
+										<LayoutGridIcon className="size-3.5" />
+									</button>
+								</div>
+							</div>
+
+							<div className="max-h-58vh min-h-40 overflow-y-auto pr-0.5">
+								{entries === null ? (
+									<div className="grid gap-1.5" aria-label="Loading projects">
+										<div className="h-11 animate-pulse rounded-lg bg-muted" />
+										<div className="h-11 animate-pulse rounded-lg bg-muted" />
+										<div className="h-11 animate-pulse rounded-lg bg-muted" />
+									</div>
+								) : filtered.length === 0 ? (
+									<div className="rounded-xl border border-dashed border-border px-4 py-8 text-center">
+										<p className="text-13 font-semibold text-foreground">
+											{query ? "No matches" : "No Astro projects yet"}
+										</p>
+										<p className="mt-1 text-12 text-muted-foreground">
+											{query
+												? `Nothing matches “${query}”.`
+												: "Use Add project to open a folder with astro.config.*."}
+										</p>
+									</div>
+								) : view === "list" ? (
+									<ul className="grid gap-0.5">
+										{filtered.map((entry) => (
+											<li key={entry.root}>
+												<button
+													className={cn(
+														"flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors",
+														switching === null ? "hover:bg-muted" : "cursor-not-allowed opacity-55",
+													)}
+													disabled={switching !== null}
+													onClick={() => selectProject(entry)}
+													title={entry.root}
+													type="button"
+												>
+													{entry.favicon ? (
+														<img
+															alt=""
+															className="size-8 shrink-0 rounded-md object-contain"
+															src={entry.favicon}
+														/>
+													) : (
+														<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+															<FileTextIcon className="size-3.5" />
+														</span>
+													)}
+													<span className="min-w-0 flex-1">
+														<span className="flex items-center gap-1.5">
+															<span className="truncate text-13 font-semibold text-foreground">
+																{entry.name}
+															</span>
+															{entry.current ? (
+																<span className="shrink-0 rounded-full bg-brand-soft px-1.5 py-0.5 text-9 font-bold text-brand uppercase">
+																	Current
+																</span>
+															) : null}
+														</span>
+														<span className="block truncate font-mono text-10 text-muted-foreground">
+															{entry.displayPath}
+														</span>
+													</span>
+													<span className="flex shrink-0 items-center gap-1 font-mono text-10 text-muted-foreground">
+														<GitBranchIcon className="size-3" />
+														<span className="max-w-24 truncate">
+															{switching === entry.root ? "switching…" : entry.branch}
+														</span>
+													</span>
+												</button>
+											</li>
+										))}
+									</ul>
+								) : (
+									<ul className="grid grid-cols-2 gap-2">
+										{filtered.map((entry) => (
+											<li key={entry.root}>
+												<button
+													className={cn(
+														"flex size-full flex-col gap-2 rounded-xl border border-border bg-card p-3 text-left transition-card",
+														switching === null
+															? "hover:border-foreground/15 hover:shadow-soft"
+															: "cursor-not-allowed opacity-55",
+													)}
+													disabled={switching !== null}
+													onClick={() => selectProject(entry)}
+													title={entry.root}
+													type="button"
+												>
+													<span className="flex items-center justify-between gap-1.5">
+														{entry.favicon ? (
+															<img
+																alt=""
+																className="size-8 rounded-md object-contain"
+																src={entry.favicon}
+															/>
+														) : (
+															<span className="inline-flex size-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
+																<FileTextIcon className="size-3.5" />
+															</span>
+														)}
+														<span className="flex shrink-0 items-center gap-1 font-mono text-10 text-muted-foreground">
+															<GitBranchIcon className="size-3" />
+															<span className="max-w-24 truncate">
+																{switching === entry.root ? "switching…" : entry.branch}
+															</span>
+														</span>
+													</span>
+													<span className="min-w-0">
+														<span className="flex items-center gap-1.5">
+															<span className="truncate text-13 font-semibold text-foreground">
+																{entry.name}
+															</span>
+															{entry.current ? (
+																<span className="shrink-0 rounded-full bg-brand-soft px-1.5 py-0.5 text-9 font-bold text-brand uppercase">
+																	Current
+																</span>
+															) : null}
+														</span>
+														<span className="mt-0.5 block truncate font-mono text-10 text-muted-foreground">
+															{entry.displayPath}
+														</span>
+													</span>
+												</button>
+											</li>
+										))}
+									</ul>
+								)}
+							</div>
+
+							<DialogFooter className="items-center gap-2">
+								<p className="min-w-0 flex-1 text-11 text-muted-foreground">
+									Only Astro projects are listed.
+								</p>
+								<Button onClick={startBrowse} size="sm" variant="outline">
+									<FolderPlusIcon />
+									Add project
+								</Button>
+							</DialogFooter>
+						</>
+					) : (
+						<>
+							<div className="flex items-center gap-1.5">
+								<Button
+									aria-label="Back to project list"
+									onClick={() => setMode("select")}
+									size="icon-sm"
+									variant="ghost"
+								>
+									<ArrowLeftIcon />
+								</Button>
+								<div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5">
+									<FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
+									<span className="truncate font-mono text-11 text-muted-foreground">
+										{browse?.displayPath ?? "Loading…"}
+									</span>
+								</div>
+								<Button
+									aria-label="Parent folder"
+									disabled={!browse?.parent || browseLoading}
+									onClick={() => {
+										if (browse?.parent) void openFolder(browse.parent);
+									}}
+									size="icon-sm"
+									variant="ghost"
+								>
+									<ArrowUpIcon />
+								</Button>
+							</div>
+
+							<div className="flex max-h-58vh min-h-40 gap-2">
+								<div className="w-36 shrink-0">
+									<p className="px-2 pb-1 text-9 font-bold tracking-12 text-muted-foreground uppercase">
+										Places
+									</p>
+									<ul className="grid gap-0.5">
+										{(browse?.places ?? []).map((place) => {
+											const PlaceIcon = browsePlaceIcons[place.label] ?? FolderIcon;
+											return (
+												<li key={place.path}>
+													<button
+														className={cn(
+															"flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-11 transition-colors",
+															browse?.path === place.path
+																? "bg-sidebar-accent font-semibold text-foreground"
+																: "text-muted-foreground hover:bg-muted hover:text-foreground",
+														)}
+														onClick={() => void openFolder(place.path)}
+														type="button"
+													>
+														<PlaceIcon className="size-3 shrink-0" />
+														<span className="truncate">{place.label}</span>
+													</button>
+												</li>
+											);
+										})}
+									</ul>
+								</div>
+
+								<div className="min-h-0 min-w-0 flex-1 overflow-y-auto border-l border-border pl-2">
+									{browseLoading && !browse ? (
+										<div aria-label="Loading folders" className="grid gap-1.5">
+											<div className="h-11 animate-pulse rounded-lg bg-muted" />
+											<div className="h-11 animate-pulse rounded-lg bg-muted" />
+											<div className="h-11 animate-pulse rounded-lg bg-muted" />
+										</div>
+									) : browseError ? (
+										<div className="rounded-xl border border-dashed border-border px-4 py-8 text-center">
+											<p className="text-13 font-semibold text-foreground">Cannot open folder</p>
+											<p className="mt-1 text-12 text-muted-foreground">{browseError}</p>
+										</div>
+									) : browse ? (
+										browse.entries.length === 0 ? (
+											<div className="rounded-xl border border-dashed border-border px-4 py-8 text-center">
+												<p className="text-13 font-semibold text-foreground">No folders here</p>
+												<p className="mt-1 text-12 text-muted-foreground">
+													Go up a level to keep looking.
+												</p>
+											</div>
+										) : (
+											<ul className="grid gap-0.5">
+												{browse.entries.map((entry) => (
+													<li key={entry.path}>
+														<button
+															className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-muted"
+															onClick={() => void openFolder(entry.path)}
+															type="button"
+														>
+															<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+																<FolderIcon className="size-3.5" />
+															</span>
+															<span className="min-w-0 flex-1 truncate text-13 font-semibold text-foreground">
+																{entry.name}
+															</span>
+															{entry.isAstro ? (
+																<span className="shrink-0 rounded-full bg-brand-soft px-1.5 py-0.5 text-9 font-bold text-brand uppercase">
+																	Astro
+																</span>
+															) : null}
+															<ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+														</button>
+													</li>
+												))}
+											</ul>
+										)
+									) : null}
+									{browse?.truncated ? (
+										<p className="p-2 text-10 text-muted-foreground">
+											Showing the first 300 folders.
+										</p>
+									) : null}
+								</div>
+							</div>
+
+							<DialogFooter className="items-center gap-2">
+								<p className="min-w-0 flex-1 text-11 text-muted-foreground">
+									{browse?.isAstro ? (
+										<span className="inline-flex items-center gap-1 font-semibold text-brand">
+											<CheckIcon className="size-3" />
+											Astro project detected
+										</span>
+									) : (
+										"Pick a folder that contains astro.config.* to enable Add project."
+									)}
+								</p>
+								<Button
+									disabled={!browse?.isAstro || browseLoading || switching !== null}
+									onClick={addProject}
+									size="sm"
+								>
+									{switching === browse?.path ? "Adding…" : "Add project"}
+								</Button>
+							</DialogFooter>
+						</>
+					)}
+				</DialogContent>
+			</Dialog>
+		</>
 	);
 }
 
@@ -584,8 +920,8 @@ function SidebarNav({
 	return (
 		<ul className="grid gap-0.5">
 			<SidebarLink
-				active={pathname === "/"}
-				href="/"
+				active={pathname === "/dashboard"}
+				href="/dashboard"
 				icon={LayoutDashboardIcon}
 				label="Dashboard"
 				onClick={onNavigate}
@@ -747,25 +1083,36 @@ function SidebarNav({
 function SidebarPanel({
 	collections,
 	onNavigate,
+	onResync,
+	syncError,
+	syncStatus,
+	syncing,
 	workspace,
 }: {
 	collections: CollectionSummary[];
 	onNavigate?: () => void;
+	onResync: () => void;
+	syncError: boolean;
+	syncStatus: SyncScopeStatus[] | null;
+	syncing: boolean;
 	workspace: WorkspacePayload | null;
 }) {
 	return (
 		<div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
 			<div className="border-b border-sidebar-border p-2">
-				<WorkspaceMenu collections={collections} onNavigate={onNavigate} workspace={workspace} />
+				<WorkspaceMenu onNavigate={onNavigate} workspace={workspace} />
 			</div>
 			<nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto p-2">
 				<SidebarNav collections={collections} onNavigate={onNavigate} workspace={workspace} />
 			</nav>
-			<div className="border-t border-sidebar-border p-3">
-				<p className="flex items-center gap-1.5 text-10 text-muted-foreground">
-					<span aria-hidden="true" className="size-1.5 rounded-full bg-brand" />
-					local-first · files are the source of truth
-				</p>
+			<div className="border-t border-sidebar-border p-2">
+				<SyncStatusBar
+					lastSync={overallLastSync(syncStatus)}
+					loading={syncStatus === null && !syncError}
+					onRefresh={onResync}
+					refreshing={syncing}
+					stale={syncError}
+				/>
 			</div>
 		</div>
 	);
@@ -782,6 +1129,8 @@ export function AppSidebar() {
 	const routerHref = useRouterState({ select: (state) => state.location.href });
 	const showCms = useUiPref("showCms");
 	const collections = useCollections(showCms);
+	const { resync, status, syncError, syncing } = useSyncStatus();
+	const handleResync = () => void resync();
 
 	useEffect(() => {
 		if (routerHref) setMobileOpen(false);
@@ -790,7 +1139,14 @@ export function AppSidebar() {
 	return (
 		<>
 			<aside className="fixed inset-y-0 left-0 z-40 hidden w-sidebar border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:block">
-				<SidebarPanel collections={collections} workspace={workspace} />
+				<SidebarPanel
+					collections={collections}
+					onResync={handleResync}
+					syncError={syncError}
+					syncStatus={status}
+					syncing={syncing}
+					workspace={workspace}
+				/>
 			</aside>
 
 			<header className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-border bg-background/90 px-3 backdrop-blur-xl lg:hidden">
@@ -835,6 +1191,10 @@ export function AppSidebar() {
 							<SidebarPanel
 								collections={collections}
 								onNavigate={() => setMobileOpen(false)}
+								onResync={handleResync}
+								syncError={syncError}
+								syncStatus={status}
+								syncing={syncing}
 								workspace={workspace}
 							/>
 						</div>

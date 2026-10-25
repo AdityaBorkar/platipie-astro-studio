@@ -16,7 +16,7 @@ bun run check:tailwind   # bunx tailwind-lint
 bun run gen:routes       # tsr generate -> src/routeTree.gen.ts
 bun run build            # vite build, output .output/ (not dist/)
 bun run verify           # format && lint && types && build (full pre-push gate)
-bun run verify:spec      # SPEC §14 acceptance against ASTRO_ROOT (bun scripts/verify.ts)
+bun run verify:spec      # SPEC §14 acceptance against PROJECT_PATH (bun scripts/verify.ts)
 ```
 
 - Always `bun run <script>`, not `npm`/`npx`.
@@ -26,7 +26,7 @@ bun run verify:spec      # SPEC §14 acceptance against ASTRO_ROOT (bun scripts/
 ## Paths and env
 
 - Path aliases: `#/*` → `./src/*`, `#cms/*` → `./src/lib/cms/*`, `~/*` → `./src/*` (`package.json` `imports` + `tsconfig` `paths`). Prefer `#cms/*` inside server libs.
-- Runtime config in `src/lib/cms/config.ts` (`ASTRO_ROOT` jail, `ASTRO_URL`, BYOK `AI_*`, `PORT` 4000, `TRASH_TTL_DAYS`). Client env via `src/env.ts` (T3 `createEnv` + zod, `VITE_` prefix).
+- Runtime config in `src/lib/cms/config.ts` (`PROJECT_PATH` jail, server-only, never sent to the frontend; falls back to cwd, `ASTRO_URL`, BYOK `AI_*`, `PORT` 4000, `TRASH_TTL_DAYS`). Client env via `src/env.ts` (T3 `createEnv` + zod, `VITE_` prefix).
 - Binds localhost by default, no auth in V1 (documented risk given TS-editing power — backups + danger-zone confirms).
 
 ## Design system

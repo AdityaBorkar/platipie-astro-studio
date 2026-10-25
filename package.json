@@ -2,7 +2,7 @@
 	"name": "platipie-cms",
 	"version": "0.1.0",
 	"private": true,
-	"description": "Standalone content-management server for the Astro site at ASTRO_ROOT — TanStack Start + Bun + Nitro (bun preset).",
+	"description": "Standalone content-management server for the Astro site — TanStack Start + Bun + Nitro (bun preset).",
 	"type": "module",
 	"imports": {
 		"#/*": "./src/*",

@@ -10,7 +10,7 @@ interface FinalCtaProps {
 	title?: string;
 }
 
-const defaultPrimary = { href: "/", label: "Start for free" };
+const defaultPrimary = { href: "/dashboard", label: "Start for free" };
 const defaultSecondary = { href: "/settings", label: "Talk to us" };
 
 /**

@@ -50,10 +50,9 @@ interface CollectionsResponse {
 	drift: { code: string; hint?: string; message: string }[];
 	env: {
 		aiEnabled: boolean;
-		astroRoot: string;
-		astroRootReachable: boolean;
 		astroUrl: string | null;
 		port: number;
+		projectReachable: boolean;
 		trashTtlDays: number;
 	};
 	recent: RecentEntry[];
@@ -161,7 +160,7 @@ function ContentPage() {
 						truth; the SQLite mirror is a read-model kept fresh by the FS watcher.
 					</p>
 				</div>
-				<Button nativeButton={false} render={<Link to="/" />} size="sm" variant="outline">
+				<Button nativeButton={false} render={<Link to="/dashboard" />} size="sm" variant="outline">
 					<ArrowRightIcon className="size-3.5" />
 					Open dashboard
 				</Button>
@@ -170,9 +169,9 @@ function ContentPage() {
 			<div className="mt-6 flex flex-wrap items-center gap-1.5">
 				<Badge
 					className="font-mono"
-					variant={data?.env.astroRootReachable ? "success" : "destructive"}
+					variant={data?.env.projectReachable ? "success" : "destructive"}
 				>
-					ASTRO_ROOT {data?.env.astroRootReachable ? "reachable" : "missing"}
+					Project {data?.env.projectReachable ? "reachable" : "missing"}
 				</Badge>
 				<Badge variant="secondary">{totalEntries} entries</Badge>
 				<Badge variant={(data?.drift.length ?? 0) > 0 ? "brand" : "success"}>
@@ -294,7 +293,7 @@ function ContentPage() {
 										<Badge variant="outline">{collection.count} entries</Badge>
 										<Button
 											nativeButton={false}
-											render={<Link hash="collections" to="/" />}
+											render={<Link hash="collections" to="/dashboard" />}
 											size="sm"
 											variant="ghost"
 										>

@@ -47,7 +47,12 @@ export function ErrorPage({ error, reset }: { error: unknown; reset: () => void 
 							<RotateCcwIcon className="size-3.5" />
 							Try again
 						</Button>
-						<Button nativeButton={false} render={<Link to="/" />} size="sm" variant="outline">
+						<Button
+							nativeButton={false}
+							render={<Link to="/dashboard" />}
+							size="sm"
+							variant="outline"
+						>
 							<HouseIcon className="size-3.5" />
 							Back to dashboard
 						</Button>

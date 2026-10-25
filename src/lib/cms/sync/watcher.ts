@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { watch } from "chokidar";
 
-import { getAstroRoot } from "../config.ts";
+import { getProjectRoot } from "../config.ts";
 import { SYNC_SCOPES, fullSync, syncScope } from "./index.ts";
 import type { SyncScope } from "./index.ts";
 
@@ -54,7 +54,7 @@ const WATCHED_REL = [
 ];
 
 /** Bootstrap a full sync, then watch the checkout and re-sync on change. */
-export async function startWatcher(root = getAstroRoot()): Promise<WatcherHandle> {
+export async function startWatcher(root = getProjectRoot()): Promise<WatcherHandle> {
 	const initial = await fullSync(root);
 	console.log(
 		`[watcher] initial sync of ${root}: ` +

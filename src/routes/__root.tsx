@@ -4,7 +4,6 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { useEffect } from "react";
 
 import { AppSidebar } from "#/components/gitbook/app-sidebar";
-import { AskWidget } from "#/components/gitbook/ask-widget";
 import { ErrorPage } from "#/components/pages/error";
 import { LoadingPage } from "#/components/pages/loading";
 import { NotFoundPage } from "#/components/pages/not-found";
@@ -55,7 +54,7 @@ export const Route = createRootRoute({
 			{ title: "platipie-cms" },
 			{
 				content:
-					"Standalone content-management server for the Astro site at ASTRO_ROOT. Files are the source of truth; SQLite holds a synced read-model.",
+					"Standalone content-management server for the Astro site. Files are the source of truth; SQLite holds a synced read-model.",
 				name: "description",
 			},
 		],
@@ -92,7 +91,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 						<main className="min-h-dvh pt-12 lg:pt-0">{children}</main>
 					</div>
 				</div>
-				<AskWidget />
 				<Toaster position="top-center" richColors />
 				<ReactGrabDevtools />
 				<TanStackDevtools

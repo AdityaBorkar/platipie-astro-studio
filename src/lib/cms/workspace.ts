@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 
-import { getAstroRoot } from "./config.ts";
+import { getProjectRoot } from "./config.ts";
 
 const PAGE_EXTENSIONS = new Map([
 	[".astro", "astro"],
@@ -27,7 +27,6 @@ export interface Workspace {
 	pages: SitePage[];
 	project: string;
 	reachable: boolean;
-	root: string;
 }
 
 async function readProjectName(root: string): Promise<string> {
@@ -124,14 +123,14 @@ async function walkPages(root: string, dirAbs: string, out: SitePage[]): Promise
 }
 
 export async function listSitePages(): Promise<SitePage[]> {
-	const root = getAstroRoot();
+	const root = getProjectRoot();
 	const pages: SitePage[] = [];
 	await walkPages(root, path.join(root, "src/pages"), pages);
 	return pages.toSorted((a, b) => a.route.localeCompare(b.route));
 }
 
 export async function getWorkspace(): Promise<Workspace> {
-	const root = getAstroRoot();
+	const root = getProjectRoot();
 	const reachable = await fs
 		.stat(root)
 		.then((stat) => stat.isDirectory())
@@ -141,6 +140,5 @@ export async function getWorkspace(): Promise<Workspace> {
 		pages: reachable ? await listSitePages() : [],
 		project: await readProjectName(root),
 		reachable,
-		root,
 	};
 }

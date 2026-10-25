@@ -45,7 +45,6 @@ interface WorkspaceResponse {
 	branch: string;
 	project: string;
 	reachable: boolean;
-	root: string;
 }
 
 interface SettingsResponse {
@@ -194,7 +193,7 @@ function WebsitePage() {
 
 			<div className="mt-6 flex flex-wrap items-center gap-1.5">
 				<Badge className="font-mono" variant={workspace?.reachable ? "success" : "destructive"}>
-					ASTRO_ROOT {workspace?.reachable ? "reachable" : workspace ? "missing" : "…"}
+					Project {workspace?.reachable ? "reachable" : workspace ? "missing" : "…"}
 				</Badge>
 				<Badge className="font-mono" variant="outline">
 					{workspace?.project ?? "…"} · {workspace?.branch ?? "…"}

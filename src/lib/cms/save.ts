@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { createTwoFilesPatch } from "diff";
 
-import { getAstroRoot, getTrashTtlDays, resolveRepoPath, LARGE_FILE_BYTES } from "./config.ts";
+import { getProjectRoot, getTrashTtlDays, resolveRepoPath, LARGE_FILE_BYTES } from "./config.ts";
 import { CmsError } from "./errors.ts";
 import { normalizeText, parseFileContent, stringifyFileContent } from "./frontmatter.ts";
 import {
@@ -487,7 +487,7 @@ export async function renameEntry(
 }
 
 function trashRoot(): string {
-	return path.join(getAstroRoot(), ".cms-trash");
+	return path.join(getProjectRoot(), ".cms-trash");
 }
 
 export async function softDelete(
@@ -565,7 +565,7 @@ export async function listTrash(): Promise<{ path: string; deletedAt?: string }[
 			const st = await fs.stat(abs);
 			if (st.isDirectory()) await walk(abs);
 			else {
-				const rel = path.relative(getAstroRoot(), abs).replaceAll("\\", "/");
+				const rel = path.relative(getProjectRoot(), abs).replaceAll("\\", "/");
 				out.push({ path: rel });
 			}
 		}

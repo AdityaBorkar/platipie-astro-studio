@@ -1,13 +1,13 @@
-// scripts/verify.ts — verifies SPEC §14 acceptance against ASTRO_ROOT.
-// Run: ASTRO_ROOT=/home/aditya/repo/AdityaBorkar bun scripts/verify.ts
+// scripts/verify.ts — verifies SPEC §14 acceptance against PROJECT_PATH.
+// Run: PROJECT_PATH=/home/aditya/repo/AdityaBorkar bun scripts/verify.ts
 // Uses only server libs (no dev server needed) + exercises file ops safely
 // on temp copies where destructive.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-process.env.ASTRO_ROOT ??= "/home/aditya/repo/AdityaBorkar";
+process.env.PROJECT_PATH ??= "/home/aditya/repo/AdityaBorkar";
 
-const { getAstroRoot } = await import("../src/lib/cms/config.ts");
+const { getProjectRoot } = await import("../src/lib/cms/config.ts");
 const { listEntries, collectionCounts, driftWarnings } =
 	await import("../src/lib/cms/collections.ts");
 const { parseFileContent, stringifyFileContent } = await import("../src/lib/cms/frontmatter.ts");
@@ -16,7 +16,6 @@ const { loadEntry, saveEntry, createEntry, renameEntry, softDelete, restoreTrash
 const { scoreEntry } = await import("../src/lib/cms/seo.ts");
 const { listMedia } = await import("../src/lib/cms/media.ts");
 const { readSettingsRaw } = await import("../src/lib/cms/settings.ts");
-const { blogRegistrationStatus } = await import("../src/lib/cms/blog-register.ts");
 
 let fail = 0,
 	pass = 0;
@@ -30,7 +29,7 @@ function ok(name: string, cond: boolean, detail = "") {
 	}
 }
 
-console.log(`ASTRO_ROOT=${getAstroRoot()}`);
+console.log(`PROJECT_PATH=${getProjectRoot()}`);
 
 // 1. Dashboard counts + template hidden/offer
 const counts = await collectionCounts();
@@ -55,17 +54,13 @@ ok(
 	drift.some((d) => d.code === "template-oddity"),
 );
 ok(
-	"drift blog-unregistered flagged",
-	drift.some((d) => d.code === "blog-unregistered"),
-);
-ok(
 	"drift testimonials-project flagged",
 	drift.some((d) => d.code === "testimonials-project-drift"),
 );
 
 // 2. Toggle Markdown⇄Visual no-diff (frontend holds body state; backend semantic no-op) + save touches modifiedDate
 const platRel = "cms/projects/platipie.md";
-const platOrigRaw = await fs.readFile(path.join(getAstroRoot(), platRel), "utf8");
+const platOrigRaw = await fs.readFile(path.join(getProjectRoot(), platRel), "utf8");
 const plat = await loadEntry(platRel);
 const reser = stringifyFileContent(plat.frontmatter, plat.body, plat.hasFrontmatter);
 // Byte-identical is ideal, but YAML quoting (`"` vs `'`) may normalize on write.
@@ -80,7 +75,7 @@ ok(
 	semanticSame,
 	`keys=${Object.keys(plat.frontmatter).length}`,
 );
-const rawPlat = await fs.readFile(path.join(getAstroRoot(), platRel), "utf8");
+const rawPlat = await fs.readFile(path.join(getProjectRoot(), platRel), "utf8");
 void rawPlat;
 // Untouched save → no-op (toggle without edits produces no diff).
 const noop = await saveEntry(
@@ -121,12 +116,12 @@ await saveEntry(
 	},
 ).catch(() => {});
 // byte-for-byte restore so Astro repo stays clean (verify must be non-destructive)
-await fs.writeFile(path.join(getAstroRoot(), platRel), platOrigRaw, "utf8").catch(() => {});
+await fs.writeFile(path.join(getProjectRoot(), platRel), platOrigRaw, "utf8").catch(() => {});
 // cleanup normalization artifacts (.bak) so Astro repo stays clean
-await fs.rm(path.join(getAstroRoot(), `${platRel}.bak`), { force: true }).catch(() => {});
-await fs.rm(path.join(getAstroRoot(), `${platRel}.bak.1`), { force: true }).catch(() => {});
-await fs.rm(path.join(getAstroRoot(), `${platRel}.bak.2`), { force: true }).catch(() => {});
-await fs.rm(path.join(getAstroRoot(), `${platRel}.bak.3`), { force: true }).catch(() => {});
+await fs.rm(path.join(getProjectRoot(), `${platRel}.bak`), { force: true }).catch(() => {});
+await fs.rm(path.join(getProjectRoot(), `${platRel}.bak.1`), { force: true }).catch(() => {});
+await fs.rm(path.join(getProjectRoot(), `${platRel}.bak.2`), { force: true }).catch(() => {});
+await fs.rm(path.join(getProjectRoot(), `${platRel}.bak.3`), { force: true }).catch(() => {});
 
 // 3. Create hello-world draft + rename + SEO no-AI
 const helloSlug = `hello-world-verify-${Date.now().toString(36)}`;
@@ -169,14 +164,14 @@ try {
 			// cleanup: delete again + remove trash envelope + bak so repo is clean
 			const del2 = await softDelete(helloPath).catch(() => null);
 			if (del2) {
-				const trashAbs = path.join(getAstroRoot(), del2.trashPath);
+				const trashAbs = path.join(getProjectRoot(), del2.trashPath);
 				await fs.rm(trashAbs, { force: true }).catch(() => {});
 				// remove timestamp dir if empty-ish (manifest cleanup)
 				await fs.rm(path.dirname(trashAbs), { force: true, recursive: true }).catch(() => {});
 			}
 		}
 		// rename leaves a .bak next to the old path — clean all hello verify artifacts
-		const blogDir = path.join(getAstroRoot(), "cms/blog");
+		const blogDir = path.join(getProjectRoot(), "cms/blog");
 		try {
 			const names = await fs.readdir(blogDir);
 			for (const n of names) {
@@ -186,7 +181,7 @@ try {
 		} catch {}
 	}
 	await fs
-		.rm(path.join(getAstroRoot(), ".cms-trash"), { force: true, recursive: true })
+		.rm(path.join(getProjectRoot(), ".cms-trash"), { force: true, recursive: true })
 		.catch(() => {});
 }
 
@@ -252,9 +247,9 @@ ok(
 	);
 	ok("testimonial/client persist", put.ok && put.diff.length >= 0, `diff len=${put.diff.length}`);
 	// revert clients.json byte-for-byte
-	await fs.writeFile(path.join(getAstroRoot(), "cms/clients.json"), clientsOrig, "utf8");
-	await fs.rm(path.join(getAstroRoot(), uploaded.path), { force: true }).catch(() => {});
-	await fs.rm(path.join(getAstroRoot(), "cms/clients.json.bak"), { force: true }).catch(() => {});
+	await fs.writeFile(path.join(getProjectRoot(), "cms/clients.json"), clientsOrig, "utf8");
+	await fs.rm(path.join(getProjectRoot(), uploaded.path), { force: true }).catch(() => {});
+	await fs.rm(path.join(getProjectRoot(), "cms/clients.json.bak"), { force: true }).catch(() => {});
 }
 
 // 6. SITE_URL + legal {SOCIALS.email} intact
@@ -274,16 +269,16 @@ ok("SITE_URL in constants", settings.raw.includes("SITE_URL"));
 		patched ? "patched" : "failed",
 	);
 	await fs
-		.writeFile(path.join(getAstroRoot(), "cms/constants.ts"), origRaw, "utf8")
+		.writeFile(path.join(getProjectRoot(), "cms/constants.ts"), origRaw, "utf8")
 		.catch(() => {});
-	await fs.rm(path.join(getAstroRoot(), "cms/constants.ts.bak"), { force: true }).catch(() => {});
+	await fs.rm(path.join(getProjectRoot(), "cms/constants.ts.bak"), { force: true }).catch(() => {});
 }
 const legalRel = "src/pages/legal/_privacy-policy.mdx";
 const legal = await loadEntry(legalRel);
 ok(
 	"legal SOCIALS import intact",
 	legal.body.includes("#cms/constants") ||
-		(await fs.readFile(path.join(getAstroRoot(), legalRel), "utf8")).includes("#cms/constants"),
+		(await fs.readFile(path.join(getProjectRoot(), legalRel), "utf8")).includes("#cms/constants"),
 );
 const legalSave = await saveEntry(
 	{ collection: "legal", path: legalRel },
@@ -305,47 +300,8 @@ try {
 	ok("stale-write 409", e.code === "CONFLICT", e.code ?? String(e).slice(0, 60));
 }
 
-// 8. Blog registration status (dry — do not mutate here; endpoint is idempotent)
-const reg = await blogRegistrationStatus();
-console.log("blog registration", reg);
-ok("blog status readable", typeof reg.registered === "boolean", `registered=${reg.registered}`);
-{
-	// Idempotent merge tested on an isolated temp ASTRO_ROOT copy (never touches real repo).
-	const osTmp = await import("node:os");
-	const tmpRoot = await fs.mkdtemp(path.join(osTmp.tmpdir(), "cms-verify-"));
-	try {
-		const realCfg = await fs.readFile(path.join(getAstroRoot(), "src/content.config.ts"), "utf8");
-		await fs.mkdir(path.join(tmpRoot, "src"), { recursive: true });
-		await fs.writeFile(path.join(tmpRoot, "src/content.config.ts"), realCfg, "utf8");
-		const prevRoot = process.env.ASTRO_ROOT;
-		process.env.ASTRO_ROOT = tmpRoot;
-		const { registerBlogCollection, blogRegistrationStatus: status2 } =
-			await import("../src/lib/cms/blog-register.ts");
-		const first = await registerBlogCollection({});
-		const second = await registerBlogCollection({});
-		const st = await status2();
-		ok(
-			"blog register applies cleanly once",
-			first.ok && (first.already === false || first.already === true),
-			`already=${first.already}`,
-		);
-		ok(
-			"blog register idempotent",
-			second.already === true && st.registered === true && st.projectsExtended === true,
-			JSON.stringify(st),
-		);
-		// parse check = site still typechecks (transpile gate inside register already passed)
-		const merged = await fs.readFile(path.join(tmpRoot, "src/content.config.ts"), "utf8");
-		new Bun.Transpiler({ loader: "ts" }).transformSync(merged);
-		ok("merged config parses (typecheck gate)", true);
-		process.env.ASTRO_ROOT = prevRoot;
-	} finally {
-		await fs.rm(tmpRoot, { force: true, recursive: true }).catch(() => {});
-	}
-}
-
-// 9. gem-finder richest round-trip (semantic: frontmatter keys + body preserved)
-const gemRaw = await fs.readFile(path.join(getAstroRoot(), gemRel), "utf8");
+// 8. gem-finder richest round-trip (semantic: frontmatter keys + body preserved)
+const gemRaw = await fs.readFile(path.join(getProjectRoot(), gemRel), "utf8");
 const gemParsed = parseFileContent(gemRaw);
 const gemReser = stringifyFileContent(
 	gemParsed.frontmatter,

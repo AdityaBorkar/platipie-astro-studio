@@ -41,7 +41,7 @@ export const Route = createFileRoute("/components")({
 const templates = [
 	{
 		description: "Workspace overview with counts, drift, and recent edits.",
-		href: "/",
+		href: "/dashboard",
 		icon: LayoutDashboardIcon,
 		label: "Dashboard",
 	},
@@ -374,7 +374,7 @@ function ComponentsPage() {
 								Two pages reference a flag that no longer exists.
 							</Hint>
 							<Hint title="Write blocked" variant="danger">
-								The path sits outside the ASTRO_ROOT jail.
+								The path sits outside the project jail.
 							</Hint>
 						</CardContent>
 					</Card>

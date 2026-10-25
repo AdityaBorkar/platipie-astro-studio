@@ -1,11 +1,9 @@
 import { Editor } from "@monaco-editor/react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-	ArrowRightIcon,
 	Code2Icon,
 	CogIcon,
 	DatabaseIcon,
-	GitBranchIcon,
 	PaletteIcon,
 	RefreshCwIcon,
 	SaveIcon,
@@ -56,7 +54,6 @@ const sections = [
 	{ href: "#astro", icon: CogIcon, label: "Astro Settings" },
 	{ href: "#typed-form", icon: Settings2Icon, label: "Typed form" },
 	{ href: "#advanced", icon: Code2Icon, label: "Advanced" },
-	{ href: "#blog", icon: GitBranchIcon, label: "Blog registration" },
 	{ href: "#trash", icon: Trash2Icon, label: "Trash" },
 ];
 
@@ -98,7 +95,6 @@ function SettingsPage() {
 	const [values, setValues] = useState<Record<string, any>>({});
 	const [mtime, setMtime] = useState(0);
 	const [env, setEnv] = useState<any>(null);
-	const [blog, setBlog] = useState<any>(null);
 	const [msg, setMsg] = useState<string | null>(null);
 	const [err, setErr] = useState<string | null>(null);
 	const [trash, setTrash] = useState<{ path: string }[]>([]);
@@ -107,7 +103,6 @@ function SettingsPage() {
 	const [loaded, setLoaded] = useState(false);
 	const [rawDialogOpen, setRawDialogOpen] = useState(false);
 	const [activeSection, setActiveSection] = useState("environment");
-	const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
 
 	const load = useCallback(async () => {
 		const response = await fetch("/api/cms/settings");
@@ -116,7 +111,6 @@ function SettingsPage() {
 		setValues(json.values ?? {});
 		setMtime(json.mtime);
 		setEnv(json.env);
-		setBlog(json.blog);
 		const trashResponse = await fetch("/api/cms/restore")
 			.then((value) => value.json())
 			.catch(() => ({ trash: [] }));
@@ -179,24 +173,6 @@ function SettingsPage() {
 		setRaw(json.raw);
 		setMsg("Settings saved (typed form)");
 		toast.success("Settings saved (typed form)");
-	}
-
-	async function registerBlog(widen = false) {
-		const response = await fetch("/api/cms/collections/blog/register", {
-			body: JSON.stringify(widen ? { widenGlobs: true } : {}),
-			headers: { "Content-Type": "application/json" },
-			method: "POST",
-		});
-		const json = await response.json();
-		const message = response.ok
-			? widen
-				? `Widened=${json.widened}`
-				: `Register: already=${json.already} backup=${json.backup}`
-			: json.message;
-		setMsg(message);
-		if (response.ok) toast.success(message);
-		else toast.error(message);
-		void load();
 	}
 
 	async function restoreTrash(trashPath: string) {
@@ -293,12 +269,9 @@ function SettingsPage() {
 								<>
 									<Badge
 										className="font-mono"
-										variant={env.astroRootReachable ? "success" : "destructive"}
+										variant={env.projectReachable ? "success" : "destructive"}
 									>
-										ASTRO_ROOT {env.astroRootReachable ? "✓ reachable" : "✗ missing"}
-									</Badge>
-									<Badge className="font-mono" variant="outline">
-										{env.astroRoot}
+										Project {env.projectReachable ? "✓ reachable" : "✗ missing"}
 									</Badge>
 									<Badge className="font-mono" variant="outline">
 										ASTRO_URL {env.astroUrl ?? "unset"}
@@ -532,26 +505,6 @@ function SettingsPage() {
 						</CardContent>
 					</Card>
 
-					<Card id="blog">
-						<CardHeader>
-							<CardTitle>Blog registration</CardTitle>
-							<CardDescription>
-								registered: {String(blog?.registered)} · projectsExtended:{" "}
-								{String(blog?.projectsExtended)} · {blog?.path}
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="flex flex-wrap items-center gap-2">
-							<Button onClick={() => setRegisterDialogOpen(true)} variant="outline">
-								<GitBranchIcon className="size-3.5" />
-								Register blog collection
-							</Button>
-							<Button onClick={() => void registerBlog(true)} variant="ghost">
-								Widen globs to MDX
-								<ArrowRightIcon className="size-3.5" />
-							</Button>
-						</CardContent>
-					</Card>
-
 					<Card id="trash">
 						<CardHeader>
 							<CardTitle>Trash</CardTitle>
@@ -617,29 +570,6 @@ function SettingsPage() {
 							variant="destructive"
 						>
 							Save raw
-						</Button>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-
-			<AlertDialog onOpenChange={setRegisterDialogOpen} open={registerDialogOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Register blog collection?</AlertDialogTitle>
-						<AlertDialogDescription>
-							Danger zone: merges blog collection + projects extension into content.config.ts.
-							Continue?
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<Button
-							onClick={() => {
-								setRegisterDialogOpen(false);
-								void registerBlog(false);
-							}}
-						>
-							Register
 						</Button>
 					</AlertDialogFooter>
 				</AlertDialogContent>

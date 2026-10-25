@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { getAiConfig, getAstroRoot, isAiEnabled } from "./config.ts";
+import { getAiConfig, getProjectRoot, isAiEnabled } from "./config.ts";
 import { CmsError } from "./errors.ts";
 
 export interface SeoCheck {
@@ -52,7 +52,7 @@ function fleschGrade(score: number): string {
 function imageResolves(ref: string): boolean {
 	// remote allowed as plain string (§10)
 	if (/^https?:\/\//u.test(ref)) return true;
-	const root = getAstroRoot();
+	const root = getProjectRoot();
 	const cleaned = ref.replace(/^\/+/u, "").replace(/^assets\//u, "assets/");
 	const candidates = [
 		path.join(root, cleaned),

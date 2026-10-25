@@ -127,9 +127,9 @@ function kindForExt(ext: string): string {
 }
 
 /** Every file under `<root>/assets` (all kinds — the Assets Viewer scope). */
-export async function scanAssets(astroRoot: string): Promise<AssetScan[]> {
+export async function scanAssets(projectRoot: string): Promise<AssetScan[]> {
 	const entries: WalkEntry[] = [];
-	await walkDir(path.join(astroRoot, "assets"), "assets", entries);
+	await walkDir(path.join(projectRoot, "assets"), "assets", entries);
 	return entries.map((entry) => {
 		const ext = path.extname(entry.rel).toLowerCase();
 		return {
@@ -203,10 +203,10 @@ function topLevelKeys(body: string): string[] {
 }
 
 /** Locate `src/content.config.ts` (fallback: `<root>/content.config.ts`). */
-export function findContentConfig(astroRoot: string): string | null {
+export function findContentConfig(projectRoot: string): string | null {
 	const candidates = ["src/content.config.ts", "content.config.ts"];
 	for (const rel of candidates) {
-		if (existsSync(path.join(astroRoot, rel))) return rel;
+		if (existsSync(path.join(projectRoot, rel))) return rel;
 	}
 	return null;
 }
@@ -221,18 +221,22 @@ function extensionsForPattern(pattern: string): string[] {
 	return [...exts];
 }
 
-async function countGlobEntries(astroRoot: string, base: string, pattern: string): Promise<number> {
+async function countGlobEntries(
+	projectRoot: string,
+	base: string,
+	pattern: string,
+): Promise<number> {
 	const cleanBase = base.replace(/^\.\//u, "");
 	const entries: WalkEntry[] = [];
-	await walkDir(path.join(astroRoot, cleanBase), cleanBase, entries);
+	await walkDir(path.join(projectRoot, cleanBase), cleanBase, entries);
 	const exts = extensionsForPattern(pattern);
 	if (exts.length === 0) return entries.length;
 	return entries.filter((entry) => exts.includes(path.extname(entry.rel).toLowerCase())).length;
 }
 
-async function countFileEntries(astroRoot: string, base: string): Promise<number> {
+async function countFileEntries(projectRoot: string, base: string): Promise<number> {
 	try {
-		const raw = await fs.readFile(path.join(astroRoot, base.replace(/^\.\//u, "")), "utf8");
+		const raw = await fs.readFile(path.join(projectRoot, base.replace(/^\.\//u, "")), "utf8");
 		const parsed: unknown = JSON.parse(raw);
 		return Array.isArray(parsed) ? parsed.length : 0;
 	} catch {
@@ -245,10 +249,12 @@ async function countFileEntries(astroRoot: string, base: string): Promise<number
  * Returns one row per `defineCollection` with loader base/pattern and the
  * top-level schema keys.
  */
-export async function scanContentCollections(astroRoot: string): Promise<ContentCollectionScan[]> {
-	const rel = findContentConfig(astroRoot);
+export async function scanContentCollections(
+	projectRoot: string,
+): Promise<ContentCollectionScan[]> {
+	const rel = findContentConfig(projectRoot);
 	if (!rel) return [];
-	const abs = path.join(astroRoot, rel);
+	const abs = path.join(projectRoot, rel);
 	const text = await fs.readFile(abs, "utf8").catch(() => "");
 	if (!text) return [];
 	const st = await fs.stat(abs).catch(() => null);
@@ -284,9 +290,9 @@ export async function scanContentCollections(astroRoot: string): Promise<Content
 		}
 		const count =
 			loader === "file" && base
-				? await countFileEntries(astroRoot, base)
+				? await countFileEntries(projectRoot, base)
 				: loader === "glob" && base
-					? await countGlobEntries(astroRoot, base, pattern)
+					? await countGlobEntries(projectRoot, base, pattern)
 					: 0;
 		out.push({
 			base,
@@ -316,9 +322,9 @@ function parsePropsFields(text: string): string[] {
 }
 
 /** Files under `<root>/src/<dir>` (components, layouts, templates). */
-export async function scanComponentDir(astroRoot: string, dir: string): Promise<ComponentScan[]> {
+export async function scanComponentDir(projectRoot: string, dir: string): Promise<ComponentScan[]> {
 	const entries: WalkEntry[] = [];
-	await walkDir(path.join(astroRoot, "src", dir), `src/${dir}`, entries);
+	await walkDir(path.join(projectRoot, "src", dir), `src/${dir}`, entries);
 	const out: ComponentScan[] = [];
 	for (const entry of entries) {
 		const ext = path.extname(entry.rel).toLowerCase();
@@ -347,9 +353,9 @@ export async function scanComponentDir(astroRoot: string, dir: string): Promise<
 }
 
 /** React-email files under `<root>/src/emails` (optional upstream). */
-export async function scanEmails(astroRoot: string): Promise<EmailScan[]> {
+export async function scanEmails(projectRoot: string): Promise<EmailScan[]> {
 	const entries: WalkEntry[] = [];
-	await walkDir(path.join(astroRoot, "src", "emails"), "src/emails", entries);
+	await walkDir(path.join(projectRoot, "src", "emails"), "src/emails", entries);
 	const out: EmailScan[] = [];
 	for (const entry of entries) {
 		const ext = path.extname(entry.rel).toLowerCase();
@@ -457,9 +463,9 @@ function schemaTypesValue(text: string): string[] {
  * Unlike the sidebar inventory, private `_` files and API routes are kept
  * and flagged so the Website page can show the full picture.
  */
-export async function scanPages(astroRoot: string): Promise<PageScan[]> {
+export async function scanPages(projectRoot: string): Promise<PageScan[]> {
 	const entries: WalkEntry[] = [];
-	await walkDir(path.join(astroRoot, "src", "pages"), "src/pages", entries);
+	await walkDir(path.join(projectRoot, "src", "pages"), "src/pages", entries);
 	const out: PageScan[] = [];
 	for (const entry of entries) {
 		const ext = path.extname(entry.rel).toLowerCase();
@@ -544,9 +550,9 @@ function topLevelListItems(body: string): string[] {
 }
 
 /** Read + parse `astro.config.mjs` (shown in Settings as “Astro Settings”). */
-export async function scanAstroSettings(astroRoot: string): Promise<AstroSettingsScan | null> {
+export async function scanAstroSettings(projectRoot: string): Promise<AstroSettingsScan | null> {
 	const rel = "astro.config.mjs";
-	const abs = path.join(astroRoot, rel);
+	const abs = path.join(projectRoot, rel);
 	const raw = await fs.readFile(abs, "utf8").catch(() => null);
 	if (raw === null) return null;
 	const st = await fs.stat(abs).catch(() => null);

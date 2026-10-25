@@ -65,7 +65,7 @@ function formatGb(bytes: number): string {
 	return `${(bytes / 1024 ** 3).toFixed(1)}G`;
 }
 
-/** Print one `[machine-stats]` line for `mountPath` (defaults to ASTRO_ROOT). */
+/** Print one `[machine-stats]` line for `mountPath` (defaults to PROJECT_PATH). */
 export async function printMachineStats(mountPath: string): Promise<void> {
 	const [cpu, total, free] = [await cpuUsagePercent(), totalmem(), freemem()];
 	const used = total - free;

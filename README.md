@@ -1,12 +1,12 @@
 # platipie-cms
 
-Standalone content-management server for the Astro site at `ASTRO_ROOT`.
+Standalone content-management server for the Astro site.
 TanStack Start (latest) + Bun + Nitro (`bun` preset). No database — `cms/` files are the source of truth.
 
 ## Run
 
 ```sh
-cp .env.example .env   # set ASTRO_ROOT to your Astro checkout
+cp .env.example .env   # set PROJECT_PATH to your project checkout
 bun install
 bun run dev    # vite dev on 127.0.0.1:4000
 bun run build && bun run start
@@ -19,7 +19,7 @@ bun run build && bun run start
 - Components: `/components` — surface gallery, templates, and the UI primitive index.
 - Assets: `/assets` — image library with upload, copy-path, and preview proxy.
 - Unified editor: `/edit/:collection/:id?path=<repo-rel>` — Markdown ⇄ Visual, frontmatter form, local + faithful previews, SEO + schema sidebar, one save pipeline.
-- Settings: `/settings` — typed form + raw TS fallback, appearance/theme switcher, blog registration, env status, trash.
+- Settings: `/settings` — typed form + raw TS fallback, appearance/theme switcher, env status, trash.
 - Design system: `/design` — GitBook-inspired tokens, brand, style, languages, components, motion, viewports, docs shell, and full marketing flow. See `DESIGN.md`.
 
 ## REST (`/api/cms`)
@@ -28,9 +28,9 @@ bun run build && bun run start
 `POST /entries`, `POST /duplicate`, `POST /rename`, `DELETE /entry`, `GET|POST /restore`,
 `GET /diff?path=&rev=`, `GET|POST /media`, `GET /media?path=` (image proxy),
 `GET /seo?path=`, `POST /seo/ai`, `GET|PUT /settings`,
-`GET /workspace` (project, branch, Astro pages), `GET|POST /collections/blog/register`.
+`GET /workspace` (project, branch, Astro pages).
 
-File I/O only on the server. All paths jailed under `ASTRO_ROOT`. Errors:
+File I/O only on the server. All paths jailed under the project root (`PROJECT_PATH` or cwd). Errors:
 `VALIDATION|NOT_FOUND|CONFLICT|SCHEMA_MERGE|IO|AI_DISABLED` + HTTP status.
 
 ## Design

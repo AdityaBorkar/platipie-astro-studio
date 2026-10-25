@@ -2,7 +2,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { ALLOWED_IMAGE_MIME, MAX_UPLOAD_BYTES, getAstroRoot, resolveRepoPath } from "./config.ts";
+import { ALLOWED_IMAGE_MIME, MAX_UPLOAD_BYTES, getProjectRoot, resolveRepoPath } from "./config.ts";
 import { CmsError } from "./errors.ts";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif", ".ico"]);
@@ -39,7 +39,7 @@ async function walkImages(absDir: string, repoPrefix: string, out: MediaItem[]):
 }
 
 export async function listMedia(): Promise<MediaItem[]> {
-	const root = getAstroRoot();
+	const root = getProjectRoot();
 	const out: MediaItem[] = [];
 	await walkImages(path.join(root, "assets/images"), "assets/images", out);
 	await walkImages(path.join(root, "assets"), "assets", out).catch(() => {});

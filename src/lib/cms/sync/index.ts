@@ -3,7 +3,7 @@
 // read-model the UI pages render from.
 import { eq, sql } from "drizzle-orm";
 
-import { getAstroRoot } from "../config.ts";
+import { getProjectRoot } from "../config.ts";
 import { getDb } from "../db/index.ts";
 import {
 	astroSettings,
@@ -292,7 +292,7 @@ async function syncAstro(root: string): Promise<number> {
 }
 
 /** Sync one scope and record its watermark. Returns the mirrored row count. */
-export async function syncScope(scope: SyncScope, root = getAstroRoot()): Promise<number> {
+export async function syncScope(scope: SyncScope, root = getProjectRoot()): Promise<number> {
 	let count = 0;
 	switch (scope) {
 		case "assets":
@@ -325,7 +325,7 @@ export async function syncScope(scope: SyncScope, root = getAstroRoot()): Promis
 }
 
 /** Sync every scope. Used by the CLI `--once` path and the watcher bootstrap. */
-export async function fullSync(root = getAstroRoot()): Promise<SyncResult> {
+export async function fullSync(root = getProjectRoot()): Promise<SyncResult> {
 	const scopes: ScopeStatus[] = [];
 	for (const scope of SYNC_SCOPES) {
 		const fileCount = await syncScope(scope, root);

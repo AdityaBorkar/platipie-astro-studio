@@ -2,12 +2,12 @@
 //
 // Usage:
 //   bun scripts/sync.ts [--once] [--scope=<scope>] [--machine-stats=<seconds>]
-//                         [--root=<astro-root>] [--db=<sqlite-path>] [--help]
+//                         [--root=<path>] [--db=<sqlite-path>] [--help]
 //
 //   --once               run one full sync (or one scope) then exit
 //   --scope=<scope>      assets|content|components|layouts|templates|pages|emails|astro
 //   --machine-stats=N    print CPU / memory / disk usage every N seconds
-//   --root=<path>        override ASTRO_ROOT for this run
+//   --root=<path>        override PROJECT_PATH for this run
 //   --db=<path>          override CMS_DB_PATH for this run
 import { closeDb } from "../src/lib/cms/db/index.ts";
 import { SYNC_SCOPES, fullSync, getSyncStatus, syncScope } from "../src/lib/cms/sync/index.ts";
@@ -24,7 +24,7 @@ Options:
   --once               run one sync then exit (default: watch)
   --scope=<scope>      sync only one scope with --once (${SYNC_SCOPES.join("|")})
   --machine-stats=N    print CPU / memory / disk usage every N seconds
-  --root=<path>        override ASTRO_ROOT for this run
+  --root=<path>        override PROJECT_PATH for this run
   --db=<path>          override the SQLite file (CMS_DB_PATH)
   --help               show this help`);
 }
@@ -48,12 +48,12 @@ if (scopeArg && !(SYNC_SCOPES as readonly string[]).includes(scopeArg)) {
 }
 
 const rootArg = flagValue("root");
-if (rootArg) process.env.ASTRO_ROOT = rootArg;
+if (rootArg) process.env.PROJECT_PATH = rootArg;
 const dbArg = flagValue("db");
 if (dbArg) process.env.CMS_DB_PATH = dbArg;
 
-const { getAstroRoot } = await import("../src/lib/cms/config.ts");
-const root = getAstroRoot();
+const { getProjectRoot } = await import("../src/lib/cms/config.ts");
+const root = getProjectRoot();
 const { getDbPath } = await import("../src/lib/cms/db/index.ts");
 
 async function printStatus(): Promise<void> {

@@ -986,45 +986,6 @@ pre {
 		animation: gb-glow 5s ease-in-out infinite;
 	}
 
-	.gb-search-trigger {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		height: 2.25rem;
-		width: 100%;
-		max-width: 18rem;
-		cursor: pointer;
-		color: var(--muted-foreground);
-		background-color: color-mix(in oklab, var(--muted) 80%, transparent);
-		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		padding-inline: 0.875rem;
-		font-size: 0.875rem;
-		font-weight: 500;
-		transition:
-			color 260ms var(--ease-spring),
-			border-color 260ms var(--ease-spring),
-			background-color 260ms var(--ease-spring);
-	}
-
-	.gb-search-trigger:hover {
-		color: var(--foreground);
-		background-color: var(--card);
-		border-color: color-mix(in oklab, var(--foreground) 16%, var(--border));
-	}
-
-	.gb-search-trigger:focus-visible {
-		outline: none;
-		border-color: var(--ring);
-		box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 22%, transparent);
-	}
-
-	@media (min-width: 1024px) {
-		.gb-search-trigger {
-			max-width: 15rem;
-		}
-	}
-
 	/* Product stage: an orange halo and a browser frame, GitBook's signature
 	   hero composition. */
 	.gb-stage {

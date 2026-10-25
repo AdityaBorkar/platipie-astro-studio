@@ -7,7 +7,7 @@
 import { integer, text } from "drizzle-orm/sqlite-core";
 import { sqliteTable } from "drizzle-orm/sqlite-core";
 
-/** Every file under `<ASTRO_ROOT>/assets` (all kinds, not just images). */
+/** Every file under `<PROJECT_PATH>/assets` (all kinds, not just images). */
 export const assets = sqliteTable("assets", {
 	dir: text("dir").notNull().default(""),
 	ext: text("ext").notNull().default(""),
@@ -45,16 +45,16 @@ const fileInventoryColumns = {
 	updatedAt: integer("updated_at").notNull().default(0),
 } as const;
 
-/** Files under `<ASTRO_ROOT>/src/components`. */
+/** Files under `<PROJECT_PATH>/src/components`. */
 export const components = sqliteTable("components", fileInventoryColumns);
 
-/** Files under `<ASTRO_ROOT>/src/layouts`. */
+/** Files under `<PROJECT_PATH>/src/layouts`. */
 export const layouts = sqliteTable("layouts", fileInventoryColumns);
 
-/** Files under `<ASTRO_ROOT>/src/templates` (may be empty upstream). */
+/** Files under `<PROJECT_PATH>/src/templates` (may be empty upstream). */
 export const templates = sqliteTable("templates", fileInventoryColumns);
 
-/** React-email files under `<ASTRO_ROOT>/src/emails` (optional upstream). */
+/** React-email files under `<PROJECT_PATH>/src/emails` (optional upstream). */
 export const emails = sqliteTable("emails", {
 	dir: text("dir").notNull().default(""),
 	ext: text("ext").notNull().default(""),
@@ -66,7 +66,7 @@ export const emails = sqliteTable("emails", {
 	updatedAt: integer("updated_at").notNull().default(0),
 });
 
-/** Pages under `<ASTRO_ROOT>/src/pages` with SEO + prerender metadata. */
+/** Pages under `<PROJECT_PATH>/src/pages` with SEO + prerender metadata. */
 export const pages = sqliteTable("pages", {
 	dynamic: integer("dynamic").notNull().default(0),
 	hasSeo: integer("has_seo").notNull().default(0),

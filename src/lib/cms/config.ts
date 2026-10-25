@@ -1,4 +1,4 @@
-// §4 + §13 — runtime config + ASTRO_ROOT jail. Server-only.
+// §4 + §13 — runtime config + project jail. Server-only.
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -19,14 +19,12 @@ export const ALLOWED_IMAGE_MIME = new Set([
 	"image/avif",
 ]);
 
-function defaultAstroRoot(): string {
-	const sibling = "/home/aditya/repo/AdityaBorkar";
-	if (existsSync(sibling)) return sibling;
+function defaultProjectRoot(): string {
 	return process.cwd();
 }
 
-export function getAstroRoot(): string {
-	const raw = process.env.ASTRO_ROOT?.trim() || defaultAstroRoot();
+export function getProjectRoot(): string {
+	const raw = process.env.PROJECT_PATH?.trim() || defaultProjectRoot();
 	return path.resolve(raw);
 }
 
@@ -60,9 +58,9 @@ export function getAiConfig(): { baseUrl: string; apiKey: string; model: string 
 	};
 }
 
-/** Resolve a repo-relative path under ASTRO_ROOT. Rejects traversal outside jail. */
+/** Resolve a repo-relative path under the project root. Rejects traversal outside jail. */
 export function resolveRepoPath(repoRel: string): string {
-	const root = getAstroRoot();
+	const root = getProjectRoot();
 	const cleaned = repoRel.replace(/^\/+/u, "");
 	if (cleaned === "" || cleaned === ".") throw cmsError("IO", "Empty path", 400);
 	const abs = path.resolve(root, cleaned);
@@ -75,22 +73,21 @@ export function resolveRepoPath(repoRel: string): string {
 
 /** Repo-relative form of an absolute path (throws if outside jail). */
 export function toRepoRel(abs: string): string {
-	const root = getAstroRoot();
+	const root = getProjectRoot();
 	const rel = path.relative(root, path.resolve(abs));
 	if (rel.startsWith("..") || path.isAbsolute(rel)) {
-		throw cmsError("IO", `Path outside ASTRO_ROOT: ${abs}`, 400);
+		throw cmsError("IO", `Path outside project: ${abs}`, 400);
 	}
 	return rel.replaceAll("\\", "/");
 }
 
 export function envStatus() {
-	const astroRoot = getAstroRoot();
+	const projectRoot = getProjectRoot();
 	return {
 		aiEnabled: isAiEnabled(),
-		astroRoot,
-		astroRootReachable: existsSync(astroRoot),
 		astroUrl: getAstroUrl(),
 		port: getPort(),
+		projectReachable: existsSync(projectRoot),
 		trashTtlDays: getTrashTtlDays(),
 	};
 }
