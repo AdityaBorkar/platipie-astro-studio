@@ -1,11 +1,13 @@
 import { Editor } from "@monaco-editor/react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import {
+	ArrowLeftIcon,
 	CircleCheckIcon,
 	CircleXIcon,
 	CopyIcon,
+	FileTextIcon,
 	HistoryIcon,
 	SaveIcon,
 	SparklesIcon,
@@ -16,7 +18,8 @@ import { marked } from "marked";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
+import { Hint } from "#/components/gitbook/hint";
+import { EmptyState, PageHeader, PageShell } from "#/components/gitbook/page";
 import {
 	AlertDialog,
 	AlertDialogCancel,
@@ -30,7 +33,6 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#/components/ui/empty";
 import { Field, FieldError, FieldGroup, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#/components/ui/input-group";
@@ -276,71 +278,68 @@ function UnifiedEditor() {
 	if (!loaded) {
 		if (err) {
 			return (
-				<div className="mx-auto w-page px-5 py-10">
-					<Alert variant="destructive">
-						<TriangleAlertIcon />
-						<AlertTitle>Failed to load entry</AlertTitle>
-						<AlertDescription>{err}</AlertDescription>
-					</Alert>
-				</div>
+				<PageShell>
+					<Hint title="Failed to load entry" variant="danger">
+						{err}
+					</Hint>
+				</PageShell>
 			);
 		}
 		return (
-			<div className="mx-auto w-page px-5 py-10">
+			<PageShell>
 				<div className="grid gap-3">
 					<Skeleton className="h-10 w-64" />
 					<Skeleton className="h-96 w-full" />
 				</div>
-			</div>
+			</PageShell>
 		);
 	}
 
 	if (loaded.readOnly) {
 		return (
-			<div className="mx-auto w-page px-5 py-10">
-				<Alert>
-					<TriangleAlertIcon />
-					<AlertTitle>Read-only</AlertTitle>
-					<AlertDescription>
-						{loaded.ref.path} ({(loaded.body ?? "").length} bytes &gt; 1 MB guard)
-					</AlertDescription>
-				</Alert>
-			</div>
+			<PageShell>
+				<Hint title="Read-only" variant="warning">
+					{loaded.ref.path} ({(loaded.body ?? "").length} bytes &gt; 1 MB guard)
+				</Hint>
+			</PageShell>
 		);
 	}
 
 	const collection = loaded.ref.collection;
 
 	return (
-		<div className="mx-auto w-page px-5 py-8 sm:py-10">
-			<div className="animate-rise flex flex-wrap items-end justify-between gap-4">
-				<div className="min-w-0">
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Editor</p>
-					<h1 className="gb-display mt-2 truncate text-2xl sm:text-3xl">
-						{loaded.ref.path.split("/").pop()}
-					</h1>
-					<div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+		<PageShell>
+			<PageHeader
+				actions={
+					<Button nativeButton={false} render={<Link to="/content" />} size="sm" variant="outline">
+						<ArrowLeftIcon className="size-3.5" />
+						Back to content
+					</Button>
+				}
+				description={
+					<>
+						Editing <code>{loaded.ref.path}</code>. Files stay the source of truth; save writes
+						straight to the checkout.
+					</>
+				}
+				eyebrow="Editor"
+				meta={
+					<>
 						<Badge variant="secondary">{collection}</Badge>
-						<span className="truncate font-mono">{loaded.ref.path}</span>
-					</div>
-				</div>
-				<div className="flex items-center gap-2">
-					<Badge variant={fm.status === "published" ? "success" : "outline"}>
-						{String(fm.status ?? "draft")}
-					</Badge>
-					<Badge className="font-mono" variant="outline">
-						{new Date(mtime).toLocaleTimeString()}
-					</Badge>
-				</div>
-			</div>
+						<Badge variant={fm.status === "published" ? "success" : "outline"}>
+							{String(fm.status ?? "draft")}
+						</Badge>
+						<Badge className="font-mono" variant="outline">
+							updated {new Date(mtime).toLocaleTimeString()}
+						</Badge>
+					</>
+				}
+				title={loaded.ref.path.split("/").pop()}
+			/>
 
 			<div className="mt-6 grid gap-4">
 				<Card>
 					<CardContent className="flex flex-wrap items-center gap-2">
-						<Badge className="font-mono" variant="outline">
-							{loaded.ref.path}
-						</Badge>
-						<Separator className="h-4" orientation="vertical" />
 						<Button onClick={() => void save(false)} size="sm">
 							<SaveIcon />
 							Save
@@ -360,10 +359,6 @@ function UnifiedEditor() {
 						>
 							<HistoryIcon />
 							Diff vs .bak
-						</Button>
-						<Button onClick={() => setDeleteOpen(true)} size="sm" variant="destructive">
-							<Trash2Icon />
-							Delete
 						</Button>
 						<Button
 							onClick={() => {
@@ -387,50 +382,45 @@ function UnifiedEditor() {
 							<CopyIcon />
 							Duplicate
 						</Button>
+						<Button
+							className="sm:ml-auto"
+							onClick={() => setDeleteOpen(true)}
+							size="sm"
+							variant="destructive"
+						>
+							<Trash2Icon />
+							Delete
+						</Button>
 					</CardContent>
 				</Card>
 
-				{err && (
-					<Alert variant="destructive">
-						<TriangleAlertIcon />
-						<AlertTitle>Error</AlertTitle>
-						<AlertDescription>{err}</AlertDescription>
-					</Alert>
-				)}
-				{msg && (
-					<Alert>
-						<CircleCheckIcon />
-						<AlertTitle>Saved</AlertTitle>
-						<AlertDescription>{msg}</AlertDescription>
-					</Alert>
-				)}
-				{Object.keys(fieldErrors).length > 0 && (
-					<Alert variant="destructive">
-						<CircleXIcon />
-						<AlertTitle>Validation failed</AlertTitle>
-						<AlertDescription>
-							{Object.entries(fieldErrors)
-								.map(([k, v]) => `${k}: ${v}`)
-								.join("; ")}
-						</AlertDescription>
-					</Alert>
-				)}
-				{warnings.length > 0 && (
-					<Alert>
-						<TriangleAlertIcon />
-						<AlertTitle>Warnings</AlertTitle>
-						<AlertDescription>{warnings.join(" · ")}</AlertDescription>
-					</Alert>
-				)}
-				{unknownKeys.length > 0 && (
-					<Alert>
-						<TriangleAlertIcon />
-						<AlertTitle>Drift</AlertTitle>
-						<AlertDescription>
-							Unknown keys round-trip untouched: {unknownKeys.join(", ")}
-						</AlertDescription>
-					</Alert>
-				)}
+				{err ? (
+					<Hint title="Error" variant="danger">
+						{err}
+					</Hint>
+				) : null}
+				{msg ? (
+					<Hint title="Saved" variant="success">
+						{msg}
+					</Hint>
+				) : null}
+				{Object.keys(fieldErrors).length > 0 ? (
+					<Hint title="Validation failed" variant="danger">
+						{Object.entries(fieldErrors)
+							.map(([k, v]) => `${k}: ${v}`)
+							.join("; ")}
+					</Hint>
+				) : null}
+				{warnings.length > 0 ? (
+					<Hint title="Warnings" variant="warning">
+						{warnings.join(" · ")}
+					</Hint>
+				) : null}
+				{unknownKeys.length > 0 ? (
+					<Hint title="Drift" variant="warning">
+						Unknown keys round-trip untouched: {unknownKeys.join(", ")}
+					</Hint>
+				) : null}
 
 				{(collection === "projects" || collection === "blog") && (
 					<Card>
@@ -538,13 +528,9 @@ function UnifiedEditor() {
 												value={body}
 											/>
 											{(body.includes("import ") || /\{[A-Z_]+\./u.test(body)) && (
-												<Alert className="mt-3">
-													<TriangleAlertIcon />
-													<AlertDescription>
-														MDX constructs detected — Visual mode shows opaque placeholders;
-														Markdown preserves byte-for-byte.
-													</AlertDescription>
-												</Alert>
+												<Hint className="mt-3" title="MDX constructs detected" variant="warning">
+													Visual mode shows opaque placeholders; Markdown preserves byte-for-byte.
+												</Hint>
 											)}
 										</TabsContent>
 										<TabsContent value="visual">
@@ -673,7 +659,7 @@ function UnifiedEditor() {
 					</AlertDialogContent>
 				</AlertDialog>
 			</div>
-		</div>
+		</PageShell>
 	);
 }
 
@@ -689,11 +675,11 @@ function FrontmatterForm({ fm, setFm, fieldErrors, media, aiDraft }: any) {
 		);
 	return (
 		<FieldGroup>
-			{aiDraft && (
-				<Alert>
-					<AlertDescription>AI-drafted until edited: {aiDraft}</AlertDescription>
-				</Alert>
-			)}
+			{aiDraft ? (
+				<Hint title="AI draft" variant="info">
+					AI-drafted until edited: {aiDraft}
+				</Hint>
+			) : null}
 			<Field data-invalid={Boolean(fieldErrors.title)}>
 				<FieldLabel htmlFor="fm-title">title</FieldLabel>
 				<Input
@@ -995,12 +981,10 @@ function FaithfulPreview({ slug, collection }: { slug: string; collection: strin
 	}, []);
 	if (!astroUrl) {
 		return (
-			<Alert>
-				<AlertDescription>
-					Faithful preview needs ASTRO_URL (Astro dev server). Start Astro dev server for
-					pixel-faithful iframe; local render above always works.
-				</AlertDescription>
-			</Alert>
+			<Hint title="Faithful preview needs ASTRO_URL" variant="info">
+				Start the Astro dev server and set <code>ASTRO_URL</code> for a pixel-faithful iframe. The
+				local render above always works.
+			</Hint>
 		);
 	}
 	const previewPath =
@@ -1021,7 +1005,7 @@ function SeoPane({ seo, fm, setFm, setAiDraft, setAiBusy, aiBusy, body }: any) {
 	return (
 		<div className="grid gap-3 text-sm">
 			<div className="flex flex-wrap items-center gap-1.5">
-				<Badge>Score: {seo.score}/100</Badge>
+				<Badge variant="brand">Score: {seo.score}/100</Badge>
 				<Badge variant="outline">Flesch {seo.readability?.flesch}</Badge>
 				<Badge variant="outline">keywords {seo.keywordCoverage}%</Badge>
 			</div>
@@ -1033,9 +1017,9 @@ function SeoPane({ seo, fm, setFm, setAiDraft, setAiBusy, aiBusy, body }: any) {
 				{seo.checks?.map((c: any) => (
 					<li className="flex items-start gap-1.5 text-13" key={c.id}>
 						{c.status === "pass" ? (
-							<CircleCheckIcon className="mt-0.5 size-3.5 shrink-0 text-primary" />
+							<CircleCheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />
 						) : c.status === "warn" ? (
-							<TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-accent-foreground" />
+							<TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
 						) : (
 							<CircleXIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
 						)}
@@ -1292,12 +1276,12 @@ function JsonTableEditor({ rows, setRows, rowId, setRowId, media }: any) {
 						</ScrollArea>
 					</FieldGroup>
 				) : (
-					<Empty>
-						<EmptyHeader>
-							<EmptyTitle>No rows.</EmptyTitle>
-							<EmptyDescription>Add a row to get started.</EmptyDescription>
-						</EmptyHeader>
-					</Empty>
+					<EmptyState
+						compact
+						description="Add a row to get started."
+						icon={FileTextIcon}
+						title="No rows"
+					/>
 				)}
 			</CardContent>
 			<AlertDialog onOpenChange={setRowDeleteOpen} open={rowDeleteOpen}>

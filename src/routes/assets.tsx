@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
+import { EmptyState, PageHeader, PageShell, SyncBadge } from "#/components/gitbook/page";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
@@ -161,63 +162,66 @@ function AssetsPage() {
 	}
 
 	return (
-		<div className="mx-auto w-page px-5 py-8 sm:py-10">
-			<div className="animate-rise flex flex-wrap items-end justify-between gap-5">
-				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Assets</p>
-					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">
-						The <span className="text-brand">assets directory,</span> in view.
-					</h1>
-					<p className="gb-sub mt-3 max-w-xl text-base">
+		<PageShell>
+			<PageHeader
+				actions={
+					<>
+						<input
+							accept="image/*"
+							className="sr-only"
+							onChange={(event) => {
+								const file = event.target.files?.[0];
+								if (file) void upload(file);
+							}}
+							ref={fileRef}
+							type="file"
+						/>
+						<Button
+							disabled={uploading}
+							onClick={() => fileRef.current?.click()}
+							size="sm"
+							variant="outline"
+						>
+							<UploadIcon className="size-3.5" />
+							{uploading ? "Uploading…" : "Upload"}
+						</Button>
+						<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
+							<RefreshCwIcon className="size-3.5" />
+							{syncing ? "Syncing…" : "Re-sync"}
+						</Button>
+					</>
+				}
+				description={
+					<>
 						Every file under <code>assets/</code> in the Astro checkout, mirrored into the SQLite
 						read-model by the FS watcher. Uploads land in <code>assets/images</code> and return a
 						site-relative path.
-					</p>
-				</div>
-				<div className="flex flex-wrap items-center gap-2">
-					<input
-						accept="image/*"
-						className="sr-only"
-						onChange={(event) => {
-							const file = event.target.files?.[0];
-							if (file) void upload(file);
-						}}
-						ref={fileRef}
-						type="file"
-					/>
-					<Button
-						disabled={uploading}
-						onClick={() => fileRef.current?.click()}
-						size="sm"
-						variant="outline"
-					>
-						<UploadIcon className="size-3.5" />
-						{uploading ? "Uploading…" : "Upload"}
-					</Button>
-					<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
-						<RefreshCwIcon className="size-3.5" />
-						{syncing ? "Syncing…" : "Re-sync"}
-					</Button>
-				</div>
-			</div>
-
-			<div className="mt-6 flex flex-wrap items-center gap-1.5">
-				<Badge variant="secondary">{assets?.length ?? 0} files</Badge>
-				<Badge className="font-mono" variant="outline">
-					{formatBytes(totalBytes)}
-				</Badge>
-				<Badge className="font-mono" variant={lastSync ? "success" : "destructive"}>
-					{lastSync ? `synced ${new Date(lastSync).toLocaleString()}` : "never synced"}
-				</Badge>
-				{kindCounts.map(([kind, count]) => (
-					<Badge key={kind} variant="outline">
-						{kind} · {count}
-					</Badge>
-				))}
-			</div>
+					</>
+				}
+				eyebrow="Assets"
+				meta={
+					<>
+						<Badge variant="secondary">{assets?.length ?? 0} files</Badge>
+						<Badge className="font-mono" variant="outline">
+							{formatBytes(totalBytes)}
+						</Badge>
+						<SyncBadge lastSync={lastSync} />
+						{kindCounts.map(([kind, count]) => (
+							<Badge key={kind} variant="outline">
+								{kind} · {count}
+							</Badge>
+						))}
+					</>
+				}
+				title={
+					<>
+						The <span className="text-brand">assets directory,</span> in view.
+					</>
+				}
+			/>
 
 			{error ? (
-				<Hint title="Failed to load assets" variant="danger">
+				<Hint className="mt-4" title="Failed to load assets" variant="danger">
 					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
 				</Hint>
 			) : null}
@@ -254,9 +258,12 @@ function AssetsPage() {
 							<Skeleton className="h-48 w-full" />
 						</div>
 					) : filtered.length === 0 ? (
-						<Hint title="No assets match" variant="info">
-							Upload a file or clear the filter to see the directory.
-						</Hint>
+						<EmptyState
+							compact
+							description="Upload a file or clear the filter to see the directory."
+							icon={ImageIcon}
+							title="No assets match"
+						/>
 					) : (
 						<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 							{filtered.map((item) => {
@@ -312,6 +319,6 @@ function AssetsPage() {
 				Rows come from the <code>assets</code> SQLite table, kept fresh by <code>bun run sync</code>
 				. Uploads still write straight to the Astro checkout.
 			</Hint>
-		</div>
+		</PageShell>
 	);
 }

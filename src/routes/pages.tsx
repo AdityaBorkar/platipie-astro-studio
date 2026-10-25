@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
+import { EmptyState, PageHeader, PageShell, SyncBadge } from "#/components/gitbook/page";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
@@ -136,7 +137,11 @@ function PagesPage() {
 		);
 	}, [pages, query]);
 
-	const selectedPage = pages.find((page) => page.route === selected) ?? pages[0] ?? null;
+	const selectedPage =
+		pages.find((page) => page.route === selected) ??
+		pages.find((page) => page.route === "/") ??
+		pages[0] ??
+		null;
 	const siteUrl = settings?.values?.SITE_URL?.replace(/\/$/u, "") ?? "";
 	const previewUrl = selectedPage ? `${siteUrl}${selectedPage.route}` : siteUrl;
 	const selectedKeywords = selectedPage ? parseList(selectedPage.seoKeywords) : [];
@@ -162,41 +167,42 @@ function PagesPage() {
 	}
 
 	return (
-		<div className="mx-auto w-page px-5 py-8 sm:py-10">
-			<div className="animate-rise flex flex-wrap items-end justify-between gap-5">
-				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Pages</p>
-					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">
-						Pages, <span className="text-brand">kept in view.</span>
-					</h1>
-					<p className="gb-sub mt-3 max-w-xl text-base">
-						The Astro routes under <code>src/pages</code> with parsed SEO metadata and prerender
-						settings, mirrored into SQLite by the FS watcher.
-					</p>
-				</div>
-				<div className="flex flex-wrap items-center gap-2">
+		<PageShell>
+			<PageHeader
+				actions={
 					<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
 						<RefreshCwIcon className="size-3.5" />
 						{syncing ? "Syncing…" : "Re-sync"}
 					</Button>
-				</div>
-			</div>
-
-			<div className="mt-6 flex flex-wrap items-center gap-1.5">
-				<Badge className="font-mono" variant={workspace?.reachable ? "success" : "destructive"}>
-					Project {workspace?.reachable ? "reachable" : workspace ? "missing" : "…"}
-				</Badge>
-				<Badge className="font-mono" variant="outline">
-					{workspace?.project ?? "…"} · {workspace?.branch ?? "…"}
-				</Badge>
-				<Badge variant="secondary">{pages.length} pages</Badge>
-				<Badge className="font-mono" variant={lastSync ? "success" : "destructive"}>
-					{lastSync ? `synced ${new Date(lastSync).toLocaleString()}` : "never synced"}
-				</Badge>
-			</div>
+				}
+				description={
+					<>
+						The Astro routes under <code>src/pages</code> with parsed SEO metadata and prerender
+						settings, mirrored into SQLite by the FS watcher.
+					</>
+				}
+				eyebrow="Pages"
+				meta={
+					<>
+						<Badge className="font-mono" variant={workspace?.reachable ? "success" : "destructive"}>
+							Project {workspace?.reachable ? "reachable" : workspace ? "missing" : "…"}
+						</Badge>
+						<Badge className="font-mono" variant="outline">
+							{workspace?.project ?? "…"} · {workspace?.branch ?? "…"}
+						</Badge>
+						<Badge variant="secondary">{pages.length} pages</Badge>
+						<SyncBadge lastSync={lastSync} />
+					</>
+				}
+				title={
+					<>
+						Pages, <span className="text-brand">kept in view.</span>
+					</>
+				}
+			/>
 
 			{error ? (
-				<Hint title="Failed to load pages" variant="danger">
+				<Hint className="mt-4" title="Failed to load pages" variant="danger">
 					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
 				</Hint>
 			) : null}
@@ -233,16 +239,20 @@ function PagesPage() {
 								<Skeleton className="h-12 w-full" />
 							</div>
 						) : filtered.length === 0 ? (
-							<Hint className="m-4" title="No pages match" variant="info">
-								Try a different route or clear the filter.
-							</Hint>
+							<EmptyState
+								className="m-4"
+								compact
+								description="Try a different route or clear the filter."
+								icon={SearchIcon}
+								title="No pages match"
+							/>
 						) : (
 							<ul className="divide-y divide-border">
 								{filtered.map((page) => (
 									<li key={page.path}>
 										<Link
 											className={cn(
-												"flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60",
+												"flex items-center gap-3 px-4 py-3 transition-colors outline-none hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset",
 												selectedPage?.route === page.route && "bg-muted/60",
 											)}
 											search={{ page: page.route }}
@@ -261,10 +271,13 @@ function PagesPage() {
 													{page.route} · {page.path}
 												</span>
 											</span>
-											<Badge className="font-mono" variant={prerenderVariant(page.prerender)}>
+											<Badge
+												className="hidden font-mono xl:inline-flex"
+												variant={prerenderVariant(page.prerender)}
+											>
 												{page.prerender === "unset" ? "ssr" : `pre:${page.prerender}`}
 											</Badge>
-											<Badge className="font-mono" variant="outline">
+											<Badge className="hidden font-mono xl:inline-flex" variant="outline">
 												{page.type}
 											</Badge>
 										</Link>
@@ -288,7 +301,8 @@ function PagesPage() {
 								</CardHeader>
 								<CardContent className="grid gap-2">
 									<Badge
-										className="w-fit font-mono"
+										className="max-w-full truncate font-mono"
+										title={selectedPage.seoTitle ?? undefined}
 										variant={selectedPage.seoTitle ? "success" : "destructive"}
 									>
 										{selectedPage.seoTitle ?? "no title parsed"}
@@ -320,27 +334,29 @@ function PagesPage() {
 								</CardHeader>
 								<CardContent className="grid gap-1.5 text-xs">
 									<div className="flex items-center justify-between gap-2">
-										<span className="text-muted-foreground">Route</span>
-										<span className="font-mono">{selectedPage.route}</span>
+										<span className="shrink-0 text-muted-foreground">Route</span>
+										<span className="min-w-0 truncate font-mono">{selectedPage.route}</span>
 									</div>
 									<div className="flex items-center justify-between gap-2">
-										<span className="text-muted-foreground">Source</span>
-										<span className="truncate font-mono">{selectedPage.path}</span>
+										<span className="shrink-0 text-muted-foreground">Source</span>
+										<span className="min-w-0 truncate font-mono" title={selectedPage.path}>
+											{selectedPage.path}
+										</span>
 									</div>
 									<div className="flex items-center justify-between gap-2">
-										<span className="text-muted-foreground">Type</span>
+										<span className="shrink-0 text-muted-foreground">Type</span>
 										<Badge className="font-mono" variant="outline">
 											{selectedPage.type}
 										</Badge>
 									</div>
 									<div className="flex items-center justify-between gap-2">
-										<span className="text-muted-foreground">Prerender</span>
+										<span className="shrink-0 text-muted-foreground">Prerender</span>
 										<Badge className="font-mono" variant={prerenderVariant(selectedPage.prerender)}>
 											{selectedPage.prerender}
 										</Badge>
 									</div>
 									<div className="flex items-center justify-between gap-2">
-										<span className="text-muted-foreground">Updated</span>
+										<span className="shrink-0 text-muted-foreground">Updated</span>
 										<span className="font-mono">
 											{new Date(selectedPage.mtime).toLocaleDateString()}
 										</span>
@@ -374,12 +390,15 @@ function PagesPage() {
 							</Card>
 						</>
 					) : (
-						<Hint title="No page selected" variant="info">
-							Pick a page from the list to inspect its metadata.
-						</Hint>
+						<EmptyState
+							compact
+							description="Pick a page from the list to inspect its metadata."
+							icon={FileTextIcon}
+							title="No page selected"
+						/>
 					)}
 				</aside>
 			</div>
-		</div>
+		</PageShell>
 	);
 }

@@ -14,17 +14,17 @@ const styles: Record<HintVariant, { icon: typeof InfoIcon; iconColor: string; wr
 	info: {
 		icon: InfoIcon,
 		iconColor: "text-brand",
-		wrap: "border-brand/20 bg-brand/5",
+		wrap: "border-brand/20 bg-brand-soft",
 	},
 	success: {
 		icon: CircleCheckIcon,
-		iconColor: "text-brand-mint-foreground",
+		iconColor: "text-success",
 		wrap: "border-brand-mint/60 bg-brand-mint/20",
 	},
 	warning: {
 		icon: TriangleAlertIcon,
-		iconColor: "text-chart-3",
-		wrap: "border-chart-3/25 bg-chart-3/8",
+		iconColor: "text-warning",
+		wrap: "border-warning/25 bg-warning/8",
 	},
 };
 

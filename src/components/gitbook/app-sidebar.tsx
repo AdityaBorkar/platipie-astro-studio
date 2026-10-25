@@ -272,7 +272,7 @@ function SidebarLink({
 		<li>
 			<AppLink
 				className={cn(
-					"flex items-center gap-2 rounded-lg px-2 py-1.5 text-13 font-semibold transition-colors",
+					"flex items-center gap-2 rounded-lg px-2 py-1.5 text-13 font-semibold transition-colors outline-none focus-visible:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring/40",
 					active
 						? "bg-sidebar-accent text-sidebar-accent-foreground"
 						: "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
@@ -306,9 +306,9 @@ function SidebarChildLink({
 		<li>
 			<AppLink
 				className={cn(
-					"flex items-center gap-2 rounded-md px-2 py-1 text-12 transition-colors",
+					"flex items-center gap-2 rounded-md px-2 py-1 text-12 transition-colors outline-none focus-visible:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring/40",
 					active
-						? "bg-sidebar-accent font-semibold text-foreground"
+						? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
 						: "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
 				)}
 				href={href}
@@ -345,9 +345,11 @@ const pageKindOrder = { dynamic: 1, static: 0, utility: 2 } satisfies Record<
 >;
 
 function SidebarPageLink({
-	page,
+	active,
 	onClick,
+	page,
 }: {
+	active: boolean;
 	onClick?: () => void;
 	page: WorkspacePayload["pages"][number];
 }) {
@@ -355,8 +357,14 @@ function SidebarPageLink({
 	return (
 		<li>
 			<Link
+				aria-current={active ? "page" : undefined}
 				aria-label={`${page.route} — ${label}`}
-				className="flex items-center gap-2 rounded-md px-2 py-1 text-12 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+				className={cn(
+					"flex items-center gap-2 rounded-md px-2 py-1 text-12 transition-colors outline-none focus-visible:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring/40",
+					active
+						? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+						: "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+				)}
 				onClick={onClick}
 				search={{ page: page.route }}
 				title={`${label} · ${page.title}`}
@@ -399,7 +407,7 @@ function SidebarGroup({
 				aria-controls={`sidebar-${id}`}
 				aria-expanded={expanded}
 				className={cn(
-					"group/row flex items-center gap-2 rounded-lg px-2 py-1.5 text-13 font-semibold transition-gb hover:bg-sidebar-accent focus-visible:bg-sidebar-accent",
+					"group/row flex items-center gap-2 rounded-lg px-2 py-1.5 text-13 font-semibold transition-gb hover:bg-sidebar-accent focus-visible:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring/40",
 					active
 						? "bg-sidebar-accent text-sidebar-accent-foreground"
 						: "text-muted-foreground hover:text-foreground focus-visible:text-foreground",
@@ -586,7 +594,7 @@ function WorkspaceMenu({
 		<>
 			<button
 				aria-haspopup="dialog"
-				className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-sidebar-accent"
+				className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors outline-none hover:bg-sidebar-accent focus-visible:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring/40"
 				onClick={() => setOpen(true)}
 				type="button"
 			>
@@ -657,7 +665,7 @@ function WorkspaceMenu({
 										<LayoutGridIcon className="size-3.5" />
 									</button>
 								</div>
-								<Button className="shrink-0" onClick={startBrowse} size="sm" variant="brand">
+								<Button className="shrink-0" onClick={startBrowse} size="sm">
 									<FolderPlusIcon />
 									Add project
 								</Button>
@@ -687,7 +695,7 @@ function WorkspaceMenu({
 											<li key={entry.root}>
 												<button
 													className={cn(
-														"flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors",
+														"flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors outline-none focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40",
 														switching === null ? "hover:bg-muted" : "cursor-not-allowed opacity-55",
 													)}
 													disabled={switching !== null}
@@ -872,7 +880,7 @@ function WorkspaceMenu({
 												{browse.entries.map((entry) => (
 													<li key={entry.path}>
 														<button
-															className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-muted"
+															className="flex w-full items-center gap-2 rounded-lg p-2 text-left transition-colors outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40"
 															onClick={() => void openFolder(entry.path)}
 															type="button"
 														>
@@ -939,12 +947,16 @@ function SidebarNav({
 	workspace: WorkspacePayload | null;
 }) {
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
+	const search = useRouterState({ select: (state) => state.location.search }) as {
+		page?: string;
+	};
 	const hash = useHash();
 	const activeHref = `${pathname}${hash}`;
 	const [groups, setGroups] = useState<Record<string, boolean>>({});
 	const pages = (workspace?.pages ?? []).toSorted(
 		(a, b) => pageKindOrder[a.kind] - pageKindOrder[b.kind] || a.route.localeCompare(b.route),
 	);
+	const activePage = pathname === "/pages" ? search.page : undefined;
 
 	function expanded(id: string, active: boolean) {
 		return groups[id] ?? active;
@@ -975,7 +987,12 @@ function SidebarNav({
 				onToggle={() => toggleGroup("pages", expanded("pages", pathname === "/pages"))}
 			>
 				{pages.map((page) => (
-					<SidebarPageLink key={page.path} onClick={onNavigate} page={page} />
+					<SidebarPageLink
+						active={activePage === page.route}
+						key={page.path}
+						onClick={onNavigate}
+						page={page}
+					/>
 				))}
 			</SidebarGroup>
 

@@ -25,6 +25,7 @@ export { LinkCards } from "./link-cards";
 export type { LinkCardItem } from "./link-cards";
 export { LogoCloud, LogoWordmark } from "./logo-cloud";
 export { Reveal } from "./motion";
+export { EmptyState, PageHeader, PageShell, SectionHeader, SyncBadge } from "./page";
 export { ProductDemo, ProductStage } from "./product-preview";
 export { ShowcaseTabs } from "./showcase-tabs";
 export { Testimonial } from "./testimonial";

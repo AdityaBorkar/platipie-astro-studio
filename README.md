@@ -13,7 +13,7 @@ bun run build && bun run start
 ```
 
 - Fixed app rail: project + branch, nav map, expandable Pages/Content/Components/Design groups, and an Emails link when `src/emails` has templates.
-- Dashboard: `/` — 7 collection cards, counts, search, `New`, recent-edits, drift warnings.
+- Dashboard: `/dashboard` — project identity and sync state, page/content/asset/component counts, recent edits, drift warnings, and the project root.
 - Pages: `/pages?page=<route>` — Astro page inventory with optional SEO / metadata / schema rail.
 - Content: `/content` — collections, recent edits, SEO + schema rail.
 - Components: `/components` — surface gallery, templates, and the UI primitive index.

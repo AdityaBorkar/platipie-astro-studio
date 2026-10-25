@@ -15,6 +15,13 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
+import {
+	EmptyState,
+	PageHeader,
+	PageShell,
+	SectionHeader,
+	SyncBadge,
+} from "#/components/gitbook/page";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
@@ -180,22 +187,20 @@ function SyncedInventorySection() {
 
 	return (
 		<section className="mt-10 scroll-mt-24" id="synced">
-			<div className="flex flex-wrap items-end justify-between gap-3">
-				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Synced</p>
-					<h2 className="mt-2 text-title font-bold tracking-heading">From the Astro checkout</h2>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Mirrored into SQLite by the FS watcher. Files stay the source of truth.
-					</p>
-				</div>
-				<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
-					<RefreshCwIcon className="size-3.5" />
-					{syncing ? "Syncing…" : "Re-sync"}
-				</Button>
-			</div>
+			<SectionHeader
+				actions={
+					<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
+						<RefreshCwIcon className="size-3.5" />
+						{syncing ? "Syncing…" : "Re-sync"}
+					</Button>
+				}
+				description="Mirrored into SQLite by the FS watcher. Files stay the source of truth."
+				eyebrow="Synced"
+				title="From the Astro checkout"
+			/>
 
 			{error ? (
-				<Hint className="mt-4" title="Inventory unavailable" variant="warning">
+				<Hint className="mt-4" title="Inventory unavailable" variant="danger">
 					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
 				</Hint>
 			) : null}
@@ -217,44 +222,44 @@ function SyncedInventorySection() {
 									</div>
 									<div className="flex items-center gap-1.5">
 										<Badge variant="secondary">{files.length} files</Badge>
-										<Badge className="font-mono" variant={synced ? "success" : "destructive"}>
-											{synced ? `synced ${new Date(synced).toLocaleDateString()}` : "never synced"}
-										</Badge>
+										<SyncBadge lastSync={synced} />
 									</div>
 								</div>
 							</CardHeader>
 							<CardContent className="p-0">
 								{files.length === 0 ? (
-									<Hint
+									<EmptyState
 										className="m-4"
+										compact
+										description={
+											group.scope === "emails"
+												? "src/emails is not present in the Astro checkout (react-email is optional)."
+												: group.scope === "templates"
+													? "src/templates exists but holds no files yet."
+													: `No files under src/${group.scope} — the watcher will pick them up when added.`
+										}
+										icon={FileStackIcon}
 										title={`No ${group.title.toLowerCase()} found`}
-										variant="info"
-									>
-										{group.scope === "emails"
-											? "src/emails is not present in the Astro checkout (react-email is optional)."
-											: group.scope === "templates"
-												? "src/templates exists but holds no files yet."
-												: `No files under src/${group.scope} — the watcher will pick them up when added.`}
-									</Hint>
+									/>
 								) : (
 									<Table>
 										<TableHeader>
-											<TableRow className="bg-muted/40 hover:bg-muted/40">
+											<TableRow>
 												<TableHead className="pl-5">File</TableHead>
-												<TableHead>Details</TableHead>
+												<TableHead className="hidden sm:table-cell">Details</TableHead>
 												<TableHead className="text-right">Updated</TableHead>
 											</TableRow>
 										</TableHeader>
 										<TableBody>
 											{files.slice(0, 30).map((file) => (
 												<TableRow key={file.path}>
-													<TableCell className="pl-5">
-														<span className="block font-mono text-xs">{file.name}</span>
+													<TableCell className="w-full max-w-0 pl-5">
+														<span className="block truncate font-mono text-xs">{file.name}</span>
 														<span className="block truncate font-mono text-10 text-muted-foreground">
 															{file.path}
 														</span>
 													</TableCell>
-													<TableCell className="text-xs text-muted-foreground">
+													<TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
 														{file.props
 															? (() => {
 																	const props = JSON.parse(file.props) as string[];
@@ -294,40 +299,40 @@ function SyncedInventorySection() {
 
 function ComponentsPage() {
 	return (
-		<div className="mx-auto w-page px-5 py-8 sm:py-10">
-			<div className="animate-rise">
-				<p className="text-11 font-bold tracking-14 text-brand uppercase">Components</p>
-				<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">
-					Building blocks, <span className="text-brand">already assembled.</span>
-				</h1>
-				<p className="gb-sub mt-3 max-w-xl text-base">
-					The same shadcn primitives and GitBook surfaces used across the CMS. Start from a
-					template, then drop in the UI piece you need.
-				</p>
-			</div>
-
-			<div className="mt-6 flex flex-wrap items-center gap-1.5">
-				<Badge variant="brand">
-					<BlocksIcon className="size-3" />
-					{primitives.length} primitives
-				</Badge>
-				<Badge variant="outline">{templates.length} templates</Badge>
-				<Badge variant="secondary">shadcn base-nova</Badge>
-			</div>
+		<PageShell>
+			<PageHeader
+				description="The same shadcn primitives and GitBook surfaces used across the CMS. Start from a template, then drop in the UI piece you need."
+				eyebrow="Components"
+				meta={
+					<>
+						<Badge variant="brand">
+							<BlocksIcon className="size-3" />
+							{primitives.length} primitives
+						</Badge>
+						<Badge variant="outline">{templates.length} templates</Badge>
+						<Badge variant="secondary">shadcn base-nova</Badge>
+					</>
+				}
+				title={
+					<>
+						Building blocks, <span className="text-brand">already assembled.</span>
+					</>
+				}
+			/>
 
 			<SyncedInventorySection />
 
 			<section className="mt-10 scroll-mt-24" id="components">
-				<div className="flex flex-wrap items-end justify-between gap-3">
-					<div>
-						<p className="text-11 font-bold tracking-14 text-brand uppercase">Surfaces</p>
-						<h2 className="mt-2 text-title font-bold tracking-heading">The working set</h2>
-					</div>
-					<Button nativeButton={false} render={<Link to="/design" />} size="sm" variant="ghost">
-						Open full reference
-						<ArrowRightIcon className="size-3.5" />
-					</Button>
-				</div>
+				<SectionHeader
+					actions={
+						<Button nativeButton={false} render={<Link to="/design" />} size="sm" variant="ghost">
+							Open full reference
+							<ArrowRightIcon className="size-3.5" />
+						</Button>
+					}
+					eyebrow="Surfaces"
+					title="The working set"
+				/>
 
 				<div className="mt-4 grid gap-4 lg:grid-cols-2">
 					<Card>
@@ -388,20 +393,18 @@ function ComponentsPage() {
 			</section>
 
 			<section className="mt-12 scroll-mt-24" id="templates">
-				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Templates</p>
-					<h2 className="mt-2 text-title font-bold tracking-heading">Pages that already exist</h2>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Every template is a real route. Copy the structure, keep the tokens.
-					</p>
-				</div>
+				<SectionHeader
+					description="Every template is a real route. Copy the structure, keep the tokens."
+					eyebrow="Templates"
+					title="Pages that already exist"
+				/>
 
 				<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 					{templates.map((template) => {
 						const Icon = template.icon;
 						return (
 							<Link
-								className="group rounded-xl border border-border bg-card p-5 transition-card hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-soft"
+								className="gb-card-link group rounded-xl border border-border bg-card p-5"
 								key={template.label}
 								to={template.href as LinkProps["to"]}
 							>
@@ -424,18 +427,20 @@ function ComponentsPage() {
 			</section>
 
 			<section className="mt-12 scroll-mt-24" id="ui">
-				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">UI</p>
-					<h2 className="mt-2 text-title font-bold tracking-heading">Primitive index</h2>
-					<p className="mt-1 text-sm text-muted-foreground">
-						All live in <code>src/components/ui</code> and stay token-first.
-					</p>
-				</div>
+				<SectionHeader
+					description={
+						<>
+							All live in <code>src/components/ui</code> and stay token-first.
+						</>
+					}
+					eyebrow="UI"
+					title="Primitive index"
+				/>
 
 				<Card className="mt-4 overflow-hidden">
 					<Table>
 						<TableHeader>
-							<TableRow className="bg-muted/40 hover:bg-muted/40">
+							<TableRow>
 								<TableHead className="pl-5">Primitive</TableHead>
 								<TableHead>Purpose</TableHead>
 							</TableRow>
@@ -468,6 +473,6 @@ function ComponentsPage() {
 					</Button>
 				</div>
 			</section>
-		</div>
+		</PageShell>
 	);
 }

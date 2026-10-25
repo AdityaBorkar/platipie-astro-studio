@@ -43,6 +43,8 @@ All tokens live in `src/styles.css`.
 | `--ring`               | `#fe551b` | `#ff6a35`  |
 | `--brand-mint`         | `#a4f4cf` | `#7ce3b6`  |
 | `--brand-cream`        | `#fff4ee` | `#2a1810`  |
+| `--warning`            | `#b45309` | `#fbbf24`  |
+| `--success`            | `#047857` | `#7ce3b6`  |
 
 Extra tokens:
 
@@ -82,33 +84,36 @@ Extra tokens:
 All design-system components live in `src/components/gitbook/` and are exported
 from `index.ts`.
 
-| Component                                                       | Purpose                                                                     |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `AppSidebar`                                                    | Fixed workspace rail: identity, nav map, primary navigation, mobile drawer  |
-| `Hero`, `HeroFrame`, `HeroPrimaryAction`, `HeroSecondaryAction` | Centered hero, browser frame, pill actions                                  |
-| `ProductStage`, `ProductDemo`                                   | Orange halo + CSS-only docs workspace                                       |
-| `LogoCloud`, `LogoWordmark`                                     | Masked marquee and text wordmarks                                           |
-| `AgentRow`                                                      | Orange-glowed capsule of agent pills                                        |
-| `FeatureSplit`                                                  | Alternating two-column story rows                                           |
-| `FeatureGrid`, `SystemOrbit`                                    | Four-up bento with a dashed orbit diagram                                   |
-| `Testimonial`                                                   | Logo card + large quote + action                                            |
-| `EnterpriseGrid`, `EnterpriseArt`                               | Four features around an orange certification plate                          |
-| `Customers`                                                     | Scroll-snap carousel with dashes and arrow controls                         |
-| `FinalCta`                                                      | Watermark logo mark + centered CTA                                          |
-| `Footer`                                                        | Link matrix, orange enterprise card, case study, report                     |
-| `DocsShell`, `DocsNav`, `DocsToc`                               | Three-rail documentation layout                                             |
-| `Hint`                                                          | Docs callouts: info (orange), success (mint), warning (amber), danger (red) |
-| `LinkCards`                                                     | Two-up docs link table                                                      |
-| `ShowcaseTabs`                                                  | Pill switcher with crossfade panels                                         |
-| `Reveal`                                                        | IntersectionObserver fade-rise-deblur                                       |
-| `BrandMark`, `Wordmark`                                         | Layered-page mark and lockup                                                |
+| Component                                                             | Purpose                                                                                          |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `AppSidebar`                                                          | Fixed workspace rail: identity, nav map, primary navigation, mobile drawer                       |
+| `Hero`, `HeroFrame`, `HeroPrimaryAction`, `HeroSecondaryAction`       | Centered hero, browser frame, pill actions                                                       |
+| `ProductStage`, `ProductDemo`                                         | Orange halo + CSS-only docs workspace                                                            |
+| `LogoCloud`, `LogoWordmark`                                           | Masked marquee and text wordmarks                                                                |
+| `AgentRow`                                                            | Orange-glowed capsule of agent pills                                                             |
+| `FeatureSplit`                                                        | Alternating two-column story rows                                                                |
+| `FeatureGrid`, `SystemOrbit`                                          | Four-up bento with a dashed orbit diagram                                                        |
+| `Testimonial`                                                         | Logo card + large quote + action                                                                 |
+| `EnterpriseGrid`, `EnterpriseArt`                                     | Four features around an orange certification plate                                               |
+| `Customers`                                                           | Scroll-snap carousel with dashes and arrow controls                                              |
+| `FinalCta`                                                            | Watermark logo mark + centered CTA                                                               |
+| `Footer`                                                              | Link matrix, orange enterprise card, case study, report                                          |
+| `PageShell`, `PageHeader`, `SectionHeader`, `EmptyState`, `SyncBadge` | Shared app-page grid, header rhythm, section headings, neutral empty states, relative sync state |
+| `DocsShell`, `DocsNav`, `DocsToc`                                     | Three-rail documentation layout                                                                  |
+| `Hint`                                                                | Docs callouts: info (orange), success (mint), warning (amber), danger (red)                      |
+| `LinkCards`                                                           | Two-up docs link table                                                                           |
+| `ShowcaseTabs`                                                        | Pill switcher with crossfade panels                                                              |
+| `Reveal`                                                              | IntersectionObserver fade-rise-deblur                                                            |
+| `BrandMark`, `Wordmark`                                               | Layered-page mark and lockup                                                                     |
 
 UI primitives in `src/components/ui/` were retuned:
 
 - `button`: pill geometry, six variants (including `brand`), taller sizes.
 - `badge`: 24px pill, `brand`, `success`, `secondary`, `outline`.
 - `card`: 16px radius, hairline ring, 16px inner spacing.
-- `input` / `textarea`: 36px/rounded 12px, warm border, orange focus ring.
+- `input` / `textarea` / `select`: 36px/rounded 12px, warm border, orange focus ring.
+- `empty`: neutral dashed panel with one line of guidance — never an alert tint.
+- `table`: muted header rail, 36px head, roomy cells; header styling lives in the primitive.
 - `tabs`: muted pill track, white active pill.
 - `kbd`: mono, bordered chip.
 - `alert`: soft callout surface.
@@ -163,11 +168,12 @@ The `/design` route mirrors GitBook's marketing order:
 
 App pages reuse the same language, denser:
 
-- Dashboard: project favicon, name, and git branch only. Screen items and
-  design are planned separately.
+- Dashboard: workspace identity, sync state, page/content/asset/component counts,
+  recent edits, and the project root. The active project's branch and drift state
+  are always visible.
 - Pages: Astro page inventory plus a sticky SEO / page metadata / schema rail.
-- Content: collection cards, recent edits, SEO + schema rail, and the CMS tree in
-  the left rail.
+- Content: collection cards with a browse dialog, recent edits, SEO + schema rail,
+  and the CMS tree in the left rail.
 - Assets: image grid with upload, copy-path, and a media proxy.
 - Components: surface gallery, template cards, and the primitive index.
 - Settings: sticky section rail + Cards, Appearance (theme switcher), typed form,
@@ -204,8 +210,12 @@ App pages reuse the same language, denser:
 - Use `Reveal` for marketing surfaces; do not wrap dense app forms in it.
 - Use `Hint` for inline status, not `Alert`, unless the surface needs an alert
   role.
-- Every new page gets `mx-auto w-page px-5 py-8 sm:py-10` unless it is a
-  full-bleed marketing section.
+- Every new app page renders inside `PageShell` and opens with `PageHeader`; in-page
+  sections use `SectionHeader` so eyebrow, title, and actions stay aligned.
+- Empty results use `EmptyState` (neutral) or `Hint` only for instructions and
+  status, never an alert tint for "nothing matched".
+- Keep buttons pill-shaped and 36px form controls (`input`, `textarea`, `select`)
+  on the same 12px radius.
 - Keep the design page current: if a token or component changes, update
   `src/routes/design.tsx` in the same change.
 

@@ -31,6 +31,7 @@ import {
 	DocsNav,
 	DocsShell,
 	DocsToc,
+	EmptyState,
 	EnterpriseGrid,
 	FeatureGrid,
 	FeatureSplit,
@@ -309,6 +310,8 @@ function DesignTokens() {
 							{ className: "bg-secondary", label: "secondary" },
 							{ className: "bg-muted border border-border", label: "muted" },
 							{ className: "bg-border", label: "border" },
+							{ className: "bg-warning", label: "warning" },
+							{ className: "bg-success", label: "success" },
 							{ className: "bg-brand-mint", label: "mint" },
 							{ className: "bg-brand-cream", label: "cream" },
 						].map((swatch) => (
@@ -673,6 +676,15 @@ function ComponentsGallery() {
 							The path sits outside the <code>project</code> jail.
 						</Hint>
 					</div>
+				</Panel>
+
+				<Panel title="Empty states">
+					<EmptyState
+						compact
+						description="Try a different route or clear the filter."
+						icon={SearchIcon}
+						title="No pages match"
+					/>
 				</Panel>
 			</div>
 

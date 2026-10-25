@@ -45,7 +45,7 @@ function TrafficLights() {
 	return (
 		<span aria-hidden="true" className="flex items-center gap-1">
 			<span className="size-1.5 rounded-full bg-destructive/60" />
-			<span className="size-1.5 rounded-full bg-chart-3/70" />
+			<span className="size-1.5 rounded-full bg-warning/70" />
 			<span className="size-1.5 rounded-full bg-brand-mint" />
 		</span>
 	);
@@ -129,7 +129,7 @@ export function AgentNetworkArt() {
 				<div className="absolute top-1/2 left-1/2 flex w-32 -translate-1/2 flex-col items-center gap-1.5 rounded-xl border border-brand/30 bg-card p-3 shadow-lift">
 					<span className="flex gap-1">
 						<span className="size-1.5 rounded-full bg-destructive/60" />
-						<span className="size-1.5 rounded-full bg-chart-3/70" />
+						<span className="size-1.5 rounded-full bg-warning/70" />
 						<span className="size-1.5 rounded-full bg-brand-mint" />
 					</span>
 					<BrandMark className="size-8 text-foreground" />

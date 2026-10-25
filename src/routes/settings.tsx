@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
+import { EmptyState, PageHeader, PageShell, SyncBadge } from "#/components/gitbook/page";
 import { ThemeToggle } from "#/components/theme-toggle";
 import {
 	AlertDialog,
@@ -27,7 +28,6 @@ import {
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Skeleton } from "#/components/ui/skeleton";
@@ -191,30 +191,30 @@ function SettingsPage() {
 
 	if (!loaded) {
 		return (
-			<div className="mx-auto w-page px-5 py-10">
-				<Skeleton className="h-10 w-56" />
-				<Skeleton className="mt-6 h-48 w-full" />
-				<Skeleton className="mt-4 h-64 w-full" />
-			</div>
+			<PageShell>
+				<div className="grid gap-4">
+					<Skeleton className="h-10 w-56" />
+					<Skeleton className="h-5 w-96 max-w-full" />
+					<Skeleton className="mt-2 h-48 w-full" />
+					<Skeleton className="h-64 w-full" />
+				</div>
+			</PageShell>
 		);
 	}
 
 	return (
-		<div className="mx-auto w-page px-5 py-8 sm:py-10">
-			<div className="animate-rise flex flex-wrap items-end justify-between gap-5">
-				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Configuration</p>
-					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">Settings</h1>
-					<p className="gb-sub mt-3 max-w-xl text-base">
-						Environment, typed constants, raw TypeScript, and the soft-delete queue — all in one
-						quiet surface.
-					</p>
-				</div>
-				<Button onClick={() => void load()} size="sm" variant="outline">
-					<RefreshCwIcon className="size-3.5" />
-					Reload
-				</Button>
-			</div>
+		<PageShell>
+			<PageHeader
+				actions={
+					<Button onClick={() => void load()} size="sm" variant="outline">
+						<RefreshCwIcon className="size-3.5" />
+						Reload
+					</Button>
+				}
+				description="Environment, typed constants, raw TypeScript, and the soft-delete queue — all in one quiet surface."
+				eyebrow="Configuration"
+				title="Settings"
+			/>
 
 			<div className="mt-6 grid gap-6 lg:grid-cols-settings">
 				<aside className="hidden lg:block">
@@ -227,8 +227,8 @@ function SettingsPage() {
 									aria-current={isActive ? "true" : undefined}
 									className={
 										isActive
-											? "flex items-center gap-2 rounded-md border-l-2 border-brand bg-brand-soft px-2.5 py-1.5 text-sm font-semibold text-brand"
-											: "flex items-center gap-2 rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+											? "flex items-center gap-2 rounded-md border-l-2 border-brand bg-brand-soft px-2.5 py-1.5 text-sm font-semibold text-brand outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+											: "flex items-center gap-2 rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30"
 									}
 									href={section.href}
 									key={section.href}
@@ -273,7 +273,7 @@ function SettingsPage() {
 									>
 										Project {env.projectReachable ? "✓ reachable" : "✗ missing"}
 									</Badge>
-									<Badge className="font-mono" variant="outline">
+									<Badge className="max-w-full truncate font-mono" variant="outline">
 										ASTRO_URL {env.astroUrl ?? "unset"}
 									</Badge>
 									<Badge variant={env.aiEnabled ? "brand" : "secondary"}>
@@ -341,11 +341,7 @@ function SettingsPage() {
 										<Badge className="font-mono" variant="secondary">
 											{Object.keys(parseRecord(astro.redirects)).length} redirects
 										</Badge>
-										<Badge className="font-mono" variant="success">
-											{astroSync
-												? `synced ${new Date(astroSync).toLocaleString()}`
-												: "never synced"}
-										</Badge>
+										<SyncBadge lastSync={astroSync} />
 									</div>
 									{parseList(astro.integrations).length > 0 ? (
 										<div className="flex flex-wrap gap-1">
@@ -359,7 +355,7 @@ function SettingsPage() {
 									{Object.keys(parseRecord(astro.redirects)).length > 0 ? (
 										<Table>
 											<TableHeader>
-												<TableRow className="bg-muted/40 hover:bg-muted/40">
+												<TableRow>
 													<TableHead>From</TableHead>
 													<TableHead className="text-right">To</TableHead>
 												</TableRow>
@@ -515,16 +511,16 @@ function SettingsPage() {
 						</CardHeader>
 						<CardContent>
 							{trash.length === 0 ? (
-								<Empty>
-									<EmptyHeader>
-										<EmptyTitle>Trash is empty</EmptyTitle>
-										<EmptyDescription>Deleted entries will show up here.</EmptyDescription>
-									</EmptyHeader>
-								</Empty>
+								<EmptyState
+									compact
+									description="Deleted entries will show up here."
+									icon={Trash2Icon}
+									title="Trash is empty"
+								/>
 							) : (
 								<Table>
 									<TableHeader>
-										<TableRow className="bg-muted/40 hover:bg-muted/40">
+										<TableRow>
 											<TableHead>Path</TableHead>
 											<TableHead className="w-28 text-right">Action</TableHead>
 										</TableRow>
@@ -574,6 +570,6 @@ function SettingsPage() {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</div>
+		</PageShell>
 	);
 }

@@ -93,7 +93,7 @@ export function HeroFrame({ children, className, label = "app.platipie.local" }:
 		>
 			<div className="flex items-center gap-2 px-2 py-1.5">
 				<span aria-hidden="true" className="size-2.5 rounded-full bg-destructive/70" />
-				<span aria-hidden="true" className="size-2.5 rounded-full bg-chart-3/80" />
+				<span aria-hidden="true" className="size-2.5 rounded-full bg-warning/80" />
 				<span aria-hidden="true" className="size-2.5 rounded-full bg-brand-mint" />
 				<span className="mx-auto inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1 font-mono text-10 text-muted-foreground">
 					<span className="size-1.5 rounded-full bg-brand-mint" />

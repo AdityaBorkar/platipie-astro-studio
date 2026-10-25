@@ -85,10 +85,18 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<script suppressHydrationWarning>{themeScript}</script>
 			</head>
 			<body className="min-h-dvh">
+				<a
+					className="fixed top-3 left-3 z-50 -translate-y-16 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-transform focus:translate-y-0"
+					href="#main"
+				>
+					Skip to content
+				</a>
 				<div className="min-h-dvh">
 					<AppSidebar />
 					<div className="lg:pl-sidebar">
-						<main className="min-h-dvh pt-12 lg:pt-0">{children}</main>
+						<main className="min-h-dvh pt-12 lg:pt-0" id="main">
+							{children}
+						</main>
 					</div>
 				</div>
 				<Toaster position="top-center" richColors />

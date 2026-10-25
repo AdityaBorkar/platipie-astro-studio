@@ -14,9 +14,18 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
+import { EmptyState, PageHeader, PageShell } from "#/components/gitbook/page";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "#/components/ui/dialog";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "#/components/ui/input-group";
 import { Skeleton } from "#/components/ui/skeleton";
 import {
 	Table,
@@ -82,6 +91,10 @@ function ContentPage() {
 	const [modelSync, setModelSync] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [syncing, setSyncing] = useState(false);
+	const [browse, setBrowse] = useState<CollectionSummary | null>(null);
+	const [browseEntries, setBrowseEntries] = useState<RecentEntry[] | null>(null);
+	const [browseError, setBrowseError] = useState<string | null>(null);
+	const [browseQuery, setBrowseQuery] = useState("");
 
 	useEffect(() => {
 		let alive = true;
@@ -143,41 +156,63 @@ function ContentPage() {
 		(sum, collection) => sum + collection.count,
 		0,
 	);
+	const browseNeedle = browseQuery.trim().toLowerCase();
+	const visibleBrowseEntries = (browseEntries ?? []).filter(
+		(entry) =>
+			browseNeedle.length === 0 ||
+			entry.id.toLowerCase().includes(browseNeedle) ||
+			(entry.title ?? "").toLowerCase().includes(browseNeedle) ||
+			entry.path.toLowerCase().includes(browseNeedle),
+	);
+
+	function openCollection(collection: CollectionSummary) {
+		setBrowse(collection);
+		setBrowseEntries(null);
+		setBrowseError(null);
+		setBrowseQuery("");
+		fetch(`/api/cms/entries?collection=${encodeURIComponent(collection.id)}`)
+			.then(async (response) => {
+				const json = await response.json();
+				if (!response.ok) throw new Error(json.message ?? "Could not load entries");
+				return json as { entries?: RecentEntry[] };
+			})
+			.then((json) => setBrowseEntries(json.entries ?? []))
+			.catch((e: unknown) => setBrowseError(e instanceof Error ? e.message : String(e)));
+	}
 
 	return (
-		<div className="mx-auto w-page px-5 py-8 sm:py-10">
-			<div className="animate-rise flex flex-wrap items-end justify-between gap-5">
-				<div>
-					<p className="text-11 font-bold tracking-14 text-brand uppercase">Content</p>
-					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">
-						Every entry, <span className="text-brand">one inbox.</span>
-					</h1>
-					<p className="gb-sub mt-3 max-w-xl text-base">
+		<PageShell>
+			<PageHeader
+				description={
+					<>
 						The CMS collections registered against the Astro checkout. Files stay the source of
 						truth; the SQLite mirror is a read-model kept fresh by the FS watcher.
-					</p>
-				</div>
-				<Button nativeButton={false} render={<Link to="/dashboard" />} size="sm" variant="outline">
-					<ArrowRightIcon className="size-3.5" />
-					Open dashboard
-				</Button>
-			</div>
-
-			<div className="mt-6 flex flex-wrap items-center gap-1.5">
-				<Badge
-					className="font-mono"
-					variant={data?.env.projectReachable ? "success" : "destructive"}
-				>
-					Project {data?.env.projectReachable ? "reachable" : "missing"}
-				</Badge>
-				<Badge variant="secondary">{totalEntries} entries</Badge>
-				<Badge variant={(data?.drift.length ?? 0) > 0 ? "brand" : "success"}>
-					{data?.drift.length ?? 0} drift signals
-				</Badge>
-			</div>
+					</>
+				}
+				eyebrow="Content"
+				meta={
+					<>
+						<Badge
+							className="font-mono"
+							variant={data?.env.projectReachable ? "success" : "destructive"}
+						>
+							Project {data?.env.projectReachable ? "reachable" : "missing"}
+						</Badge>
+						<Badge variant="secondary">{totalEntries} entries</Badge>
+						<Badge variant={(data?.drift.length ?? 0) > 0 ? "brand" : "success"}>
+							{data?.drift.length ?? 0} drift signals
+						</Badge>
+					</>
+				}
+				title={
+					<>
+						Every entry, <span className="text-brand">one inbox.</span>
+					</>
+				}
+			/>
 
 			{error ? (
-				<Hint title="Failed to load content" variant="danger">
+				<Hint className="mt-4" title="Failed to load content" variant="danger">
 					{error}
 				</Hint>
 			) : null}
@@ -222,10 +257,10 @@ function ContentPage() {
 							) : (
 								<Table>
 									<TableHeader>
-										<TableRow className="bg-muted/40 hover:bg-muted/40">
+										<TableRow>
 											<TableHead className="pl-5">Collection</TableHead>
-											<TableHead>Loader</TableHead>
-											<TableHead>Schema keys</TableHead>
+											<TableHead className="hidden xl:table-cell">Loader</TableHead>
+											<TableHead className="hidden xl:table-cell">Schema keys</TableHead>
 											<TableHead className="text-right">Entries</TableHead>
 										</TableRow>
 									</TableHeader>
@@ -240,12 +275,12 @@ function ContentPage() {
 														{collection.base || "—"} · {collection.pattern || "file"}
 													</span>
 												</TableCell>
-												<TableCell>
+												<TableCell className="hidden xl:table-cell">
 													<Badge className="font-mono" variant="outline">
 														{collection.loader}
 													</Badge>
 												</TableCell>
-												<TableCell className="max-w-64 truncate font-mono text-11 text-muted-foreground">
+												<TableCell className="hidden max-w-64 truncate font-mono text-11 text-muted-foreground xl:table-cell">
 													{(() => {
 														try {
 															const keys = JSON.parse(collection.schemaKeys) as string[];
@@ -271,11 +306,7 @@ function ContentPage() {
 					) : (
 						<div className="grid gap-3 sm:grid-cols-2">
 							{data.collections.map((collection) => (
-								<Card
-									className="scroll-mt-24 transition-card hover:-translate-y-0.5 hover:shadow-soft"
-									id={collection.id}
-									key={collection.id}
-								>
+								<Card className="scroll-mt-24" id={collection.id} key={collection.id}>
 									<CardHeader>
 										<CardTitle className="flex items-center gap-2">
 											<FolderIcon className="size-4 text-brand" />
@@ -287,12 +318,7 @@ function ContentPage() {
 									</CardHeader>
 									<CardContent className="flex items-center justify-between gap-2">
 										<Badge variant="outline">{collection.count} entries</Badge>
-										<Button
-											nativeButton={false}
-											render={<Link hash="collections" to="/dashboard" />}
-											size="sm"
-											variant="ghost"
-										>
+										<Button onClick={() => openCollection(collection)} size="sm" variant="ghost">
 											Browse
 											<ArrowRightIcon className="size-3.5" />
 										</Button>
@@ -317,15 +343,19 @@ function ContentPage() {
 									<Skeleton className="h-9 w-full" />
 								</div>
 							) : data.recent.length === 0 ? (
-								<Hint className="m-4" title="No recent edits" variant="info">
-									Open an entry from the dashboard to start the activity log.
-								</Hint>
+								<EmptyState
+									className="m-4"
+									compact
+									description="Open an entry from the dashboard to start the activity log."
+									icon={FileTextIcon}
+									title="No recent edits"
+								/>
 							) : (
 								<ul className="divide-y divide-border">
 									{data.recent.slice(0, 10).map((entry) => (
 										<li key={`${entry.collection}:${entry.path}`}>
 											<Link
-												className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/60"
+												className="flex items-center gap-3 px-4 py-2.5 transition-colors outline-none hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
 												params={{
 													collection: entry.collection,
 													id: encodeURIComponent(entry.id),
@@ -365,7 +395,7 @@ function ContentPage() {
 							<CardDescription>Workspace-level signals.</CardDescription>
 						</CardHeader>
 						<CardContent className="grid gap-2">
-							<Badge className="w-fit font-mono" variant="outline">
+							<Badge className="max-w-full truncate font-mono" variant="outline">
 								ASTRO_URL {data?.env.astroUrl ?? "unset"}
 							</Badge>
 							<Badge className="w-fit" variant={data?.env.aiEnabled ? "brand" : "secondary"}>
@@ -402,7 +432,7 @@ function ContentPage() {
 						<Card>
 							<CardHeader>
 								<CardTitle className="flex items-center gap-2">
-									<TriangleAlertIcon className="size-4 text-brand" />
+									<TriangleAlertIcon className="size-4 text-warning" />
 									Drift
 								</CardTitle>
 							</CardHeader>
@@ -437,6 +467,76 @@ function ContentPage() {
 					</Button>
 				</CardContent>
 			</Card>
-		</div>
+
+			<Dialog onOpenChange={(open) => !open && setBrowse(null)} open={browse !== null}>
+				<DialogContent className="gap-3 sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle>{browse?.label}</DialogTitle>
+						<DialogDescription className="font-mono text-11">{browse?.source}</DialogDescription>
+					</DialogHeader>
+					<InputGroup>
+						<InputGroupAddon>
+							<SearchIcon />
+						</InputGroupAddon>
+						<InputGroupInput
+							aria-label="Filter entries"
+							onChange={(event) => setBrowseQuery(event.target.value)}
+							placeholder="Filter entries…"
+							value={browseQuery}
+						/>
+					</InputGroup>
+					<div className="max-h-58vh min-h-32 overflow-y-auto pr-0.5">
+						{browseError ? (
+							<Hint title="Could not load entries" variant="danger">
+								{browseError}
+							</Hint>
+						) : browseEntries === null ? (
+							<div className="grid gap-2">
+								<Skeleton className="h-10 w-full" />
+								<Skeleton className="h-10 w-full" />
+								<Skeleton className="h-10 w-full" />
+							</div>
+						) : visibleBrowseEntries.length === 0 ? (
+							<EmptyState
+								compact
+								description={
+									browseQuery
+										? "Try a different title or path."
+										: "This collection has no entries yet."
+								}
+								icon={browseQuery ? SearchIcon : FileTextIcon}
+								title={browseQuery ? "No entries match" : "No entries"}
+							/>
+						) : (
+							<ul className="grid gap-0.5">
+								{visibleBrowseEntries.map((entry) => (
+									<li key={entry.path}>
+										<Link
+											className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30"
+											params={{
+												collection: browse?.id ?? "",
+												id: encodeURIComponent(entry.id),
+											}}
+											search={{ path: entry.path }}
+											to="/edit/$collection/$id"
+										>
+											<span className="min-w-0 flex-1">
+												<span className="block truncate text-sm font-medium">
+													{entry.title ?? entry.id}
+												</span>
+												<span className="block truncate font-mono text-10 text-muted-foreground">
+													{entry.path}
+												</span>
+											</span>
+											<ArrowRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+										</Link>
+									</li>
+								))}
+							</ul>
+						)}
+					</div>
+				</DialogContent>
+			</Dialog>
+		</PageShell>
 	);
 }

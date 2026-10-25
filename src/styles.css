@@ -66,19 +66,21 @@
 	--accent-foreground: #1c1917;
 	--destructive: #dc2626;
 	--destructive-foreground: #ffffff;
+	--warning: #b45309;
+	--success: #047857;
 	--border: #efeeed;
 	--input: #e7e5e4;
 	--ring: #fe551b;
 	--chart-1: #fe551b;
 	--chart-2: #1c1917;
-	--chart-3: #d97706;
+	--chart-3: var(--warning);
 	--chart-4: #a4f4cf;
 	--chart-5: #8b8b86;
 	--radius: 0.75rem;
 	--radius-sm: 0.5rem;
-	--radius-md: 0.75rem;
-	--radius-lg: 1rem;
-	--radius-xl: 1.25rem;
+	--radius-md: 0.5rem;
+	--radius-lg: 0.75rem;
+	--radius-xl: 1rem;
 	--radius-2xl: 1.5rem;
 	--radius-3xl: 1.75rem;
 	--radius-4xl: 2rem;
@@ -126,12 +128,14 @@
 	--accent-foreground: #fafaf9;
 	--destructive: #f87171;
 	--destructive-foreground: #0c0a09;
+	--warning: #fbbf24;
+	--success: #7ce3b6;
 	--border: #282422;
 	--input: #322d2a;
 	--ring: #ff6a35;
 	--chart-1: #ff6a35;
 	--chart-2: #fafaf9;
-	--chart-3: #fbbf24;
+	--chart-3: var(--warning);
 	--chart-4: #7ce3b6;
 	--chart-5: #8b8b86;
 	--sidebar: #100d0c;
@@ -180,6 +184,8 @@
 	--color-accent-foreground: var(--accent-foreground);
 	--color-destructive: var(--destructive);
 	--color-destructive-foreground: var(--destructive-foreground);
+	--color-warning: var(--warning);
+	--color-success: var(--success);
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
@@ -211,9 +217,9 @@
 	--leading-display: 1;
 	--leading-heading: 1.2;
 	--radius-sm: 0.5rem;
-	--radius-md: 0.75rem;
-	--radius-lg: 1rem;
-	--radius-xl: 1.25rem;
+	--radius-md: 0.5rem;
+	--radius-lg: 0.75rem;
+	--radius-xl: 1rem;
 	--radius-2xl: 1.5rem;
 	--radius-3xl: 1.75rem;
 	--radius-4xl: 2rem;
@@ -578,15 +584,16 @@ p {
 	a,
 	summary,
 	[role="button"] {
-		cursor: default;
+		cursor: pointer;
+	}
+
+	button:disabled,
+	[aria-disabled="true"] {
+		cursor: not-allowed;
 	}
 
 	a[target="_blank"] {
 		cursor: pointer;
-	}
-
-	button:disabled {
-		cursor: not-allowed;
 	}
 }
 
@@ -980,6 +987,31 @@ pre {
 	.gb-card-hover:hover {
 		transform: translateY(-4px);
 		box-shadow: var(--shadow-lift);
+		border-color: color-mix(in oklab, var(--foreground) 14%, var(--border));
+	}
+
+	/* Navigational cards: no resting shadow, a short lift, and a visible
+	   keyboard ring. Keeps dense grids calm while still feeling alive. */
+	.gb-card-link {
+		transition:
+			transform 320ms var(--ease-spring),
+			box-shadow 320ms var(--ease-spring),
+			border-color 320ms var(--ease-spring),
+			background-color 320ms var(--ease-spring);
+	}
+
+	.gb-card-link:hover {
+		transform: translateY(-2px);
+		box-shadow: var(--shadow-soft);
+		border-color: color-mix(in oklab, var(--foreground) 14%, var(--border));
+	}
+
+	.gb-card-link:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+
+	.gb-card-link:focus-within {
 		border-color: color-mix(in oklab, var(--foreground) 14%, var(--border));
 	}
 
