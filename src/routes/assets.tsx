@@ -9,16 +9,18 @@ import {
 	TypeIcon,
 	UploadIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { EmptyState, PageHeader, PageShell, SyncBadge } from "#/components/gitbook/page";
+import { LiveBadge } from "#/components/live-badge";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#/components/ui/input-group";
 import { Skeleton } from "#/components/ui/skeleton";
+import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 
 interface AssetRow {
 	dir: string;
@@ -74,37 +76,22 @@ function isPreviewable(row: AssetRow): boolean {
 }
 
 function AssetsPage() {
-	const [assets, setAssets] = useState<AssetRow[] | null>(null);
-	const [lastSync, setLastSync] = useState<number | null>(null);
-	const [error, setError] = useState<string | null>(null);
 	const [query, setQuery] = useState("");
-	const [tick, setTick] = useState(0);
 	const [syncing, setSyncing] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
 
-	useEffect(() => {
-		let alive = true;
-		setError(null);
-		fetch(`/api/cms/inventory?scope=assets&tick=${tick}`)
-			.then(async (response) => {
-				const json = await response.json();
-				if (!response.ok) throw new Error(json.message ?? "Failed to load assets");
-				return json as InventoryResponse;
-			})
-			.then((json) => {
-				if (alive) {
-					setAssets(json.rows ?? []);
-					setLastSync(json.status.find((entry) => entry.scope === "assets")?.lastSync ?? null);
-				}
-			})
-			.catch((e: unknown) => {
-				if (alive) setError(String((e as Error).message ?? e));
-			});
-		return () => {
-			alive = false;
-		};
-	}, [tick]);
+	const fetchAssets = useCallback(
+		() => fetchJson<InventoryResponse>("/api/cms/inventory?scope=assets"),
+		[],
+	);
+	const assetsQuery = useCachedFetch("/api/cms/inventory?scope=assets", fetchAssets, {
+		errorMessage: "Could not refresh assets",
+	});
+	const assets = assetsQuery.data?.rows ?? null;
+	const lastSync =
+		assetsQuery.data?.status.find((entry) => entry.scope === "assets")?.lastSync ?? null;
+	const error = assets === null ? assetsQuery.error : null;
 
 	const filtered = useMemo(() => {
 		const needle = query.trim().toLowerCase();
@@ -126,17 +113,15 @@ function AssetsPage() {
 	async function resync() {
 		setSyncing(true);
 		try {
-			const response = await fetch("/api/cms/sync", {
+			const json = await fetchJson<{ fileCount: number }>("/api/cms/sync", {
 				body: JSON.stringify({ scope: "assets" }),
 				headers: { "Content-Type": "application/json" },
 				method: "POST",
 			});
-			const json = await response.json();
-			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
 			toast.success(`Re-synced ${json.fileCount} assets`);
-			setTick((value) => value + 1);
+			assetsQuery.refresh();
 		} catch (e: unknown) {
-			toast.error(String((e as Error).message ?? e));
+			toast.error(e instanceof Error ? e.message : String(e));
 		} finally {
 			setSyncing(false);
 		}
@@ -206,6 +191,7 @@ function AssetsPage() {
 							{formatBytes(totalBytes)}
 						</Badge>
 						<SyncBadge lastSync={lastSync} />
+						<LiveBadge refreshing={assetsQuery.isRefreshing} />
 						{kindCounts.map(([kind, count]) => (
 							<Badge key={kind} variant="outline">
 								{kind} · {count}

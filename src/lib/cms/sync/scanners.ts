@@ -391,7 +391,7 @@ export async function scanEmails(projectRoot: string): Promise<EmailScan[]> {
 	return out.toSorted((a, b) => a.path.localeCompare(b.path));
 }
 
-function routeFor(relativePath: string): { dynamic: boolean; route: string } {
+export function routeFor(relativePath: string): { dynamic: boolean; route: string } {
 	const withoutExt = relativePath.replace(/\.(astro|md|mdx|ts)$/u, "");
 	const segments = withoutExt.split("/").filter(Boolean);
 	if (segments.at(-1) === "index") segments.pop();

@@ -443,6 +443,14 @@
 	grid-template-columns: minmax(0, 1fr) 20rem;
 }
 
+@utility grid-cols-pages-workspace {
+	grid-template-columns: minmax(0, 19rem) minmax(0, 1fr) minmax(0, 22rem);
+}
+
+@utility grid-cols-page-meta {
+	grid-template-columns: 5.5rem minmax(0, 1fr);
+}
+
 @utility pt-hero {
 	padding-top: 8.5rem;
 }

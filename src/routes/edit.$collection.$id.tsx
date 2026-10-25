@@ -15,11 +15,12 @@ import {
 	TriangleAlertIcon,
 } from "lucide-react";
 import { marked } from "marked";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { EmptyState, PageHeader, PageShell } from "#/components/gitbook/page";
+import { LiveBadge } from "#/components/live-badge";
 import {
 	AlertDialog,
 	AlertDialogCancel,
@@ -49,6 +50,7 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
+import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 import { useTheme } from "#/hooks/use-theme";
 
 export const Route = createFileRoute("/edit/$collection/$id")({
@@ -115,7 +117,6 @@ function useQueryPath(): string {
 function UnifiedEditor() {
 	const filePath = useQueryPath();
 	const { resolved } = useTheme();
-	const [loaded, setLoaded] = useState<Loaded | null>(null);
 	const [fm, setFm] = useState<Record<string, unknown>>({});
 	const [body, setBody] = useState("");
 	const [mode, setMode] = useState<"markdown" | "visual">("markdown");
@@ -125,63 +126,79 @@ function UnifiedEditor() {
 	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 	const [warnings, setWarnings] = useState<string[]>([]);
 	const [diff, setDiff] = useState("");
-	const [seo, setSeo] = useState<any>(null);
-	const [slugEdit, setSlugEdit] = useState("");
-	const [media, setMedia] = useState<{ path: string }[]>([]);
 	const [aiBusy, setAiBusy] = useState(false);
 	const [aiDraft, setAiDraft] = useState<string | null>(null);
 	const [deleteOpen, setDeleteOpen] = useState(false);
+	const [editorKey, setEditorKey] = useState<string | null>(null);
 
 	const isJsonFile = filePath.endsWith(".json");
 	const [jsonRows, setJsonRows] = useState<any[]>([]);
 	const [jsonRowId, setJsonRowId] = useState<string | null>(null);
+	const [slugEdit, setSlugEdit] = useState("");
+
+	const [fp] = filePath.split("#");
+	const rowFrag = filePath.includes("#") ? filePath.split("#")[1] : null;
+	const entryKey = `/api/cms/entry?path=${encodeURIComponent(fp)}`;
+	const fetchEntry = useCallback(() => fetchJson<Loaded>(entryKey), [entryKey]);
+	const entryQuery = useCachedFetch(entryKey, fetchEntry, {
+		errorMessage: "Could not refresh entry",
+	});
+	const loaded = entryQuery.data;
+	const entryLoading = loaded === null && entryQuery.isLoading;
+	const entryRefreshing = loaded !== null && entryQuery.isRefreshing;
+
+	const isMarkdown = fp.endsWith(".md") || fp.endsWith(".mdx");
+	const seoKey = `/api/cms/seo?path=${encodeURIComponent(fp)}`;
+	const fetchSeo = useCallback(() => fetchJson<any>(seoKey), [seoKey]);
+	const seoQuery = useCachedFetch(seoKey, fetchSeo, {
+		enabled: isMarkdown,
+		toastOnBackgroundError: false,
+	});
+	const seo = seoQuery.data;
+
+	const fetchMedia = useCallback(
+		() => fetchJson<{ media: { path: string }[] }>("/api/cms/media"),
+		[],
+	);
+	const mediaQuery = useCachedFetch("/api/cms/media", fetchMedia, {
+		toastOnBackgroundError: false,
+	});
+	const media = mediaQuery.data?.media ?? [];
 
 	useEffect(() => {
-		setLoaded(null);
+		if (entryQuery.error && loaded === null) {
+			setErr(entryQuery.error);
+		} else if (loaded !== null) {
+			setErr(null);
+		}
+	}, [entryQuery.error, loaded]);
+
+	useEffect(() => {
+		if (!loaded) return;
+		if (editorKey === loaded.ref.path) return;
+		setEditorKey(loaded.ref.path);
 		setErr(null);
 		setMsg(null);
-		const [fp] = filePath.split("#");
-		const rowFrag = filePath.includes("#") ? filePath.split("#")[1] : null;
-		fetch(`/api/cms/entry?path=${encodeURIComponent(fp)}`)
-			.then(async (r) => {
-				const j = await r.json();
-				if (!r.ok) throw new Error(j.message ?? "load failed");
-				return j as Loaded;
-			})
-			.then((j) => {
-				setLoaded(j);
-				setFm(j.frontmatter ?? {});
-				setBody(j.body ?? "");
-				setMtime(j.mtime);
-				const stem =
-					fp
-						.split("/")
-						.pop()
-						?.replace(/\.(md|mdx|json|ts)$/u, "") ?? "";
-				setSlugEdit(stem);
-				if (fp.endsWith(".json")) {
-					try {
-						const arr = JSON.parse(j.body ?? "[]");
-						setJsonRows(Array.isArray(arr) ? arr : []);
-						setJsonRowId(rowFrag);
-					} catch {
-						setJsonRows([]);
-					}
-				}
-				// SEO
-				if (fp.endsWith(".md") || fp.endsWith(".mdx")) {
-					fetch(`/api/cms/seo?path=${encodeURIComponent(fp)}`)
-						.then((r) => r.json())
-						.then(setSeo)
-						.catch(() => {});
-				}
-				fetch("/api/cms/media")
-					.then((r) => r.json())
-					.then((m) => setMedia(m.media ?? []))
-					.catch(() => {});
-			})
-			.catch((e) => setErr(String(e.message ?? e)));
-	}, [filePath]);
+		setFm(loaded.frontmatter ?? {});
+		setBody(loaded.body ?? "");
+		setMtime(loaded.mtime);
+		const stem =
+			fp
+				.split("/")
+				.pop()
+				?.replace(/\.(md|mdx|json|ts)$/u, "") ?? "";
+		setSlugEdit(stem);
+		if (fp.endsWith(".json")) {
+			try {
+				const arr = JSON.parse(loaded.body ?? "[]");
+				setJsonRows(Array.isArray(arr) ? arr : []);
+				setJsonRowId(rowFrag);
+			} catch {
+				setJsonRows([]);
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [fp, loaded]);
 
 	const unknownKeys = useMemo(() => Object.keys(fm).filter((k) => !WP_FIELDS.has(k)), [fm]);
 	const previewHtml = useMemo(() => {
@@ -209,11 +226,15 @@ function UnifiedEditor() {
 		setErr(null);
 		setMsg(null);
 		setFieldErrors({});
-		const [fp] = filePath.split("#");
 		try {
 			if (isJsonFile) {
 				const text = JSON.stringify(jsonRows, null, 2) + "\n";
-				const r = await fetch("/api/cms/entry", {
+				const j = await fetchJson<{
+					diff?: string;
+					mtime: number;
+					path: string;
+					warnings?: string[];
+				}>("/api/cms/entry", {
 					body: JSON.stringify({
 						force,
 						payload: { body: text, frontmatter: {}, mtime },
@@ -222,24 +243,20 @@ function UnifiedEditor() {
 					headers: { "Content-Type": "application/json" },
 					method: "PUT",
 				});
-				const j = await r.json();
-				if (!r.ok) {
-					if (j.code === "CONFLICT") {
-						setErr(`Conflict: ${j.message}`);
-						setDiff(j.diff ?? "");
-						return;
-					}
-					if (j.fields) setFieldErrors(j.fields);
-					throw new Error(j.message);
-				}
 				setMtime(j.mtime);
 				setDiff(j.diff ?? "");
 				setWarnings(j.warnings ?? []);
 				setMsg(`Saved ${j.path}`);
 				toast.success(`Saved ${j.path}`);
+				entryQuery.refresh();
 				return;
 			}
-			const r = await fetch("/api/cms/entry", {
+			const j = await fetchJson<{
+				diff?: string;
+				mtime: number;
+				path: string;
+				warnings?: string[];
+			}>("/api/cms/entry", {
 				body: JSON.stringify({
 					force,
 					payload: { body, frontmatter: fm, mtime },
@@ -248,28 +265,28 @@ function UnifiedEditor() {
 				headers: { "Content-Type": "application/json" },
 				method: "PUT",
 			});
-			const j = await r.json();
-			if (!r.ok) {
-				if (j.code === "CONFLICT") {
-					setErr(`Conflict (409): ${j.message}. Review diff, then retry with Force.`);
-					setDiff(j.diff ?? "");
-					return;
-				}
-				if (j.fields) setFieldErrors(j.fields);
-				throw new Error(j.message);
-			}
 			setMtime(j.mtime);
 			setDiff(j.diff ?? "");
 			setWarnings(j.warnings ?? []);
 			setMsg(`Saved ${j.path} · modifiedDate touched`);
 			toast.success(`Saved ${j.path}`);
-			// refresh SEO
-			fetch(`/api/cms/seo?path=${encodeURIComponent(fp)}`)
-				.then((x) => x.json())
-				.then(setSeo)
-				.catch(() => {});
-		} catch (e: any) {
-			const message = String(e.message ?? e);
+			entryQuery.refresh();
+			seoQuery.refresh();
+		} catch (e: unknown) {
+			const code = (e as { code?: unknown }).code;
+			const fields = (e as { fields?: Record<string, string> }).fields;
+			const diffText = (e as { diff?: string }).diff;
+			if (code === "CONFLICT") {
+				setErr(
+					isJsonFile
+						? `Conflict: ${e instanceof Error ? e.message : String(e)}`
+						: `Conflict (409): ${e instanceof Error ? e.message : String(e)}. Review diff, then retry with Force.`,
+				);
+				setDiff(diffText ?? "");
+				return;
+			}
+			if (fields) setFieldErrors(fields);
+			const message = e instanceof Error ? e.message : String(e);
 			setErr(message);
 			toast.error(message);
 		}
@@ -281,6 +298,15 @@ function UnifiedEditor() {
 				<PageShell>
 					<Hint title="Failed to load entry" variant="danger">
 						{err}
+					</Hint>
+				</PageShell>
+			);
+		}
+		if (!entryLoading) {
+			return (
+				<PageShell>
+					<Hint title="Failed to load entry" variant="danger">
+						{entryQuery.error ?? "Entry not found"}
 					</Hint>
 				</PageShell>
 			);
@@ -332,6 +358,7 @@ function UnifiedEditor() {
 						<Badge className="font-mono" variant="outline">
 							updated {new Date(mtime).toLocaleTimeString()}
 						</Badge>
+						<LiveBadge refreshing={entryRefreshing} />
 					</>
 				}
 				title={loaded.ref.path.split("/").pop()}
@@ -435,7 +462,6 @@ function UnifiedEditor() {
 							</Field>
 							<Button
 								onClick={() => {
-									const [fp] = filePath.split("#");
 									fetch("/api/cms/rename", {
 										body: JSON.stringify({ newSlug: slugEdit, path: fp }),
 										headers: { "Content-Type": "application/json" },
@@ -634,7 +660,6 @@ function UnifiedEditor() {
 							<Button
 								onClick={() => {
 									setDeleteOpen(false);
-									const [fp] = filePath.split("#");
 									fetch("/api/cms/entry", {
 										body: JSON.stringify({ path: fp, rowId: jsonRowId ?? undefined }),
 										headers: { "Content-Type": "application/json" },

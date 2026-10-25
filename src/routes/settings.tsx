@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { EmptyState, PageHeader, PageShell, SyncBadge } from "#/components/gitbook/page";
+import { LiveBadge } from "#/components/live-badge";
 import { ThemeToggle } from "#/components/theme-toggle";
 import {
 	AlertDialog,
@@ -41,6 +42,7 @@ import {
 	TableRow,
 } from "#/components/ui/table";
 import { Textarea } from "#/components/ui/textarea";
+import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 import { useTheme } from "#/hooks/use-theme";
 
 export const Route = createFileRoute("/settings")({
@@ -94,99 +96,134 @@ function SettingsPage() {
 	const [raw, setRaw] = useState("");
 	const [values, setValues] = useState<Record<string, any>>({});
 	const [mtime, setMtime] = useState(0);
-	const [env, setEnv] = useState<any>(null);
 	const [msg, setMsg] = useState<string | null>(null);
 	const [err, setErr] = useState<string | null>(null);
-	const [trash, setTrash] = useState<{ path: string }[]>([]);
-	const [astro, setAstro] = useState<AstroSettings | null>(null);
-	const [astroSync, setAstroSync] = useState<number | null>(null);
-	const [loaded, setLoaded] = useState(false);
 	const [rawDialogOpen, setRawDialogOpen] = useState(false);
 	const [activeSection, setActiveSection] = useState("environment");
+	const [initialized, setInitialized] = useState(false);
 
-	const load = useCallback(async () => {
-		const response = await fetch("/api/cms/settings");
-		const json = await response.json();
-		setRaw(json.raw);
-		setValues(json.values ?? {});
-		setMtime(json.mtime);
-		setEnv(json.env);
-		const trashResponse = await fetch("/api/cms/restore")
-			.then((value) => value.json())
-			.catch(() => ({ trash: [] }));
-		setTrash(trashResponse.trash ?? []);
-		const astroResponse = await fetch("/api/cms/inventory?scope=astro")
-			.then((value) => value.json())
-			.catch(() => ({ rows: [], status: [] }));
-		const astroRows = (astroResponse.rows ?? []) as AstroSettings[];
-		setAstro(astroRows[0] ?? null);
-		const astroStatus = (astroResponse.status ?? []) as {
-			lastSync: number | null;
-			scope: string;
-		}[];
-		setAstroSync(astroStatus.find((entry) => entry.scope === "astro")?.lastSync ?? null);
-		setLoaded(true);
-	}, []);
+	const fetchSettings = useCallback(
+		() =>
+			fetchJson<{
+				env: unknown;
+				mtime: number;
+				raw: string;
+				values?: Record<string, unknown>;
+			}>("/api/cms/settings"),
+		[],
+	);
+	const fetchTrash = useCallback(
+		() => fetchJson<{ trash: { path: string }[] }>("/api/cms/restore"),
+		[],
+	);
+	const fetchAstro = useCallback(
+		() =>
+			fetchJson<{ rows: AstroSettings[]; status: { lastSync: number | null; scope: string }[] }>(
+				"/api/cms/inventory?scope=astro",
+			),
+		[],
+	);
+	const settingsQuery = useCachedFetch("/api/cms/settings", fetchSettings, {
+		errorMessage: "Could not refresh settings",
+	});
+	const trashQuery = useCachedFetch("/api/cms/restore", fetchTrash, {
+		errorMessage: "Could not refresh trash",
+		toastOnBackgroundError: false,
+	});
+	const astroQuery = useCachedFetch("/api/cms/inventory?scope=astro", fetchAstro, {
+		errorMessage: "Could not refresh Astro settings",
+		toastOnBackgroundError: false,
+	});
+
+	const env = (settingsQuery.data as { env?: unknown } | null)?.env as any;
+	const trash = trashQuery.data?.trash ?? [];
+	const astro = astroQuery.data?.rows[0] ?? null;
+	const astroSync =
+		astroQuery.data?.status.find((entry) => entry.scope === "astro")?.lastSync ?? null;
+	const loaded = settingsQuery.data !== null;
+	const refreshing =
+		astroQuery.isRefreshing || settingsQuery.isRefreshing || trashQuery.isRefreshing;
 
 	useEffect(() => {
-		void load();
-	}, [load]);
+		if (!initialized && settingsQuery.data) {
+			setRaw(settingsQuery.data.raw);
+			setValues((settingsQuery.data.values ?? {}) as Record<string, unknown>);
+			setMtime(settingsQuery.data.mtime);
+			setInitialized(true);
+		}
+	}, [initialized, settingsQuery.data]);
+
+	const load = useCallback(() => {
+		setInitialized(false);
+		astroQuery.refresh();
+		settingsQuery.refresh();
+		trashQuery.refresh();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	async function saveRaw() {
 		setErr(null);
 		setMsg(null);
-		const response = await fetch("/api/cms/settings", {
-			body: JSON.stringify({ mtime, raw }),
-			headers: { "Content-Type": "application/json" },
-			method: "PUT",
-		});
-		const json = await response.json();
-		if (!response.ok) {
+		try {
+			const json = await fetchJson<{ mtime: number }>("/api/cms/settings", {
+				body: JSON.stringify({ mtime, raw }),
+				headers: { "Content-Type": "application/json" },
+				method: "PUT",
+			});
+			setMtime(json.mtime);
+			setMsg("Settings saved (raw)");
+			toast.success("Settings saved (raw)");
+			settingsQuery.refresh();
+		} catch (e: unknown) {
+			const code = (e as { code?: unknown }).code;
 			const message =
-				json.code === "CONFLICT"
+				code === "CONFLICT"
 					? "Conflict (409): constants changed — reload then retry with force"
-					: json.message;
+					: e instanceof Error
+						? e.message
+						: String(e);
 			setErr(message);
 			toast.error(message);
-			return;
 		}
-		setMtime(json.mtime);
-		setMsg("Settings saved (raw)");
-		toast.success("Settings saved (raw)");
 	}
 
 	async function saveForm() {
 		setErr(null);
 		setMsg(null);
-		const response = await fetch("/api/cms/settings", {
-			body: JSON.stringify({ mtime, values }),
-			headers: { "Content-Type": "application/json" },
-			method: "PUT",
-		});
-		const json = await response.json();
-		if (!response.ok) {
-			setErr(json.message);
-			toast.error(json.message);
-			return;
+		try {
+			const json = await fetchJson<{ mtime: number; raw: string }>("/api/cms/settings", {
+				body: JSON.stringify({ mtime, values }),
+				headers: { "Content-Type": "application/json" },
+				method: "PUT",
+			});
+			setMtime(json.mtime);
+			setRaw(json.raw);
+			setMsg("Settings saved (typed form)");
+			toast.success("Settings saved (typed form)");
+			settingsQuery.refresh();
+		} catch (e: unknown) {
+			const message = e instanceof Error ? e.message : String(e);
+			setErr(message);
+			toast.error(message);
 		}
-		setMtime(json.mtime);
-		setRaw(json.raw);
-		setMsg("Settings saved (typed form)");
-		toast.success("Settings saved (typed form)");
 	}
 
 	async function restoreTrash(trashPath: string) {
-		const response = await fetch("/api/cms/restore", {
-			body: JSON.stringify({ trashPath }),
-			headers: { "Content-Type": "application/json" },
-			method: "POST",
-		});
-		const json = await response.json();
-		const message = response.ok ? `Restored → ${json.path}` : json.message;
-		setMsg(message);
-		if (response.ok) toast.success(message);
-		else toast.error(message);
-		void load();
+		try {
+			const json = await fetchJson<{ path: string }>("/api/cms/restore", {
+				body: JSON.stringify({ trashPath }),
+				headers: { "Content-Type": "application/json" },
+				method: "POST",
+			});
+			const message = `Restored → ${json.path}`;
+			setMsg(message);
+			toast.success(message);
+		} catch (e: unknown) {
+			const message = e instanceof Error ? e.message : String(e);
+			setMsg(message);
+			toast.error(message);
+		}
+		trashQuery.refresh();
 	}
 
 	if (!loaded) {
@@ -206,10 +243,13 @@ function SettingsPage() {
 		<PageShell>
 			<PageHeader
 				actions={
-					<Button onClick={() => void load()} size="sm" variant="outline">
-						<RefreshCwIcon className="size-3.5" />
-						Reload
-					</Button>
+					<>
+						<LiveBadge refreshing={refreshing} />
+						<Button onClick={() => load()} size="sm" variant="outline">
+							<RefreshCwIcon className="size-3.5" />
+							Reload
+						</Button>
+					</>
 				}
 				description="Environment, typed constants, raw TypeScript, and the soft-delete queue — all in one quiet surface."
 				eyebrow="Configuration"

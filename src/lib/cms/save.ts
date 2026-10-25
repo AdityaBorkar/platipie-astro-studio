@@ -104,7 +104,7 @@ export async function loadEntry(repoRel: string): Promise<LoadedEntry> {
 	};
 }
 
-async function backupFile(abs: string): Promise<void> {
+export async function backupFile(abs: string): Promise<void> {
 	try {
 		const text = await fs.readFile(abs, "utf8").catch(() => null);
 		if (text === null) return;
@@ -128,7 +128,7 @@ async function backupFile(abs: string): Promise<void> {
 	}
 }
 
-async function atomicWrite(abs: string, content: string): Promise<void> {
+export async function atomicWrite(abs: string, content: string): Promise<void> {
 	await fs.mkdir(path.dirname(abs), { recursive: true });
 	const tmp = `${abs}.tmp-${process.pid}-${Date.now()}`;
 	await fs.writeFile(tmp, content, "utf8");

@@ -10,16 +10,18 @@ import {
 	ShapesIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
 import { BrandMark } from "#/components/gitbook/brand";
 import { Hint } from "#/components/gitbook/hint";
 import { EmptyState, PageHeader, PageShell, SyncBadge } from "#/components/gitbook/page";
+import { LiveBadge } from "#/components/live-badge";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Skeleton } from "#/components/ui/skeleton";
+import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 
 interface ProjectEntry {
 	branch: string;
@@ -81,49 +83,61 @@ function lastSyncOf(status: InventoryResponse["status"]): number | null {
 }
 
 function Dashboard() {
-	const [data, setData] = useState<DashboardData | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [reloadKey, setReloadKey] = useState(0);
+	const fetchProjects = useCallback(
+		() => fetchJson<{ projects: ProjectEntry[] }>("/api/cms/projects"),
+		[],
+	);
+	const fetchCollections = useCallback(
+		() => fetchJson<CollectionsResponse>("/api/cms/collections"),
+		[],
+	);
+	const fetchInventory = useCallback(
+		() => fetchJson<InventoryResponse>("/api/cms/inventory?scope=pages,assets,components"),
+		[],
+	);
+	const projectsQuery = useCachedFetch("/api/cms/projects", fetchProjects, {
+		errorMessage: "Could not refresh projects",
+	});
+	const collectionsQuery = useCachedFetch("/api/cms/collections", fetchCollections, {
+		errorMessage: "Could not refresh collections",
+	});
+	const inventoryQuery = useCachedFetch(
+		"/api/cms/inventory?scope=pages,assets,components",
+		fetchInventory,
+		{
+			errorMessage: "Could not refresh inventory",
+		},
+	);
 
-	useEffect(() => {
-		let alive = true;
-		setError(null);
-		Promise.all([
-			fetch("/api/cms/projects").then((response) => response.json()),
-			fetch("/api/cms/collections").then((response) => response.json()),
-			fetch(`/api/cms/inventory?scope=pages,assets,components&tick=${reloadKey}`).then((response) =>
-				response.json(),
-			),
-		])
-			.then(([projects, collections, inventory]) => {
-				if (!alive) return;
-				const entries = (projects.projects ?? []) as ProjectEntry[];
-				setData({
-					collections: collections as CollectionsResponse,
-					inventory: inventory as InventoryResponse,
-					project: entries.find((entry) => entry.current) ?? null,
-				});
-			})
-			.catch((e: unknown) => {
-				if (alive) setError(e instanceof Error ? e.message : String(e));
-			});
-		return () => {
-			alive = false;
+	const data = useMemo<DashboardData | null>(() => {
+		if (!projectsQuery.data || !collectionsQuery.data || !inventoryQuery.data) return null;
+		const entries = projectsQuery.data.projects ?? [];
+		return {
+			collections: collectionsQuery.data,
+			inventory: inventoryQuery.data,
+			project: entries.find((entry) => entry.current) ?? null,
 		};
-	}, [reloadKey]);
+	}, [collectionsQuery.data, inventoryQuery.data, projectsQuery.data]);
+	const refreshing =
+		collectionsQuery.isRefreshing || inventoryQuery.isRefreshing || projectsQuery.isRefreshing;
+	const loading =
+		data === null &&
+		(projectsQuery.isLoading || collectionsQuery.isLoading || inventoryQuery.isLoading);
+	const loadError = projectsQuery.error ?? collectionsQuery.error ?? inventoryQuery.error;
 
-	if (error) {
+	function refreshAll() {
+		collectionsQuery.refresh();
+		inventoryQuery.refresh();
+		projectsQuery.refresh();
+	}
+
+	if (loadError && data === null) {
 		return (
 			<PageShell>
 				<Hint title="Failed to load the workspace" variant="danger">
-					{error}
+					{loadError}
 				</Hint>
-				<Button
-					className="mt-4"
-					onClick={() => setReloadKey((value) => value + 1)}
-					size="sm"
-					variant="outline"
-				>
+				<Button className="mt-4" onClick={refreshAll} size="sm" variant="outline">
 					<RefreshCwIcon className="size-3.5" />
 					Try again
 				</Button>
@@ -131,7 +145,7 @@ function Dashboard() {
 		);
 	}
 
-	if (data === null) {
+	if (data === null || loading) {
 		return (
 			<PageShell>
 				<div className="animate-rise flex items-center gap-4">
@@ -202,7 +216,7 @@ function Dashboard() {
 			const json = await response.json();
 			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
 			toast.success("Workspace re-synced");
-			setReloadKey((value) => value + 1);
+			refreshAll();
 		} catch (e: unknown) {
 			toast.error(e instanceof Error ? e.message : "Re-sync failed");
 		}
@@ -235,6 +249,7 @@ function Dashboard() {
 							{project?.branch ?? "no branch"}
 						</Badge>
 						<SyncBadge lastSync={lastSync} />
+						<LiveBadge refreshing={refreshing} />
 					</>
 				}
 				title={

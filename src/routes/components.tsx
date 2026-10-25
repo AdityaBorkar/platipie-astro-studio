@@ -11,7 +11,7 @@ import {
 	RefreshCwIcon,
 	Settings2Icon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
@@ -22,6 +22,7 @@ import {
 	SectionHeader,
 	SyncBadge,
 } from "#/components/gitbook/page";
+import { LiveBadge } from "#/components/live-badge";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
@@ -39,6 +40,7 @@ import {
 	TableRow,
 } from "#/components/ui/table";
 import { Textarea } from "#/components/ui/textarea";
+import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 
 export const Route = createFileRoute("/components")({
 	component: ComponentsPage,
@@ -136,28 +138,20 @@ function lastSyncFor(status: SyncedInventory["status"], scope: string): number |
 }
 
 function SyncedInventorySection() {
-	const [inventory, setInventory] = useState<SyncedInventory | null>(null);
-	const [error, setError] = useState<string | null>(null);
 	const [syncing, setSyncing] = useState(false);
 
-	useEffect(() => {
-		let alive = true;
-		fetch("/api/cms/inventory?scope=components,layouts,templates,emails")
-			.then(async (response) => {
-				const json = await response.json();
-				if (!response.ok) throw new Error(json.message ?? "Failed to load inventory");
-				return json as SyncedInventory;
-			})
-			.then((json) => {
-				if (alive) setInventory(json);
-			})
-			.catch((e: unknown) => {
-				if (alive) setError(String((e as Error).message ?? e));
-			});
-		return () => {
-			alive = false;
-		};
-	}, []);
+	const fetchInventory = useCallback(
+		() =>
+			fetchJson<SyncedInventory>("/api/cms/inventory?scope=components,layouts,templates,emails"),
+		[],
+	);
+	const inventoryQuery = useCachedFetch(
+		"/api/cms/inventory?scope=components,layouts,templates,emails",
+		fetchInventory,
+		{ errorMessage: "Could not refresh synced files" },
+	);
+	const inventory = inventoryQuery.data;
+	const error = inventory === null ? inventoryQuery.error : null;
 
 	useEffect(() => {
 		if (inventory === null) return;
@@ -168,18 +162,15 @@ function SyncedInventorySection() {
 	async function resync() {
 		setSyncing(true);
 		try {
-			const response = await fetch("/api/cms/sync", {
+			await fetchJson<{ fileCount: number }>("/api/cms/sync", {
 				body: JSON.stringify({}),
 				headers: { "Content-Type": "application/json" },
 				method: "POST",
 			});
-			const json = await response.json();
-			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
 			toast.success("Inventory re-synced from the Astro checkout");
-			const reload = await fetch("/api/cms/inventory?scope=components,layouts,templates,emails");
-			setInventory((await reload.json()) as SyncedInventory);
+			inventoryQuery.refresh();
 		} catch (e: unknown) {
-			toast.error(String((e as Error).message ?? e));
+			toast.error(e instanceof Error ? e.message : String(e));
 		} finally {
 			setSyncing(false);
 		}
@@ -189,10 +180,13 @@ function SyncedInventorySection() {
 		<section className="mt-10 scroll-mt-24" id="synced">
 			<SectionHeader
 				actions={
-					<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
-						<RefreshCwIcon className="size-3.5" />
-						{syncing ? "Syncing…" : "Re-sync"}
-					</Button>
+					<>
+						<LiveBadge refreshing={inventoryQuery.isRefreshing} />
+						<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
+							<RefreshCwIcon className="size-3.5" />
+							{syncing ? "Syncing…" : "Re-sync"}
+						</Button>
+					</>
 				}
 				description="Mirrored into SQLite by the FS watcher. Files stay the source of truth."
 				eyebrow="Synced"

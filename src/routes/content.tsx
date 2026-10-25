@@ -10,11 +10,12 @@ import {
 	SparklesIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { EmptyState, PageHeader, PageShell } from "#/components/gitbook/page";
+import { LiveBadge } from "#/components/live-badge";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
@@ -35,6 +36,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "#/components/ui/table";
+import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 
 interface CollectionSummary {
 	count: number;
@@ -86,67 +88,44 @@ export const Route = createFileRoute("/content")({
 });
 
 function ContentPage() {
-	const [data, setData] = useState<CollectionsResponse | null>(null);
-	const [model, setModel] = useState<DbCollection[] | null>(null);
-	const [modelSync, setModelSync] = useState<number | null>(null);
-	const [error, setError] = useState<string | null>(null);
+	const fetchCollections = useCallback(
+		() => fetchJson<CollectionsResponse>("/api/cms/collections"),
+		[],
+	);
+	const fetchModel = useCallback(
+		() => fetchJson<ContentModelResponse>("/api/cms/inventory?scope=content"),
+		[],
+	);
+	const collectionsQuery = useCachedFetch("/api/cms/collections", fetchCollections, {
+		errorMessage: "Could not refresh collections",
+	});
+	const modelQuery = useCachedFetch("/api/cms/inventory?scope=content", fetchModel, {
+		errorMessage: "Could not refresh content model",
+	});
+	const data = collectionsQuery.data;
+	const modelRows = useMemo(() => modelQuery.data?.rows ?? null, [modelQuery.data]);
+	const modelSync = useMemo(
+		() => modelQuery.data?.status.find((entry) => entry.scope === "content")?.lastSync ?? null,
+		[modelQuery.data],
+	);
+	const error = collectionsQuery.data ? null : collectionsQuery.error;
+	const refreshing = collectionsQuery.isRefreshing || modelQuery.isRefreshing;
 	const [syncing, setSyncing] = useState(false);
 	const [browse, setBrowse] = useState<CollectionSummary | null>(null);
-	const [browseEntries, setBrowseEntries] = useState<RecentEntry[] | null>(null);
-	const [browseError, setBrowseError] = useState<string | null>(null);
-	const [browseQuery, setBrowseQuery] = useState("");
-
-	useEffect(() => {
-		let alive = true;
-		fetch("/api/cms/collections")
-			.then(async (response) => {
-				const json = await response.json();
-				if (!response.ok) throw new Error(json.message ?? "Failed to load content");
-				return json as CollectionsResponse;
-			})
-			.then((json) => {
-				if (alive) setData(json);
-			})
-			.catch((e: unknown) => {
-				if (alive) setError(String((e as Error).message ?? e));
-			});
-		fetch("/api/cms/inventory?scope=content")
-			.then(async (response) => {
-				const json = await response.json();
-				if (!response.ok) throw new Error(json.message ?? "Failed to load content model");
-				return json as ContentModelResponse;
-			})
-			.then((json) => {
-				if (alive) {
-					setModel(json.rows ?? []);
-					setModelSync(json.status.find((entry) => entry.scope === "content")?.lastSync ?? null);
-				}
-			})
-			.catch(() => {
-				if (alive) setModel([]);
-			});
-		return () => {
-			alive = false;
-		};
-	}, []);
 
 	async function resyncModel() {
 		setSyncing(true);
 		try {
-			const response = await fetch("/api/cms/sync", {
+			const json = await fetchJson<{ fileCount: number }>("/api/cms/sync", {
 				body: JSON.stringify({ scope: "content" }),
 				headers: { "Content-Type": "application/json" },
 				method: "POST",
 			});
-			const json = await response.json();
-			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
 			toast.success(`Content model re-synced (${json.fileCount} collections)`);
-			const reload = await fetch("/api/cms/inventory?scope=content");
-			const next = (await reload.json()) as ContentModelResponse;
-			setModel(next.rows ?? []);
-			setModelSync(next.status.find((entry) => entry.scope === "content")?.lastSync ?? null);
+			collectionsQuery.refresh();
+			modelQuery.refresh();
 		} catch (e: unknown) {
-			toast.error(String((e as Error).message ?? e));
+			toast.error(e instanceof Error ? e.message : String(e));
 		} finally {
 			setSyncing(false);
 		}
@@ -156,28 +135,9 @@ function ContentPage() {
 		(sum, collection) => sum + collection.count,
 		0,
 	);
-	const browseNeedle = browseQuery.trim().toLowerCase();
-	const visibleBrowseEntries = (browseEntries ?? []).filter(
-		(entry) =>
-			browseNeedle.length === 0 ||
-			entry.id.toLowerCase().includes(browseNeedle) ||
-			(entry.title ?? "").toLowerCase().includes(browseNeedle) ||
-			entry.path.toLowerCase().includes(browseNeedle),
-	);
 
 	function openCollection(collection: CollectionSummary) {
 		setBrowse(collection);
-		setBrowseEntries(null);
-		setBrowseError(null);
-		setBrowseQuery("");
-		fetch(`/api/cms/entries?collection=${encodeURIComponent(collection.id)}`)
-			.then(async (response) => {
-				const json = await response.json();
-				if (!response.ok) throw new Error(json.message ?? "Could not load entries");
-				return json as { entries?: RecentEntry[] };
-			})
-			.then((json) => setBrowseEntries(json.entries ?? []))
-			.catch((e: unknown) => setBrowseError(e instanceof Error ? e.message : String(e)));
 	}
 
 	return (
@@ -202,6 +162,7 @@ function ContentPage() {
 						<Badge variant={(data?.drift.length ?? 0) > 0 ? "brand" : "success"}>
 							{data?.drift.length ?? 0} drift signals
 						</Badge>
+						<LiveBadge refreshing={refreshing} />
 					</>
 				}
 				title={
@@ -244,12 +205,12 @@ function ContentPage() {
 							</div>
 						</CardHeader>
 						<CardContent className="p-0">
-							{model === null ? (
+							{modelRows === null ? (
 								<div className="grid gap-2 p-4">
 									<Skeleton className="h-9 w-full" />
 									<Skeleton className="h-9 w-full" />
 								</div>
-							) : model.length === 0 ? (
+							) : modelRows.length === 0 ? (
 								<Hint className="m-4" title="No content model yet" variant="info">
 									Run <code>bun run sync:once</code> to parse <code>src/content.config.ts</code>{" "}
 									into the SQLite mirror.
@@ -265,7 +226,7 @@ function ContentPage() {
 										</TableRow>
 									</TableHeader>
 									<TableBody>
-										{model.map((collection) => (
+										{modelRows.map((collection) => (
 											<TableRow key={collection.name}>
 												<TableCell className="pl-5">
 													<span className="block font-mono text-xs font-semibold">
@@ -468,75 +429,116 @@ function ContentPage() {
 				</CardContent>
 			</Card>
 
-			<Dialog onOpenChange={(open) => !open && setBrowse(null)} open={browse !== null}>
-				<DialogContent className="gap-3 sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>{browse?.label}</DialogTitle>
-						<DialogDescription className="font-mono text-11">{browse?.source}</DialogDescription>
-					</DialogHeader>
-					<InputGroup>
-						<InputGroupAddon>
-							<SearchIcon />
-						</InputGroupAddon>
-						<InputGroupInput
-							aria-label="Filter entries"
-							onChange={(event) => setBrowseQuery(event.target.value)}
-							placeholder="Filter entries…"
-							value={browseQuery}
-						/>
-					</InputGroup>
-					<div className="max-h-58vh min-h-32 overflow-y-auto pr-0.5">
-						{browseError ? (
-							<Hint title="Could not load entries" variant="danger">
-								{browseError}
-							</Hint>
-						) : browseEntries === null ? (
-							<div className="grid gap-2">
-								<Skeleton className="h-10 w-full" />
-								<Skeleton className="h-10 w-full" />
-								<Skeleton className="h-10 w-full" />
-							</div>
-						) : visibleBrowseEntries.length === 0 ? (
-							<EmptyState
-								compact
-								description={
-									browseQuery
-										? "Try a different title or path."
-										: "This collection has no entries yet."
-								}
-								icon={browseQuery ? SearchIcon : FileTextIcon}
-								title={browseQuery ? "No entries match" : "No entries"}
-							/>
-						) : (
-							<ul className="grid gap-0.5">
-								{visibleBrowseEntries.map((entry) => (
-									<li key={entry.path}>
-										<Link
-											className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30"
-											params={{
-												collection: browse?.id ?? "",
-												id: encodeURIComponent(entry.id),
-											}}
-											search={{ path: entry.path }}
-											to="/edit/$collection/$id"
-										>
-											<span className="min-w-0 flex-1">
-												<span className="block truncate text-sm font-medium">
-													{entry.title ?? entry.id}
-												</span>
-												<span className="block truncate font-mono text-10 text-muted-foreground">
-													{entry.path}
-												</span>
-											</span>
-											<ArrowRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
-										</Link>
-									</li>
-								))}
-							</ul>
-						)}
-					</div>
-				</DialogContent>
-			</Dialog>
+			{browse ? <BrowseDialog collection={browse} onClose={() => setBrowse(null)} /> : null}
 		</PageShell>
+	);
+}
+
+function BrowseDialog({
+	collection,
+	onClose,
+}: {
+	collection: CollectionSummary;
+	onClose: () => void;
+}) {
+	const [browseQuery, setBrowseQuery] = useState("");
+	const fetchEntries = useCallback(
+		() =>
+			fetchJson<{ entries?: RecentEntry[] }>(
+				`/api/cms/entries?collection=${encodeURIComponent(collection.id)}`,
+			),
+		[collection.id],
+	);
+	const entriesQuery = useCachedFetch(
+		`/api/cms/entries?collection=${encodeURIComponent(collection.id)}`,
+		fetchEntries,
+		{
+			errorMessage: `Could not refresh ${collection.label}`,
+		},
+	);
+	const browseEntries = entriesQuery.data?.entries ?? null;
+	const browseNeedle = browseQuery.trim().toLowerCase();
+	const visibleBrowseEntries = useMemo(
+		() =>
+			(browseEntries ?? []).filter(
+				(entry) =>
+					browseNeedle.length === 0 ||
+					entry.id.toLowerCase().includes(browseNeedle) ||
+					(entry.title ?? "").toLowerCase().includes(browseNeedle) ||
+					entry.path.toLowerCase().includes(browseNeedle),
+			),
+		[browseEntries, browseNeedle],
+	);
+
+	return (
+		<Dialog onOpenChange={(open) => !open && onClose()} open>
+			<DialogContent className="gap-3 sm:max-w-lg">
+				<DialogHeader>
+					<DialogTitle>{collection.label}</DialogTitle>
+					<DialogDescription className="font-mono text-11">{collection.source}</DialogDescription>
+				</DialogHeader>
+				<InputGroup>
+					<InputGroupAddon>
+						<SearchIcon />
+					</InputGroupAddon>
+					<InputGroupInput
+						aria-label="Filter entries"
+						onChange={(event) => setBrowseQuery(event.target.value)}
+						placeholder="Filter entries…"
+						value={browseQuery}
+					/>
+				</InputGroup>
+				<div className="max-h-58vh min-h-32 overflow-y-auto pr-0.5">
+					{entriesQuery.error && browseEntries === null ? (
+						<Hint title="Could not load entries" variant="danger">
+							{entriesQuery.error}
+						</Hint>
+					) : browseEntries === null ? (
+						<div className="grid gap-2">
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+						</div>
+					) : visibleBrowseEntries.length === 0 ? (
+						<EmptyState
+							compact
+							description={
+								browseQuery
+									? "Try a different title or path."
+									: "This collection has no entries yet."
+							}
+							icon={browseQuery ? SearchIcon : FileTextIcon}
+							title={browseQuery ? "No entries match" : "No entries"}
+						/>
+					) : (
+						<ul className="grid gap-0.5">
+							{visibleBrowseEntries.map((entry) => (
+								<li key={entry.path}>
+									<Link
+										className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30"
+										params={{
+											collection: collection.id,
+											id: encodeURIComponent(entry.id),
+										}}
+										search={{ path: entry.path }}
+										to="/edit/$collection/$id"
+									>
+										<span className="min-w-0 flex-1">
+											<span className="block truncate text-sm font-medium">
+												{entry.title ?? entry.id}
+											</span>
+											<span className="block truncate font-mono text-10 text-muted-foreground">
+												{entry.path}
+											</span>
+										</span>
+										<ArrowRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+									</Link>
+								</li>
+							))}
+						</ul>
+					)}
+				</div>
+			</DialogContent>
+		</Dialog>
 	);
 }
