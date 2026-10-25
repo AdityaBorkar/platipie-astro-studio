@@ -43,12 +43,11 @@ export async function listMedia(): Promise<MediaItem[]> {
 	const out: MediaItem[] = [];
 	await walkImages(path.join(root, "assets/images"), "assets/images", out);
 	await walkImages(path.join(root, "assets"), "assets", out).catch(() => {});
-	// public/** — dedupe by path.
-	const seen = new Set(out.map((m) => m.path));
-	const pub: MediaItem[] = [];
-	await walkImages(path.join(root, "public"), "public", pub);
-	for (const m of pub) if (!seen.has(m.path)) out.push(m);
-	return out.toSorted((a, b) => a.path.localeCompare(b.path));
+	await walkImages(path.join(root, "public"), "public", out);
+	// `assets/` overlaps `assets/images/`, and callers may list public twice; one
+	// path must map to one item so React keys and pickers stay stable.
+	const unique = new Map(out.map((item) => [item.path, item]));
+	return [...unique.values()].toSorted((a, b) => a.path.localeCompare(b.path));
 }
 
 export function sanitizeFilename(name: string): string {

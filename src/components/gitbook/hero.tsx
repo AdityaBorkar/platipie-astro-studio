@@ -5,117 +5,156 @@ import { cn } from "#/lib/utils";
 import { Reveal } from "./motion";
 
 interface HeroProps {
-	eyebrow?: ReactNode;
-	title: ReactNode;
-	sub?: ReactNode;
-	primaryCta?: { href: string; label: string };
-	secondaryCta?: { href: string; label: string };
+	actions?: ReactNode;
+	announce?: {
+		href?: string;
+		label?: string;
+		shortText?: string;
+		text: string;
+	};
 	children?: ReactNode;
-	align?: "center" | "left";
+	className?: string;
+	sub?: ReactNode;
+	title: ReactNode;
 }
 
 /**
- * GitBook marketing hero: centered eyebrow pill, tight display type, muted
- * sub-copy, dual pill CTAs, optional product frame slot below.
+ * GitBook's centered marketing hero: a small announcement pill, a tightly
+ * tracked display headline with an orange emphasis span, muted sub-copy, and
+ * two pill actions. The product stage slots in as children.
  */
-export function Hero({
-	eyebrow,
-	title,
-	sub,
-	primaryCta,
-	secondaryCta,
-	children,
-	align = "center",
-}: HeroProps) {
-	const centered = align === "center";
+export function Hero({ announce, title, sub, actions, children, className }: HeroProps) {
 	return (
-		<section
-			className={cn(
-				"relative overflow-hidden px-4 pt-14 pb-10 sm:pt-20",
-				centered ? "text-center" : "text-left",
-			)}
-		>
-			<div aria-hidden className="gb-dotgrid pointer-events-none absolute inset-0" />
-			<div
-				aria-hidden
-				className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-72 max-w-3xl rounded-full opacity-25 blur-3xl"
-				style={{
-					background:
-						"color-mix(in oklab, var(--primary) 32%, transparent), color-mix(in oklab, var(--chart-3) 22%, transparent)",
-				}}
-			/>
-			<div className={cn("relative mx-auto w-full max-w-3xl", centered && "items-center")}>
-				{eyebrow ? (
+		<section className={cn("relative overflow-hidden px-5 pt-14 pb-12 sm:pt-20", className)}>
+			<div aria-hidden="true" className="page-glow" />
+			<div className="relative mx-auto w-page text-center">
+				{announce ? (
 					<Reveal>
-						<span className="gb-eyebrow">{eyebrow}</span>
-					</Reveal>
-				) : null}
-				<Reveal delay={80}>
-					<h1 className="gb-display mt-5 text-4xl font-semibold text-balance sm:text-6xl">
-						{title}
-					</h1>
-				</Reveal>
-				{sub ? (
-					<Reveal delay={160}>
-						<p className="gb-sub mx-auto mt-5 max-w-xl text-base text-pretty sm:text-lg">{sub}</p>
-					</Reveal>
-				) : null}
-				{primaryCta || secondaryCta ? (
-					<Reveal delay={240}>
-						<div
-							className={cn(
-								"mt-7 flex flex-wrap items-center gap-2.5",
-								centered && "justify-center",
-							)}
+						<a
+							className="group inline-flex max-w-full items-center gap-2 rounded-full bg-muted/80 py-1 pr-3.5 pl-1 text-sm font-semibold text-foreground ring-1 ring-border transition-colors hover:bg-card hover:ring-foreground/15"
+							href={announce.href ?? "#"}
 						>
-							{primaryCta ? (
-								<Button
-									className="h-10 rounded-full px-5 text-sm"
-									nativeButton={false}
-									render={<a aria-label={primaryCta.label} href={primaryCta.href} />}
-									size="lg"
-								>
-									{primaryCta.label}
-								</Button>
-							) : null}
-							{secondaryCta ? (
-								<Button
-									className="h-10 rounded-full px-5 text-sm"
-									nativeButton={false}
-									render={<a aria-label={secondaryCta.label} href={secondaryCta.href} />}
-									size="lg"
-									variant="outline"
-								>
-									{secondaryCta.label}
-								</Button>
-							) : null}
-						</div>
+							<span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-brand-foreground">
+								{announce.label ?? "New"}
+							</span>
+							<span className="hidden truncate text-muted-foreground transition-colors group-hover:text-foreground sm:inline">
+								{announce.text}
+							</span>
+							<span className="truncate text-muted-foreground transition-colors group-hover:text-foreground sm:hidden">
+								{announce.shortText ?? announce.text}
+							</span>
+							<span aria-hidden="true" className="text-muted-foreground">
+								→
+							</span>
+						</a>
 					</Reveal>
 				) : null}
-				{children ? <Reveal delay={320}>{children}</Reveal> : null}
+
+				<Reveal delay={70}>
+					<h1 className="gb-display mx-auto mt-6 max-w-3xl text-3xl sm:text-display">{title}</h1>
+				</Reveal>
+
+				{sub ? (
+					<Reveal delay={140}>
+						<p className="gb-sub mx-auto mt-5 max-w-2xl text-base sm:text-lg">{sub}</p>
+					</Reveal>
+				) : null}
+
+				{actions ? (
+					<Reveal delay={210}>
+						<div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">{actions}</div>
+					</Reveal>
+				) : null}
+
+				{children ? <Reveal delay={280}>{children}</Reveal> : null}
 			</div>
 		</section>
 	);
 }
 
-/** Rounded product frame with soft lift shadow, GitBook-screenshot style. */
-export function HeroFrame({ children, className }: { children: ReactNode; className?: string }) {
+interface HeroFrameProps {
+	children: ReactNode;
+	className?: string;
+	label?: string;
+}
+
+/**
+ * Browser chrome for the product stage: a soft lifted surface, hairline
+ * traffic lights, and a centered address pill. The frame is deliberately
+ * quiet so the orange halo does the work.
+ */
+export function HeroFrame({ children, className, label = "app.platipie.local" }: HeroFrameProps) {
 	return (
 		<div
 			className={cn(
-				"gb-frame mx-auto mt-12 overflow-hidden rounded-2xl border border-border bg-card text-left",
+				"gb-frame overflow-hidden rounded-2xl border border-border/80 bg-card p-1.5 text-left",
 				className,
 			)}
 		>
-			<div className="flex items-center gap-1.5 border-b border-border bg-muted/50 px-4 py-2.5">
-				<span aria-hidden className="size-2.5 rounded-full bg-border" />
-				<span aria-hidden className="size-2.5 rounded-full bg-border" />
-				<span aria-hidden className="size-2.5 rounded-full bg-border" />
-				<span className="ml-2 hidden truncate font-mono text-xs text-muted-foreground sm:block">
-					docs · live preview
+			<div className="flex items-center gap-2 px-2 py-1.5">
+				<span aria-hidden="true" className="size-2.5 rounded-full bg-destructive/70" />
+				<span aria-hidden="true" className="size-2.5 rounded-full bg-chart-3/80" />
+				<span aria-hidden="true" className="size-2.5 rounded-full bg-brand-mint" />
+				<span className="mx-auto inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1 font-mono text-10 text-muted-foreground">
+					<span className="size-1.5 rounded-full bg-brand-mint" />
+					{label}
 				</span>
+				<span className="w-12" />
 			</div>
-			<div className="p-4 sm:p-6">{children}</div>
+			<div className="overflow-hidden rounded-xl border border-border bg-background">
+				{children}
+			</div>
 		</div>
+	);
+}
+
+export function HeroPrimaryAction({
+	href,
+	label,
+	icon,
+}: {
+	href: string;
+	icon?: ReactNode;
+	label: string;
+}) {
+	return (
+		<Button
+			className="h-10 rounded-full px-5"
+			nativeButton={false}
+			render={<a aria-label={label} href={href} />}
+			size="lg"
+		>
+			{icon}
+			{label}
+			<span
+				aria-hidden="true"
+				className="transition-transform duration-300 group-hover/button:translate-x-0.5"
+			>
+				→
+			</span>
+		</Button>
+	);
+}
+
+export function HeroSecondaryAction({
+	href,
+	label,
+	icon,
+}: {
+	href: string;
+	icon?: ReactNode;
+	label: string;
+}) {
+	return (
+		<Button
+			className="h-10 rounded-full px-5"
+			nativeButton={false}
+			render={<a aria-label={label} href={href} />}
+			size="lg"
+			variant="secondary"
+		>
+			{icon}
+			{label}
+		</Button>
 	);
 }

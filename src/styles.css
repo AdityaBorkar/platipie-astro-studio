@@ -1,42 +1,79 @@
-@import "@fontsource-variable/instrument-sans";
-@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/geist-mono";
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* General Sans — the face GitBook uses for display and UI. Vendored locally so
+   the design system has no CDN dependency. */
+@font-face {
+	font-family: "General Sans";
+	src: url("/fonts/general-sans/general-sans-400.woff2") format("woff2");
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "General Sans";
+	src: url("/fonts/general-sans/general-sans-500.woff2") format("woff2");
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "General Sans";
+	src: url("/fonts/general-sans/general-sans-600.woff2") format("woff2");
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "General Sans";
+	src: url("/fonts/general-sans/general-sans-700.woff2") format("woff2");
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
+/* GitBook-inspired palette, expressed entirely through shadcn tokens.
+   Ink is warm stone, paper is off-white, and a single orange carries every
+   piece of emphasis. Primary actions stay black; orange is the brand signal. */
 :root {
-	/* TallyPrime light theme: white paper, blue ink, sparing amber accents.
-	   GitBook-inspired softness: rounded surfaces (pill CTAs, 12–20px cards). */
-	--brand-blue: #075593;
-	--brand-amber: #eda915;
-	--brand-sky: #328ab0;
+	--brand: #fe551b;
+	--brand-foreground: #ffffff;
+	--on-brand: #ffffff;
+	--brand-soft: color-mix(in oklab, var(--brand) 8%, transparent);
+	--brand-mint: #a4f4cf;
+	--brand-mint-foreground: #0b3d2a;
+	--brand-cream: #fff4ee;
 	--background: #ffffff;
-	--foreground: #0c2434;
+	--foreground: #1c1917;
 	--card: #ffffff;
-	--card-foreground: #0c2434;
+	--card-foreground: #1c1917;
 	--popover: #ffffff;
-	--popover-foreground: #0c2434;
-	--primary: #075593;
-	--primary-foreground: #ffffff;
-	--secondary: #eef5fa;
-	--secondary-foreground: #0c2434;
-	--muted: #f1f6fa;
-	--muted-foreground: #56707f;
-	--accent: #fdf4dc;
-	--accent-foreground: #8a5a06;
+	--popover-foreground: #1c1917;
+	--primary: #1c1917;
+	--primary-foreground: #fafaf9;
+	--secondary: #efeeed;
+	--secondary-foreground: #1c1917;
+	--secondary-hover: #e7e5e3;
+	--muted: #fafaf9;
+	--muted-foreground: #79716b;
+	--accent: #f5f4f2;
+	--accent-foreground: #1c1917;
 	--destructive: #dc2626;
 	--destructive-foreground: #ffffff;
-	--border: #dbe7ef;
-	--input: #d3e1eb;
-	/* Amber focus/hover accents, kept out of primary blue. */
-	--ring: #b57a07;
-	--chart-1: #075593;
-	--chart-2: #328ab0;
-	--chart-3: #eda915;
-	--chart-4: #6bb4cf;
-	--chart-5: #f2c454;
-	/* GitBook reads soft: pill buttons, 12px cards, 20px feature panels. */
+	--border: #efeeed;
+	--input: #e7e5e4;
+	--ring: #fe551b;
+	--chart-1: #fe551b;
+	--chart-2: #1c1917;
+	--chart-3: #d97706;
+	--chart-4: #a4f4cf;
+	--chart-5: #8b8b86;
 	--radius: 0.75rem;
 	--radius-sm: 0.5rem;
 	--radius-md: 0.75rem;
@@ -45,82 +82,88 @@
 	--radius-2xl: 1.5rem;
 	--radius-3xl: 1.75rem;
 	--radius-4xl: 2rem;
-	--sidebar: #f7fbfd;
-	--sidebar-foreground: #0c2434;
-	--sidebar-primary: #075593;
+	--sidebar: #fafaf9;
+	--sidebar-foreground: #1c1917;
+	--sidebar-primary: #fe551b;
 	--sidebar-primary-foreground: #ffffff;
-	--sidebar-accent: #fdf3da;
-	--sidebar-accent-foreground: #8a5a06;
-	--sidebar-border: #e0eaf1;
-	--sidebar-ring: #b57a07;
-	--code-bg: #f8fbfd;
-	--code-border: #dbe7ef;
-	--code-foreground: #12293a;
-	--scrim: #000000;
-	--secondary-hover: color-mix(in oklch, var(--secondary), var(--foreground) 5%);
-	/* GitBook-like elevation + motion tokens, derived from shadcn tokens. */
-	--shadow-soft: 0 1px 2px rgb(12 36 52 / 0.05), 0 8px 24px -12px rgb(12 36 52 / 0.18);
-	--shadow-lift: 0 2px 4px rgb(12 36 52 / 0.06), 0 16px 40px -16px rgb(12 36 52 / 0.28);
+	--sidebar-accent: #f5f4f2;
+	--sidebar-accent-foreground: #1c1917;
+	--sidebar-border: #efeeed;
+	--sidebar-ring: #fe551b;
+	--code-bg: #fafaf9;
+	--code-border: #efeeed;
+	--code-foreground: #292524;
+	--scrim: #1c1917;
+	--shadow-soft: 0 1px 2px rgb(28 25 23 / 0.04), 0 12px 32px -18px rgb(28 25 23 / 0.16);
+	--shadow-lift: 0 2px 4px rgb(28 25 23 / 0.05), 0 28px 60px -24px rgb(28 25 23 / 0.24);
+	--shadow-nav: 0 1px 0 rgb(28 25 23 / 0.03), 0 16px 40px -28px rgb(28 25 23 / 0.35);
 	--ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+	--ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .dark {
-	/* Completely dark: neutral black paper, blue ink, sparing amber accents. */
-	--brand-amber: #f2c14e;
-	--brand-sky: #86c6dd;
-	--background: #0a0a0a;
-	--foreground: #ededed;
-	--card: #101010;
-	--card-foreground: #ededed;
-	--popover: #151515;
-	--popover-foreground: #ededed;
-	--primary: #5cb2d6;
-	--primary-foreground: #061318;
-	--secondary: #181818;
-	--secondary-foreground: #ededed;
-	--muted: #141414;
-	--muted-foreground: #9ba6ab;
-	--accent: #241d0b;
-	--accent-foreground: #f2c14e;
+	--brand: #ff6a35;
+	--brand-foreground: #1c1917;
+	--on-brand: #ffffff;
+	--brand-soft: color-mix(in oklab, var(--brand) 12%, transparent);
+	--brand-mint: #7ce3b6;
+	--brand-mint-foreground: #062d1e;
+	--brand-cream: #2a1810;
+	--background: #0c0a09;
+	--foreground: #fafaf9;
+	--card: #141110;
+	--card-foreground: #fafaf9;
+	--popover: #171412;
+	--popover-foreground: #fafaf9;
+	--primary: #fafaf9;
+	--primary-foreground: #1c1917;
+	--secondary: #221e1c;
+	--secondary-foreground: #fafaf9;
+	--secondary-hover: #2c2724;
+	--muted: #171412;
+	--muted-foreground: #a8a29e;
+	--accent: #1e1a18;
+	--accent-foreground: #fafaf9;
 	--destructive: #f87171;
-	--destructive-foreground: #0a0a0a;
-	--border: #272727;
-	--input: #303030;
-	--ring: #e0a92e;
-	--chart-1: #5cb2d6;
-	--chart-2: #8fd0e8;
-	--chart-3: #e0a92e;
-	--chart-4: #f5d16b;
-	--chart-5: #2b7ba8;
-	--sidebar: #0b0b0b;
-	--sidebar-foreground: #ededed;
-	--sidebar-primary: #5cb2d6;
-	--sidebar-primary-foreground: #061318;
-	--sidebar-accent: #1f1a0f;
-	--sidebar-accent-foreground: #f2c14e;
-	--sidebar-border: #242424;
-	--sidebar-ring: #e0a92e;
-	--code-bg: #0e0e0e;
-	--code-border: #272727;
-	--code-foreground: #e8e8e8;
+	--destructive-foreground: #0c0a09;
+	--border: #282422;
+	--input: #322d2a;
+	--ring: #ff6a35;
+	--chart-1: #ff6a35;
+	--chart-2: #fafaf9;
+	--chart-3: #fbbf24;
+	--chart-4: #7ce3b6;
+	--chart-5: #8b8b86;
+	--sidebar: #100d0c;
+	--sidebar-foreground: #fafaf9;
+	--sidebar-primary: #ff6a35;
+	--sidebar-primary-foreground: #1c1917;
+	--sidebar-accent: #1e1a18;
+	--sidebar-accent-foreground: #fafaf9;
+	--sidebar-border: #282422;
+	--sidebar-ring: #ff6a35;
+	--code-bg: #100d0c;
+	--code-border: #282422;
+	--code-foreground: #f5f5f4;
 	--scrim: #000000;
-	--secondary-hover: color-mix(in oklch, var(--secondary), var(--foreground) 5%);
-	--shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.6);
-	--shadow-lift: 0 2px 6px rgb(0 0 0 / 0.5), 0 24px 56px -16px rgb(0 0 0 / 0.7);
-	--ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+	--shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px -18px rgb(0 0 0 / 0.55);
+	--shadow-lift: 0 2px 6px rgb(0 0 0 / 0.5), 0 32px 70px -24px rgb(0 0 0 / 0.7);
+	--shadow-nav: 0 1px 0 rgb(255 255 255 / 0.04), 0 18px 44px -28px rgb(0 0 0 / 0.7);
 }
 
 @theme inline {
-	--font-sans:
-		"Instrument Sans Variable", "Instrument Sans", ui-sans-serif, system-ui, -apple-system,
-		"Segoe UI", sans-serif;
+	--font-sans: "General Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--font-mono:
-		"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
-		Consolas, "Liberation Mono", monospace;
+		"Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+		"Liberation Mono", monospace;
 	--color-background: var(--background);
-	--color-brand-amber: var(--brand-amber);
-	--color-brand-blue: var(--brand-blue);
-	--color-brand-sky: var(--brand-sky);
+	--color-brand: var(--brand);
+	--color-brand-foreground: var(--brand-foreground);
+	--color-on-brand: var(--on-brand);
+	--color-brand-soft: var(--brand-soft);
+	--color-brand-mint: var(--brand-mint);
+	--color-brand-mint-foreground: var(--brand-mint-foreground);
+	--color-brand-cream: var(--brand-cream);
 	--color-foreground: var(--foreground);
 	--color-card: var(--card);
 	--color-card-foreground: var(--card-foreground);
@@ -130,6 +173,7 @@
 	--color-primary-foreground: var(--primary-foreground);
 	--color-secondary: var(--secondary);
 	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary-hover: var(--secondary-hover);
 	--color-muted: var(--muted);
 	--color-muted-foreground: var(--muted-foreground);
 	--color-accent: var(--accent);
@@ -145,7 +189,6 @@
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
 	--color-scrim: var(--scrim);
-	--color-secondary-hover: var(--secondary-hover);
 	--text-9: 0.5625rem;
 	--text-10: 0.625rem;
 	--text-11: 0.6875rem;
@@ -153,15 +196,20 @@
 	--text-13: 0.8125rem;
 	--text-15: 0.9375rem;
 	--text-btn-sm: 0.8rem;
-	--text-display-sm: 2.15rem;
-	--text-display: 2.6rem;
-	--text-display-lg: 3.4rem;
+	--text-display: 2.8125rem;
+	--text-display-sm: 2.375rem;
+	--text-heading: 2rem;
+	--text-title: 1.25rem;
 	--tracking-12: 0.12em;
 	--tracking-14: 0.14em;
+	--tracking-display: -0.02em;
+	--tracking-heading: -0.02em;
 	--tracking-neg-35: -0.035em;
 	--tracking-neg-45: -0.045em;
 	--leading-102: 1.02;
 	--leading-108: 1.08;
+	--leading-display: 1;
+	--leading-heading: 1.2;
 	--radius-sm: 0.5rem;
 	--radius-md: 0.75rem;
 	--radius-lg: 1rem;
@@ -179,9 +227,8 @@
 	--color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Design-system utilities replacing arbitrary Tailwind values. Each maps
-   exactly to the arbitrary value it replaces so `no-arbitrary-value` passes
-   without visual changes. */
+/* Design-system utilities, mapping arbitrary values to named classes so the
+   Tailwind lint rules stay clean. */
 @utility origin-transform {
 	transform-origin: var(--transform-origin);
 }
@@ -271,11 +318,11 @@
 }
 
 @utility grid-cols-docs-shell {
-	grid-template-columns: 240px minmax(0, 1fr);
+	grid-template-columns: 232px minmax(0, 1fr);
 }
 
 @utility grid-cols-docs-wide {
-	grid-template-columns: 240px minmax(0, 1fr) 220px;
+	grid-template-columns: 232px minmax(0, 1fr) 208px;
 }
 
 @utility max-h-docs-rail {
@@ -314,8 +361,89 @@
 	padding-bottom: var(--card-spacing);
 }
 
+@utility transition-gb {
+	transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+	transition-duration: 300ms;
+	transition-timing-function: var(--ease-spring);
+}
+
+@utility transition-card {
+	transition-property: border-color, background-color, box-shadow, transform;
+	transition-duration: 420ms;
+	transition-timing-function: var(--ease-spring);
+}
+
+@utility grid-cols-footer {
+	grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+@utility grid-cols-product {
+	grid-template-columns: 180px minmax(0, 1fr);
+}
+
+@utility grid-cols-product-wide {
+	grid-template-columns: 180px minmax(0, 1fr) 220px;
+}
+
+@utility grid-cols-quote {
+	grid-template-columns: 220px minmax(0, 1fr);
+}
+
+@utility grid-cols-enterprise {
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
+}
+
+@utility grid-cols-settings {
+	grid-template-columns: 200px minmax(0, 1fr);
+}
+
+@utility bottom-status {
+	bottom: 38%;
+}
+
+@utility shadow-soft {
+	box-shadow: var(--shadow-soft);
+}
+
+@utility shadow-lift {
+	box-shadow: var(--shadow-lift);
+}
+
+@utility shadow-nav {
+	box-shadow: var(--shadow-nav);
+}
+
+@utility w-page {
+	width: min(100%, 75rem);
+}
+
+@utility w-page-narrow {
+	width: min(100%, 61rem);
+}
+
+@utility w-sidebar {
+	width: 16.5rem;
+}
+
+@utility pl-sidebar {
+	padding-left: 16.5rem;
+}
+
+@utility max-h-workspace-menu {
+	max-height: min(72dvh, 32rem);
+}
+
+@utility grid-cols-app-rail {
+	grid-template-columns: minmax(0, 1fr) 20rem;
+}
+
+@utility pt-hero {
+	padding-top: 8.5rem;
+}
+
 html {
 	scroll-behavior: smooth;
+	-webkit-text-size-adjust: 100%;
 }
 
 html,
@@ -327,6 +455,7 @@ body,
 body {
 	margin: 0;
 	font-family: var(--font-sans);
+	font-feature-settings: normal;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	color: var(--foreground);
@@ -337,109 +466,120 @@ h1,
 h2,
 h3,
 h4 {
-	letter-spacing: -0.025em;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+}
+
+p {
+	text-wrap: pretty;
 }
 
 ::selection {
-	background-color: color-mix(in oklab, var(--brand-amber) 28%, transparent);
+	color: var(--foreground);
+	background-color: color-mix(in oklab, var(--brand) 26%, transparent);
 }
 
-/* Soft GitBook-like corners come from per-component radius tokens.
-   No global radius reset — shadcn components opt into their own radii. */
-@layer base {
-	a {
-		color: var(--primary);
-		text-decoration: none;
-	}
-
-	a:hover {
-		text-decoration: none;
-	}
-}
-
-/* A crisp ledger-grid wash behind the top of the docs pages. */
+/* Warm, quiet wash used behind empty/error/loading states. */
 .page-glow {
 	position: absolute;
 	inset: 0 0 auto;
-	height: 520px;
+	height: 420px;
 	overflow: hidden;
 	pointer-events: none;
-	background-image:
-		linear-gradient(
-			to bottom,
-			color-mix(in oklab, var(--brand-amber) 6%, transparent),
+	background:
+		radial-gradient(
+			ellipse 52% 70% at 50% -14%,
+			color-mix(in oklab, var(--brand) 10%, transparent),
 			transparent 72%
 		),
-		linear-gradient(
-			to right,
-			color-mix(in oklab, var(--border) 80%, transparent) 1px,
-			transparent 1px
-		),
-		linear-gradient(
-			to bottom,
-			color-mix(in oklab, var(--border) 80%, transparent) 1px,
-			transparent 1px
+		radial-gradient(
+			ellipse 30% 50% at 82% 2%,
+			color-mix(in oklab, var(--brand) 6%, transparent),
+			transparent 70%
 		);
-	/* Shift the grid origin by one rule width so its lines sit on the sidebar's
-	   right border (272px) and header rule (48px) instead of 8px past them. */
-	background-position:
-		0 0,
-		-9px -9px,
-		-9px -9px;
-	background-size:
-		auto,
-		56px 56px,
-		56px 56px;
-	mask-image: linear-gradient(to bottom, #000 0%, transparent 92%);
+	mask-image: linear-gradient(to bottom, #000 0%, transparent 94%);
 }
 
-.dark .page-glow {
-	background-image:
-		linear-gradient(
-			to bottom,
-			color-mix(in oklab, var(--brand-amber) 7%, transparent),
+/* An orange halo inspired by the GitBook product stage. Pure CSS so it can
+   sit behind any frame without shipping a hero image. */
+.gb-halo {
+	position: absolute;
+	inset: auto 50% -30%;
+	width: min(1100px, 96vw);
+	height: 760px;
+	translate: 50% 0;
+	pointer-events: none;
+	background:
+		radial-gradient(
+			ellipse 58% 48% at 50% 46%,
+			transparent 54%,
+			color-mix(in oklab, var(--brand) 78%, transparent) 55%,
+			color-mix(in oklab, var(--brand) 34%, transparent) 62%,
+			transparent 70%
+		),
+		radial-gradient(
+			ellipse 46% 42% at 50% 55%,
+			transparent 48%,
+			color-mix(in oklab, var(--brand) 56%, transparent) 49.5%,
 			transparent 60%
-		),
-		linear-gradient(
-			to right,
-			color-mix(in oklab, var(--border) 70%, transparent) 1px,
-			transparent 1px
-		),
-		linear-gradient(
-			to bottom,
-			color-mix(in oklab, var(--border) 70%, transparent) 1px,
-			transparent 1px
 		);
+	filter: blur(8px);
+	opacity: 0.95;
 }
 
-/* Faint square grid used behind hero content. */
+.gb-halo::after {
+	position: absolute;
+	inset: 20% 14% 8%;
+	content: "";
+	background: radial-gradient(
+		ellipse 42% 38% at 50% 50%,
+		color-mix(in oklab, var(--brand) 12%, transparent),
+		transparent 70%
+	);
+	filter: blur(40px);
+}
+
+.dark .gb-halo {
+	opacity: 0.5;
+}
+
+/* Hairline grid, used sparingly behind product frames. */
 .grid-fade {
 	background-image:
 		linear-gradient(to right, var(--border) 1px, transparent 1px),
 		linear-gradient(to bottom, var(--border) 1px, transparent 1px);
 	background-size: 48px 48px;
-	opacity: 0.4;
+	opacity: 0.5;
 	mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 20%, transparent 75%);
 }
 
-/* Inline code — quiet chip, no border. Scoped away from code blocks so
-   Highlights' <pre><code> never inherits the chip surface. Kept in the base
-   layer so per-instance utilities can restyle individual chips. */
+/* Inline code — quiet warm chip, never applied inside pre/code blocks. */
 @layer base {
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
+
 	:not(pre) > code {
 		padding: 2px 6px;
 		font-family: var(--font-mono);
 		font-size: 0.84em;
 		color: var(--foreground);
-		background: color-mix(in oklab, var(--brand-amber) 14%, var(--muted));
-	}
-
-	a :not(pre) > code {
-		color: inherit;
+		background: color-mix(in oklab, var(--brand) 10%, var(--muted));
+		border-radius: 0.375rem;
 	}
 
 	.dark :not(pre) > code {
-		background: color-mix(in oklab, var(--brand-amber) 10%, var(--muted));
+		background: color-mix(in oklab, var(--brand) 14%, var(--muted));
+	}
+
+	button {
+		cursor: pointer;
+	}
+
+	button:disabled {
+		cursor: not-allowed;
 	}
 }
 
@@ -448,14 +588,14 @@ pre {
 	tab-size: 2;
 }
 
-/* Code surface — light paper in light mode, near-black in dark mode. */
+/* Code surfaces — warm paper in light mode, warm near-black in dark mode. */
 @layer components {
 	.card-spacing {
-		--card-spacing: calc(var(--spacing) * 3);
+		--card-spacing: calc(var(--spacing) * 4);
 	}
 
 	.card-spacing[data-size="sm"] {
-		--card-spacing: calc(var(--spacing) * 2.5);
+		--card-spacing: calc(var(--spacing) * 3);
 	}
 
 	.code-surface {
@@ -464,6 +604,7 @@ pre {
 		color: var(--code-foreground);
 		background-color: var(--code-bg);
 		border: 1px solid var(--code-border);
+		border-radius: 0.75rem;
 	}
 
 	.code-surface pre {
@@ -473,18 +614,17 @@ pre {
 		white-space: pre;
 	}
 
-	/* Editable request surface: same paper/near-black treatment as CodeBlock.
-	   A highlighted copy sits under a transparent textarea. */
 	.code-editor {
 		position: relative;
 		overflow: hidden;
 		color: var(--code-foreground);
 		background-color: var(--code-bg);
 		border: 1px solid var(--code-border);
+		border-radius: 0.75rem;
 	}
 
 	.code-editor:focus-within {
-		outline: 1px solid var(--ring);
+		outline: 2px solid color-mix(in oklab, var(--ring) 45%, transparent);
 		outline-offset: 0;
 		border-color: var(--ring);
 	}
@@ -520,7 +660,9 @@ pre {
 	}
 
 	.code-editor .highlights,
-	.code-editor .highlights span {
+	.code-editor .highlights span,
+	.code-surface .highlights,
+	.code-surface .highlights span {
 		font-style: var(--hls-light-font-style, inherit);
 		font-weight: var(--hls-light-font-weight, inherit);
 		color: var(--hls-light);
@@ -529,43 +671,26 @@ pre {
 	}
 
 	.dark .code-editor .highlights,
-	.dark .code-editor .highlights span {
-		font-style: var(--hls-dark-font-style, inherit);
-		font-weight: var(--hls-dark-font-weight, inherit);
-		color: var(--hls-dark);
-		text-decoration: var(--hls-dark-text-decoration, none);
-		background-color: transparent;
-	}
-
-	/* Plain-text payloads (error messages) should wrap instead of scrolling. */
-	.code-surface[data-language="text"] pre {
-		overflow-wrap: anywhere;
-		white-space: pre-wrap;
-	}
-
-	/* On phones, let code wrap rather than hide half a line off-screen. */
-	@media (max-width: 639px) {
-		.code-surface pre {
-			overflow-wrap: anywhere;
-			white-space: pre-wrap;
-		}
-	}
-
-	.code-surface .highlights span,
-	.code-surface .highlights {
-		font-style: var(--hls-light-font-style, inherit);
-		font-weight: var(--hls-light-font-weight, inherit);
-		color: var(--hls-light);
-		text-decoration: var(--hls-light-text-decoration, none);
-		background-color: transparent;
-	}
-
+	.dark .code-editor .highlights span,
 	.dark .code-surface .highlights,
 	.dark .code-surface .highlights span {
 		font-style: var(--hls-dark-font-style, inherit);
 		font-weight: var(--hls-dark-font-weight, inherit);
 		color: var(--hls-dark);
 		text-decoration: var(--hls-dark-text-decoration, none);
+		background-color: transparent;
+	}
+
+	.code-surface[data-language="text"] pre {
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+	}
+
+	@media (max-width: 639px) {
+		.code-surface pre {
+			overflow-wrap: anywhere;
+			white-space: pre-wrap;
+		}
 	}
 }
 
@@ -588,18 +713,22 @@ pre {
 	background: color-mix(in oklab, var(--foreground) 16%, transparent);
 	background-clip: padding-box;
 	border: 2px solid transparent;
+	border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
 	background: color-mix(in oklab, var(--foreground) 28%, transparent);
 	background-clip: padding-box;
-	border: 2px solid transparent;
 }
+
+/* ------------------------------------------------------------------ */
+/* Motion                                                              */
+/* ------------------------------------------------------------------ */
 
 @keyframes rise-in {
 	from {
 		opacity: 0;
-		transform: translateY(8px);
+		transform: translateY(10px);
 	}
 	to {
 		opacity: 1;
@@ -610,8 +739,32 @@ pre {
 @keyframes gb-fade-up {
 	from {
 		opacity: 0;
-		transform: translateY(16px) scale(0.99);
-		filter: blur(4px);
+		transform: translateY(18px) scale(0.995);
+		filter: blur(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+		filter: blur(0);
+	}
+}
+
+@keyframes gb-pop {
+	from {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes gb-tab-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.998);
+		filter: blur(3px);
 	}
 	to {
 		opacity: 1;
@@ -629,61 +782,80 @@ pre {
 	}
 }
 
-@keyframes gb-tab-in {
-	from {
-		opacity: 0;
-		transform: translateY(10px) scale(0.995);
-	}
+@keyframes gb-dash {
 	to {
-		opacity: 1;
-		transform: translateY(0) scale(1);
+		stroke-dashoffset: -24;
 	}
 }
 
-@keyframes gb-pulse-glow {
+@keyframes gb-float {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-6px);
+	}
+}
+
+@keyframes gb-glow {
 	0%,
 	100% {
 		opacity: 0.55;
+		transform: scale(1);
 	}
 	50% {
 		opacity: 1;
+		transform: scale(1.02);
 	}
 }
 
 .animate-rise {
-	animation: rise-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	animation: rise-in 500ms var(--ease-spring) both;
 }
 
 .animate-rise-delayed {
-	animation: rise-in 650ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+	animation: rise-in 650ms var(--ease-spring) 100ms both;
 }
 
-/* GitBook-inspired motion: soft scroll reveal + tab crossfade + logo marquee.
-   All motion is transform/opacity only and disabled under reduced-motion. */
 .animate-gb-fade-up {
 	animation: gb-fade-up 700ms var(--ease-spring) both;
 }
 
+.animate-gb-pop {
+	animation: gb-pop 220ms var(--ease-out-quint) both;
+}
+
 .animate-gb-tab-in {
-	animation: gb-tab-in 380ms var(--ease-spring) both;
+	animation: gb-tab-in 420ms var(--ease-spring) both;
 }
 
 .animate-gb-marquee {
-	animation: gb-marquee 32s linear infinite;
+	animation: gb-marquee 38s linear infinite;
 }
 
 .animate-gb-marquee:hover {
 	animation-play-state: paused;
 }
 
+.animate-gb-float {
+	animation: gb-float 6s ease-in-out infinite;
+}
+
+.animate-gb-glow {
+	animation: gb-glow 5s ease-in-out infinite;
+}
+
+/* Scroll reveal used by <Reveal>. Transform + opacity only; blur is a light
+   extra so content resolves rather than merely slides. */
 .gb-reveal {
 	opacity: 0;
-	transform: translateY(18px) scale(0.995);
-	filter: blur(4px);
+	transform: translateY(18px) scale(0.996);
+	filter: blur(5px);
 	transition:
-		opacity 700ms var(--ease-spring),
-		transform 700ms var(--ease-spring),
-		filter 700ms var(--ease-spring);
+		opacity 750ms var(--ease-spring),
+		transform 750ms var(--ease-spring),
+		filter 750ms var(--ease-spring);
 	transition-delay: var(--gb-reveal-delay, 0ms);
 	will-change: opacity, transform;
 }
@@ -694,6 +866,11 @@ pre {
 	filter: blur(0);
 }
 
+.dash-march {
+	stroke-dasharray: 4 8;
+	animation: gb-dash 1.6s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	html {
 		scroll-behavior: auto;
@@ -702,9 +879,13 @@ pre {
 	.animate-rise,
 	.animate-rise-delayed,
 	.animate-gb-fade-up,
+	.animate-gb-pop,
 	.animate-gb-tab-in,
 	.animate-gb-marquee,
-	.gb-reveal {
+	.animate-gb-float,
+	.animate-gb-glow,
+	.animate-ping,
+	.dash-march {
 		animation: none;
 		transition: none;
 	}
@@ -726,64 +907,44 @@ pre {
 	}
 }
 
-/* platipie-cms content surface: faithful markdown preview + three-column
-   editor layout (collapses to one column on narrow screens). */
-@layer components {
-	.grid-cols-editor {
-		grid-template-columns: minmax(0, 19rem) minmax(0, 1fr) minmax(0, 19rem);
-	}
+/* ------------------------------------------------------------------ */
+/* GitBook-inspired component surfaces                                 */
+/* ------------------------------------------------------------------ */
 
-	@media (max-width: 1100px) {
-		.grid-cols-editor {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
-
-	.prose-preview {
-		padding: 16px;
-		background-color: var(--card);
-		border: 1px solid var(--border);
-	}
-
-	.prose-preview h1,
-	.prose-preview h2 {
-		margin-top: 0.5em;
-	}
-}
-
-/* GitBook-inspired surfaces. Every value resolves to a shadcn token so the
-   palette, borders and radii stay theme-driven (light + dark). */
 @layer components {
 	.gb-eyebrow {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.375rem;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		background-color: color-mix(in oklab, var(--muted) 70%, transparent);
-		padding: 0.25rem 0.75rem;
+		padding: 0.25rem 0.625rem;
 		font-size: 0.6875rem;
-		font-weight: 600;
-		letter-spacing: 0.12em;
+		font-weight: 700;
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--muted-foreground);
+		color: var(--brand);
+		background-color: color-mix(in oklab, var(--brand) 7%, transparent);
+		border: 1px solid color-mix(in oklab, var(--brand) 18%, transparent);
+		border-radius: 999px;
 	}
 
 	.gb-display {
-		letter-spacing: -0.045em;
-		line-height: 1.02;
+		font-weight: 700;
+		letter-spacing: var(--tracking-display);
+		line-height: var(--leading-display);
 		text-wrap: balance;
 	}
 
 	.gb-sub {
-		text-wrap: pretty;
+		font-weight: 500;
+		line-height: 1.6;
 		color: var(--muted-foreground);
+		text-wrap: pretty;
 	}
 
 	.gb-dotgrid {
 		background-image: radial-gradient(
 			circle at 1px 1px,
-			color-mix(in oklab, var(--foreground) 14%, transparent) 1px,
+			color-mix(in oklab, var(--foreground) 10%, transparent) 1px,
 			transparent 0
 		);
 		background-size: 22px 22px;
@@ -791,28 +952,30 @@ pre {
 	}
 
 	.gb-mask-fade-x {
-		mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+		mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
 	}
 
 	.gb-card-hover {
 		box-shadow: var(--shadow-soft);
 		transition:
-			transform 350ms var(--ease-spring),
-			box-shadow 350ms var(--ease-spring),
-			border-color 350ms var(--ease-spring);
+			transform 420ms var(--ease-spring),
+			box-shadow 420ms var(--ease-spring),
+			border-color 420ms var(--ease-spring),
+			background-color 420ms var(--ease-spring);
 	}
 
 	.gb-card-hover:hover {
-		transform: translateY(-3px);
+		transform: translateY(-4px);
 		box-shadow: var(--shadow-lift);
-		border-color: color-mix(in oklab, var(--primary) 38%, var(--border));
+		border-color: color-mix(in oklab, var(--foreground) 14%, var(--border));
 	}
 
 	.gb-tab-pill {
 		transition:
-			color 250ms var(--ease-spring),
-			background-color 250ms var(--ease-spring),
-			box-shadow 250ms var(--ease-spring);
+			color 260ms var(--ease-spring),
+			background-color 260ms var(--ease-spring),
+			box-shadow 260ms var(--ease-spring),
+			transform 260ms var(--ease-spring);
 	}
 
 	.gb-frame {
@@ -820,69 +983,206 @@ pre {
 	}
 
 	.gb-glow {
-		animation: gb-pulse-glow 5s ease-in-out infinite;
+		animation: gb-glow 5s ease-in-out infinite;
 	}
 
 	.gb-search-trigger {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
-		height: 2rem;
+		height: 2.25rem;
 		width: 100%;
-		max-width: 16rem;
+		max-width: 18rem;
 		cursor: pointer;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		background-color: color-mix(in oklab, var(--muted) 60%, transparent);
-		padding-inline: 0.75rem;
-		font-size: 0.875rem;
 		color: var(--muted-foreground);
+		background-color: color-mix(in oklab, var(--muted) 80%, transparent);
+		border: 1px solid var(--border);
+		border-radius: 0.5rem;
+		padding-inline: 0.875rem;
+		font-size: 0.875rem;
+		font-weight: 500;
 		transition:
-			color 250ms var(--ease-spring),
-			border-color 250ms var(--ease-spring),
-			background-color 250ms var(--ease-spring);
+			color 260ms var(--ease-spring),
+			border-color 260ms var(--ease-spring),
+			background-color 260ms var(--ease-spring);
 	}
 
 	.gb-search-trigger:hover {
-		border-color: color-mix(in oklab, var(--primary) 40%, transparent);
-		background-color: var(--muted);
 		color: var(--foreground);
+		background-color: var(--card);
+		border-color: color-mix(in oklab, var(--foreground) 16%, var(--border));
 	}
 
 	.gb-search-trigger:focus-visible {
 		outline: none;
 		border-color: var(--ring);
-		box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+		box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 22%, transparent);
 	}
 
 	@media (min-width: 1024px) {
 		.gb-search-trigger {
-			max-width: 14rem;
+			max-width: 15rem;
 		}
 	}
-}
 
-@layer base {
-	input,
-	select,
-	textarea {
-		padding: 8px;
-		font-size: 14px;
-		background-color: var(--card);
-		border: 1px solid var(--input);
-		color: var(--foreground);
+	/* Product stage: an orange halo and a browser frame, GitBook's signature
+	   hero composition. */
+	.gb-stage {
+		position: relative;
+		isolation: isolate;
 	}
 
-	button {
-		padding: 8px 12px;
-		cursor: pointer;
-		background-color: var(--card);
-		border: 1px solid var(--input);
-		color: var(--foreground);
+	.gb-stage::after {
+		position: absolute;
+		top: -7%;
+		left: 50%;
+		z-index: -1;
+		width: 112%;
+		height: 114%;
+		content: "";
+		transform: translateX(-50%);
+		background: radial-gradient(
+			ellipse at center,
+			transparent 51%,
+			color-mix(in oklab, var(--brand) 82%, transparent) 52%,
+			color-mix(in oklab, var(--brand) 46%, transparent) 62%,
+			transparent 67%
+		);
+		border-radius: 50%;
+		filter: blur(4px);
+		opacity: 0.7;
 	}
 
-	button:disabled {
-		cursor: not-allowed;
-		opacity: 0.5;
+	.gb-stage::before {
+		position: absolute;
+		inset: 12% -6% -18%;
+		z-index: -1;
+		content: "";
+		background:
+			radial-gradient(
+				ellipse 48% 38% at 50% 35%,
+				color-mix(in oklab, var(--brand) 10%, transparent),
+				transparent 72%
+			),
+			linear-gradient(to bottom, transparent 55%, color-mix(in oklab, var(--brand) 5%, transparent));
+		filter: blur(18px);
+	}
+
+	/* Marquee track with a mask and a soft pause affordance. */
+	.gb-marquee-track {
+		display: flex;
+		width: max-content;
+		align-items: center;
+		gap: 3.5rem;
+		padding-right: 3.5rem;
+	}
+
+	/* Dashed connector art used in the system orbits. */
+	.gb-connector {
+		stroke: color-mix(in oklab, var(--brand) 55%, transparent);
+		stroke-width: 1;
+		fill: none;
+	}
+
+	.gb-connector-light {
+		stroke: rgb(255 255 255 / 0.55);
+		stroke-width: 1;
+		fill: none;
+	}
+
+	.gb-scroll-clean {
+		scrollbar-width: none;
+	}
+
+	.gb-scroll-clean::-webkit-scrollbar {
+		display: none;
+	}
+
+	.gb-enterprise-art {
+		background:
+			radial-gradient(
+				ellipse 70% 60% at 30% 20%,
+				color-mix(in oklab, var(--brand) 72%, white),
+				transparent 68%
+			),
+			linear-gradient(135deg, var(--brand), color-mix(in oklab, var(--brand) 68%, black));
+	}
+
+	/* Docs prose surface. */
+	.prose-preview {
+		padding: 20px;
+		color: var(--foreground);
+		background-color: var(--card);
+		border: 1px solid var(--border);
+		border-radius: 0.75rem;
+	}
+
+	.prose-preview h1,
+	.prose-preview h2,
+	.prose-preview h3 {
+		margin-top: 1.25em;
+		margin-bottom: 0.5em;
+		letter-spacing: -0.02em;
+	}
+
+	.prose-preview h1 {
+		margin-top: 0;
+		font-size: 1.75rem;
+		line-height: 1.15;
+	}
+
+	.prose-preview h2 {
+		font-size: 1.25rem;
+	}
+
+	.prose-preview h3 {
+		font-size: 1.05rem;
+	}
+
+	.prose-preview p,
+	.prose-preview li {
+		font-size: 0.9375rem;
+		line-height: 1.7;
+		color: var(--muted-foreground);
+	}
+
+	.prose-preview a {
+		color: var(--brand);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.prose-preview blockquote {
+		padding-left: 1rem;
+		margin-left: 0;
+		color: var(--muted-foreground);
+		border-left: 2px solid var(--brand);
+	}
+
+	.prose-preview hr {
+		border-color: var(--border);
+	}
+
+	.prose-preview table {
+		width: 100%;
+		font-size: 0.875rem;
+		border-collapse: collapse;
+	}
+
+	.prose-preview th,
+	.prose-preview td {
+		padding: 0.5rem 0.625rem;
+		text-align: left;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.grid-cols-editor {
+		grid-template-columns: minmax(0, 17rem) minmax(0, 1fr) minmax(0, 18rem);
+	}
+
+	@media (max-width: 1100px) {
+		.grid-cols-editor {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 }

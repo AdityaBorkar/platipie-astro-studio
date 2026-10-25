@@ -5,26 +5,26 @@ import { cn } from "#/lib/utils";
 
 type HintVariant = "info" | "success" | "warning" | "danger";
 
-const styles: Record<HintVariant, { icon: typeof InfoIcon; iconWrap: string; wrap: string }> = {
+const styles: Record<HintVariant, { icon: typeof InfoIcon; iconColor: string; wrap: string }> = {
 	danger: {
 		icon: CircleAlertIcon,
-		iconWrap: "bg-destructive/12 text-destructive",
-		wrap: "border-destructive/25 bg-destructive/[0.07]",
+		iconColor: "text-destructive",
+		wrap: "border-destructive/20 bg-destructive/5",
 	},
 	info: {
 		icon: InfoIcon,
-		iconWrap: "bg-primary/12 text-primary",
-		wrap: "border-primary/25 bg-primary/[0.07]",
+		iconColor: "text-brand",
+		wrap: "border-brand/20 bg-brand/5",
 	},
 	success: {
 		icon: CircleCheckIcon,
-		iconWrap: "bg-chart-2/15 text-chart-2",
-		wrap: "border-chart-2/30 bg-chart-2/10",
+		iconColor: "text-brand-mint-foreground",
+		wrap: "border-brand-mint/60 bg-brand-mint/20",
 	},
 	warning: {
 		icon: TriangleAlertIcon,
-		iconWrap: "bg-chart-3/20 text-accent-foreground",
-		wrap: "border-chart-3/40 bg-chart-3/10",
+		iconColor: "text-chart-3",
+		wrap: "border-chart-3/25 bg-chart-3/8",
 	},
 };
 
@@ -35,30 +35,29 @@ interface HintProps {
 	variant?: HintVariant;
 }
 
-/** GitBook docs callout: tinted panel, icon chip, compact title + body. */
+/**
+ * GitBook docs callout: a tinted panel, a single colored icon, a compact bold
+ * title, and a readable body. Kept border-light so it never competes with the
+ * surrounding prose.
+ */
 export function Hint({ variant = "info", title, children, className }: HintProps) {
-	const s = styles[variant];
-	const Icon = s.icon;
+	const style = styles[variant];
+	const Icon = style.icon;
 	return (
 		<div
 			className={cn(
-				"flex gap-3 rounded-xl border px-3.5 py-3 text-sm leading-relaxed",
-				s.wrap,
+				"flex gap-2.5 rounded-xl border px-3.5 py-3 text-sm leading-relaxed",
+				style.wrap,
 				className,
 			)}
 			role="note"
 		>
-			<span
-				className={cn(
-					"mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-lg",
-					s.iconWrap,
-				)}
-			>
-				<Icon className="size-3.5" />
-			</span>
+			<Icon className={cn("mt-0.5 size-4 shrink-0", style.iconColor)} />
 			<div className="min-w-0">
-				{title ? <p className="font-semibold text-foreground">{title}</p> : null}
-				<div className="text-foreground/80">{children}</div>
+				{title ? <p className="font-bold tracking-tight text-foreground">{title}</p> : null}
+				<div className="text-foreground/75 [&_a]:font-semibold [&_a]:text-brand [&_a]:underline [&_a]:underline-offset-2">
+					{children}
+				</div>
 			</div>
 		</div>
 	);

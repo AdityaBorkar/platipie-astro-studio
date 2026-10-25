@@ -1,15 +1,13 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import { createRootRoute, HeadContent, Link, Scripts } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { useEffect } from "react";
 
+import { AppSidebar } from "#/components/gitbook/app-sidebar";
+import { AskWidget } from "#/components/gitbook/ask-widget";
 import { ErrorPage } from "#/components/pages/error";
 import { LoadingPage } from "#/components/pages/loading";
 import { NotFoundPage } from "#/components/pages/not-found";
-import { ThemeToggle } from "#/components/theme-toggle";
-import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
-import { Separator } from "#/components/ui/separator";
 import { Toaster } from "#/components/ui/sonner";
 import { themeScript } from "#/hooks/use-theme";
 
@@ -24,8 +22,27 @@ export const Route = createRootRoute({
 				rel: "stylesheet",
 			},
 			{
-				href: "/favicon.ico",
+				as: "font",
+				crossOrigin: "anonymous",
+				href: "/fonts/general-sans/general-sans-400.woff2",
+				rel: "preload",
+				type: "font/woff2",
+			},
+			{
+				as: "font",
+				crossOrigin: "anonymous",
+				href: "/fonts/general-sans/general-sans-700.woff2",
+				rel: "preload",
+				type: "font/woff2",
+			},
+			{
+				href: "/favicon.svg",
 				rel: "icon",
+				type: "image/svg+xml",
+			},
+			{
+				href: "/favicon.ico",
+				rel: "alternate icon",
 			},
 			{
 				href: "/icon.png",
@@ -68,30 +85,19 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<HeadContent />
 				<script suppressHydrationWarning>{themeScript}</script>
 			</head>
-			<body>
-				<nav className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background/70 px-4 py-2 backdrop-blur-xl">
-					<strong className="text-sm font-semibold tracking-tight">platipie-cms</strong>
-					<Separator className="h-4" orientation="vertical" />
-					<Button nativeButton={false} render={<Link to="/" />} size="sm" variant="ghost">
-						Dashboard
-					</Button>
-					<Button nativeButton={false} render={<Link to="/design" />} size="sm" variant="ghost">
-						Design
-					</Button>
-					<Button nativeButton={false} render={<Link to="/settings" />} size="sm" variant="ghost">
-						Settings
-					</Button>
-					<Badge className="ml-auto hidden font-mono sm:inline-flex" variant="secondary">
-						ASTRO_ROOT jail · localhost only · no auto-commit
-					</Badge>
-					<ThemeToggle />
-				</nav>
-				<div className="mx-auto w-full max-w-6xl p-4">{children}</div>
-				<Toaster position="bottom-right" richColors />
+			<body className="min-h-dvh">
+				<div className="min-h-dvh">
+					<AppSidebar />
+					<div className="lg:pl-sidebar">
+						<main className="min-h-dvh pt-12 lg:pt-0">{children}</main>
+					</div>
+				</div>
+				<AskWidget />
+				<Toaster position="top-center" richColors />
 				<ReactGrabDevtools />
 				<TanStackDevtools
 					config={{
-						position: "bottom-right",
+						position: "bottom-left",
 					}}
 					plugins={[
 						{

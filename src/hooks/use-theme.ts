@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
 const STORAGE_KEY = "tally.theme";
+const listeners = new Set<() => void>();
+
+interface ThemeState {
+	mode: ThemeMode;
+	resolved: ResolvedTheme;
+}
+
+const INITIAL_STATE: ThemeState = { mode: "system", resolved: "light" };
 
 function systemTheme(): ResolvedTheme {
 	if (typeof window === "undefined") return "light";
@@ -12,8 +20,12 @@ function systemTheme(): ResolvedTheme {
 
 function readStoredMode(): ThemeMode {
 	if (typeof window === "undefined") return "system";
-	const stored = localStorage.getItem(STORAGE_KEY);
-	return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+	try {
+		const stored = localStorage.getItem(STORAGE_KEY);
+		return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+	} catch {
+		return "system";
+	}
 }
 
 function applyTheme(mode: ThemeMode): ResolvedTheme {
@@ -26,32 +38,58 @@ function applyTheme(mode: ThemeMode): ResolvedTheme {
 	return resolved;
 }
 
-/** Light / dark / system theme with localStorage persistence. */
+function emit() {
+	for (const listener of listeners) listener();
+}
+
+const storedMode: ThemeMode = typeof window === "undefined" ? "system" : readStoredMode();
+
+let state: ThemeState =
+	typeof window === "undefined"
+		? INITIAL_STATE
+		: { mode: storedMode, resolved: applyTheme(storedMode) };
+
+if (typeof window !== "undefined") {
+	const media = window.matchMedia("(prefers-color-scheme: dark)");
+	media.addEventListener("change", () => {
+		if (state.mode !== "system") return;
+		state = { mode: "system", resolved: applyTheme("system") };
+		emit();
+	});
+}
+
+function subscribe(listener: () => void) {
+	listeners.add(listener);
+	return () => {
+		listeners.delete(listener);
+	};
+}
+
+function getSnapshot() {
+	return state;
+}
+
+function getServerSnapshot() {
+	return INITIAL_STATE;
+}
+
+/** Set light / dark / system and persist it for the pre-paint script. */
+export function setThemeMode(next: ThemeMode) {
+	state = { mode: next, resolved: applyTheme(next) };
+	if (typeof window !== "undefined") {
+		try {
+			localStorage.setItem(STORAGE_KEY, next);
+		} catch {
+			// Private-mode storage failures must not break the shell.
+		}
+	}
+	emit();
+}
+
+/** Shared light / dark / system theme state, persisted in localStorage. */
 export function useTheme() {
-	const [mode, setModeState] = useState<ThemeMode>("system");
-	const [resolved, setResolved] = useState<ResolvedTheme>("light");
-
-	useEffect(() => {
-		const stored = readStoredMode();
-		setModeState(stored);
-		setResolved(applyTheme(stored));
-	}, []);
-
-	useEffect(() => {
-		setResolved(applyTheme(mode));
-		if (mode !== "system") return;
-		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		const onChange = () => setResolved(applyTheme("system"));
-		media.addEventListener("change", onChange);
-		return () => media.removeEventListener("change", onChange);
-	}, [mode]);
-
-	const setMode = useCallback((next: ThemeMode) => {
-		setModeState(next);
-		localStorage.setItem(STORAGE_KEY, next);
-	}, []);
-
-	return { mode, resolved, setMode };
+	const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+	return { mode: snapshot.mode, resolved: snapshot.resolved, setMode: setThemeMode };
 }
 
 /** Runs before paint to avoid a light flash on a dark-theme visit. */

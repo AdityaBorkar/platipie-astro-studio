@@ -140,10 +140,15 @@ Single route handles every editable file. Layout: left = form/sidebar, center = 
 
 ## 8. IA & routes
 
+- App shell — fixed left rail with project name + current branch, a click-to-open nav map (Dashboard, Website, Design, Components, Assets, Content, Settings), and expandable groups. Website/Content display toggles persist in `localStorage`. Below `lg` the rail becomes a drawer under a 48px top bar.
 - `/` — dashboard: collection cards (projects, blog, clients, mockups, testimonials, legal, settings) with counts, search, `New` buttons, recent-edits, drift warnings (unregistered blog, testimonials schema drift, missing Astro routes, `-template.md.` oddity).
+- `/website` — Astro page inventory from `src/pages` (private `_` files, API routes, and error pages hidden) with an optional SEO / page-metadata / schema rail.
+- `/content` — collection overview, recent edits, optional SEO + schema rail, and the CMS tree in the left rail.
+- `/components` — surface gallery, template cards, and the UI primitive index.
+- `/assets` — media library with upload, copy-path, and an image preview proxy.
 - `/edit/<collection>/<id>` — unified editor (§7). `<id>` = filename slug for md/mdx, row `id` for JSON.
-- `/settings` — constants form + raw fallback, blog-registration action, env status (`ASTRO_ROOT` reachable, `ASTRO_URL` reachable, AI enabled?), trash management.
-- REST (all under `/api/cms`, JSON): `GET /collections`, `GET /entries?collection=`, `GET /entry?path=`, `PUT /entry` (validate+write), `POST /entries` (create), `POST /duplicate`, `POST /rename` (slug change), `DELETE /entry` (soft), `POST /restore`, `GET /diff?path=&rev=`, `GET /media`, `POST /media` (upload), `GET /seo?path=` (score), `POST /seo/ai` (BYOK only), `GET /settings`, `PUT /settings`, `POST /collections/blog/register`.
+- `/settings` — appearance/theme switcher, constants form + raw fallback, blog-registration action, env status (`ASTRO_ROOT` reachable, `ASTRO_URL` reachable, AI enabled?), trash management.
+- REST (all under `/api/cms`, JSON): `GET /collections`, `GET /entries?collection=`, `GET /entry?path=`, `PUT /entry` (validate+write), `POST /entries` (create), `POST /duplicate`, `POST /rename` (slug change), `DELETE /entry` (soft), `POST /restore`, `GET /diff?path=&rev=`, `GET /media`, `GET /media?path=` (image bytes), `POST /media` (upload), `GET /seo?path=` (score), `POST /seo/ai` (BYOK only), `GET /settings`, `PUT /settings`, `GET /workspace` (project, branch, pages), `POST /collections/blog/register`.
 - Transport: TanStack Start server functions backed by these REST routes (Nitro handlers); file I/O only on the server.
 
 ## 9. SEO assistant (checks + counts + score + optional AI)

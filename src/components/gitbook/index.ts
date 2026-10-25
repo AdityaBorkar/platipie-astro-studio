@@ -1,13 +1,32 @@
+export { AgentRow } from "./agent-row";
+export type { AgentButton } from "./agent-row";
+export { AskWidget } from "./ask-widget";
+export { BrandMark, Wordmark } from "./brand";
+export { Customers } from "./customers";
 export { DocsNav, DocsShell, DocsToc } from "./docs-shell";
-export { FeatureGrid } from "./feature-grid";
+export { EnterpriseGrid } from "./enterprise-grid";
+export type { EnterpriseFeature } from "./enterprise-grid";
+export { FeatureGrid, MiniFeatures } from "./feature-grid";
 export type { FeatureItem } from "./feature-grid";
+export { FeatureSplit } from "./feature-split";
+export { FinalCta } from "./final-cta";
 export { Footer } from "./footer";
-export { Hero, HeroFrame } from "./hero";
+export { Hero, HeroFrame, HeroPrimaryAction, HeroSecondaryAction } from "./hero";
 export { Hint } from "./hint";
+export {
+	AgentNetworkArt,
+	ArtPanel,
+	EnterpriseArt,
+	IconTile,
+	ReviewArt,
+	StaleContentArt,
+	SystemOrbit,
+} from "./illustrations";
 export { LinkCards } from "./link-cards";
 export type { LinkCardItem } from "./link-cards";
-export { LogoCloud } from "./logo-cloud";
+export { LogoCloud, LogoWordmark } from "./logo-cloud";
 export { Reveal } from "./motion";
+export { ProductDemo, ProductStage } from "./product-preview";
 export { SearchTrigger } from "./search-trigger";
 export { ShowcaseTabs } from "./showcase-tabs";
-export { SiteHeader } from "./site-header";
+export { Testimonial } from "./testimonial";

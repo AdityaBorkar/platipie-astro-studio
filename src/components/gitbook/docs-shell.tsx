@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { cn } from "#/lib/utils";
 
 interface DocsShellProps {
-	sidebar: ReactNode;
 	children: ReactNode;
+	sidebar: ReactNode;
 	toc?: ReactNode;
 }
 
@@ -19,10 +19,10 @@ interface DocsNavGroup {
 	title: string;
 }
 
-/** GitBook docs layout: sticky tree nav, centered content, sticky TOC rail. */
+/** GitBook docs layout: pinned tree nav, centered content, pinned TOC rail. */
 export function DocsShell({ sidebar, children, toc }: DocsShellProps) {
 	return (
-		<div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 lg:grid-cols-docs-shell xl:grid-cols-docs-wide">
+		<div className="mx-auto grid w-page gap-8 px-5 py-10 lg:grid-cols-docs-shell xl:grid-cols-docs-wide">
 			<aside className="hidden lg:block">
 				<div className="sticky top-24 max-h-docs-rail overflow-y-auto pr-2">{sidebar}</div>
 			</aside>
@@ -36,25 +36,25 @@ export function DocsShell({ sidebar, children, toc }: DocsShellProps) {
 	);
 }
 
-/** Sidebar tree group with GitBook active-row treatment. */
+/** Sidebar tree group with GitBook's orange active rail. */
 export function DocsNav({ groups }: { groups: DocsNavGroup[] }) {
 	return (
-		<nav aria-label="Docs" className="grid gap-5">
-			{groups.map((g) => (
-				<div key={g.title}>
-					<p className="px-2 text-xs font-semibold tracking-12 text-muted-foreground uppercase">
-						{g.title}
+		<nav aria-label="Docs" className="grid gap-6">
+			{groups.map((group) => (
+				<div key={group.title}>
+					<p className="px-2 text-11 font-bold tracking-12 text-muted-foreground uppercase">
+						{group.title}
 					</p>
-					<ul className="mt-1.5 grid gap-0.5">
-						{g.items.map((item) => (
+					<ul className="mt-2 grid gap-0.5">
+						{group.items.map((item) => (
 							<li key={item.label}>
 								<a
 									aria-current={item.active ? "page" : undefined}
 									className={cn(
-										"block truncate rounded-lg px-2 py-1.5 text-sm transition-colors",
+										"block truncate rounded-md border-l-2 px-2.5 py-1.5 text-sm transition-colors",
 										item.active
-											? "bg-muted font-medium text-foreground ring-1 ring-foreground/10"
-											: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+											? "border-brand bg-brand-soft font-semibold text-brand"
+											: "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
 									)}
 									href={item.href}
 								>
@@ -69,22 +69,20 @@ export function DocsNav({ groups }: { groups: DocsNavGroup[] }) {
 	);
 }
 
-/** Right-rail table of contents with active link highlight. */
+/** Right-rail table of contents with an orange active link. */
 export function DocsToc({ items }: { items: { active?: boolean; href: string; label: string }[] }) {
 	return (
 		<nav aria-label="On this page" className="border-l border-border pl-4">
-			<p className="text-xs font-semibold tracking-12 text-muted-foreground uppercase">
-				On this page
-			</p>
-			<ul className="mt-2 grid gap-1">
+			<p className="text-11 font-bold tracking-12 text-muted-foreground uppercase">On this page</p>
+			<ul className="mt-3 grid gap-1.5">
 				{items.map((item) => (
-					<li key={item.href}>
+					<li key={item.label}>
 						<a
 							aria-current={item.active ? "true" : undefined}
 							className={cn(
 								"block truncate text-13 transition-colors",
 								item.active
-									? "font-medium text-primary"
+									? "font-semibold text-brand"
 									: "text-muted-foreground hover:text-foreground",
 							)}
 							href={item.href}

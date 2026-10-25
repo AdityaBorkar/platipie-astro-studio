@@ -29,6 +29,22 @@ bun run verify:spec      # SPEC §14 acceptance against ASTRO_ROOT (bun scripts/
 - Runtime config in `src/lib/cms/config.ts` (`ASTRO_ROOT` jail, `ASTRO_URL`, BYOK `AI_*`, `PORT` 4000, `TRASH_TTL_DAYS`). Client env via `src/env.ts` (T3 `createEnv` + zod, `VITE_` prefix).
 - Binds localhost by default, no auth in V1 (documented risk given TS-editing power — backups + danger-zone confirms).
 
+## Design system
+
+- Living reference: `/design` (`src/routes/design.tsx`). Rules and token table:
+  `DESIGN.md`. All tokens/components/motion live in `src/styles.css` and
+  `src/components/gitbook/`.
+- GitBook-inspired, shadcn-token-first: warm stone neutrals, one orange
+  (`--brand`) for emphasis only, black (`--primary`) for actions, pill buttons,
+  hairline borders, 16px cards / 24px illustration panels.
+- Fonts: General Sans (vendored in `public/fonts/general-sans/`) + Geist Mono.
+  Do not reintroduce Instrument Sans.
+- Motion: `Reveal` for marketing surfaces, 750ms fade-rise-deblur, 70ms stagger,
+  `prefers-reduced-motion` disables everything. App forms skip Reveal.
+- New arbitrary Tailwind value? Add a named `@utility` in `src/styles.css`
+  (e.g. `transition-card`, `shadow-soft`, `grid-cols-product`). Keep the design
+  page and `DESIGN.md` in sync with token/component changes.
+
 ## Conventions
 
 - `verbatimModuleSyntax` on — `import type` for type-only. Strict `noUnusedLocals`/`noUnusedParameters` — unused vars fail typecheck. `sort-keys` asc — keep object keys sorted.

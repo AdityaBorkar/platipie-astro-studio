@@ -12,19 +12,33 @@ bun run dev    # vite dev on 127.0.0.1:4000
 bun run build && bun run start
 ```
 
+- Fixed app rail: project + branch, nav map, expandable Website/Design/Components/Content groups, and persisted display toggles.
 - Dashboard: `/` — 7 collection cards, counts, search, `New`, recent-edits, drift warnings.
-- Unified editor: `/edit/:collection/:id?path=<repo-rel>` — Markdown ⇄ Visual, frontmatter form, local + faithful previews, SEO sidebar, one save pipeline.
-- Settings: `/settings` — typed form + raw TS fallback, blog registration, env status, trash.
+- Website: `/website` — Astro page inventory with optional SEO / metadata / schema rail.
+- Content: `/content` — collections, recent edits, optional SEO + schema rail.
+- Components: `/components` — surface gallery, templates, and the UI primitive index.
+- Assets: `/assets` — image library with upload, copy-path, and preview proxy.
+- Unified editor: `/edit/:collection/:id?path=<repo-rel>` — Markdown ⇄ Visual, frontmatter form, local + faithful previews, SEO + schema sidebar, one save pipeline.
+- Settings: `/settings` — typed form + raw TS fallback, appearance/theme switcher, blog registration, env status, trash.
+- Design system: `/design` — GitBook-inspired tokens, brand, style, languages, components, motion, viewports, docs shell, and full marketing flow. See `DESIGN.md`.
 
 ## REST (`/api/cms`)
 
 `GET /collections`, `GET /entries?collection=&q=`, `GET /entry?path=`, `PUT /entry`,
 `POST /entries`, `POST /duplicate`, `POST /rename`, `DELETE /entry`, `GET|POST /restore`,
-`GET /diff?path=&rev=`, `GET|POST /media`, `GET /seo?path=`, `POST /seo/ai`,
-`GET|PUT /settings`, `GET|POST /collections/blog/register`.
+`GET /diff?path=&rev=`, `GET|POST /media`, `GET /media?path=` (image proxy),
+`GET /seo?path=`, `POST /seo/ai`, `GET|PUT /settings`,
+`GET /workspace` (project, branch, Astro pages), `GET|POST /collections/blog/register`.
 
 File I/O only on the server. All paths jailed under `ASTRO_ROOT`. Errors:
 `VALIDATION|NOT_FOUND|CONFLICT|SCHEMA_MERGE|IO|AI_DISABLED` + HTTP status.
+
+## Design
+
+The UI is a GitBook-inspired system expressed through shadcn tokens: warm paper, one
+orange for emphasis, black pill actions, hairline surfaces, and spring motion.
+Fonts are General Sans (vendored) and Geist Mono. The living reference is `/design`;
+the rules and token table are in `DESIGN.md`.
 
 ## Notes
 

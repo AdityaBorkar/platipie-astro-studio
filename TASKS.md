@@ -66,3 +66,10 @@ Source: `SPEC.md` §§1–15. Each task maps to spec sections and acceptance bul
 ## T13 — Verify vs §14 acceptance
 
 - Dashboard counts + template hidden/offer; Markdown⇄Visual no-diff + save touches `modifiedDate`; create `hello-world` draft + rename + SEO no-AI; BYOK excerpt vs disabled reason; testimonial edit + upload pick; `SITE_URL` + legal `{SOCIALS.email}` intact; trash/restore + 409; blog+projects merge idempotent + site typechecks.
+
+## T14 — App shell & navigation (§8)
+
+- Fixed left rail (`w-sidebar`, 264px) with project name + current branch from `GET /workspace`; click-to-open nav map; mobile drawer under a 48px top bar.
+- Nav: Dashboard, Website, Design, Components, Assets, Content, Settings. Website/Content groups expose the four display toggles, persisted in `localStorage`.
+- New routes: `/website` (page inventory + metadata/schema rail), `/content` (collections + SEO rail), `/components` (gallery/templates/UI index), `/assets` (media library + proxy).
+- Theme switcher moves from the header to Settings → Appearance; `/design` gains brand, style, language, and viewport sections.

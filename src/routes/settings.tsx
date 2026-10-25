@@ -1,10 +1,21 @@
 import { Editor } from "@monaco-editor/react";
 import { createFileRoute } from "@tanstack/react-router";
-import { TriangleAlertIcon } from "lucide-react";
+import {
+	ArrowRightIcon,
+	Code2Icon,
+	DatabaseIcon,
+	GitBranchIcon,
+	PaletteIcon,
+	RefreshCwIcon,
+	SaveIcon,
+	Settings2Icon,
+	Trash2Icon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
+import { Hint } from "#/components/gitbook/hint";
+import { ThemeToggle } from "#/components/theme-toggle";
 import {
 	AlertDialog,
 	AlertDialogCancel,
@@ -31,12 +42,24 @@ import {
 	TableRow,
 } from "#/components/ui/table";
 import { Textarea } from "#/components/ui/textarea";
+import { useTheme } from "#/hooks/use-theme";
 
 export const Route = createFileRoute("/settings")({
 	component: SettingsPage,
+	head: () => ({ meta: [{ title: "Settings · platipie-cms" }] }),
 });
 
+const sections = [
+	{ href: "#environment", icon: DatabaseIcon, label: "Environment" },
+	{ href: "#appearance", icon: PaletteIcon, label: "Appearance" },
+	{ href: "#typed-form", icon: Settings2Icon, label: "Typed form" },
+	{ href: "#advanced", icon: Code2Icon, label: "Advanced" },
+	{ href: "#blog", icon: GitBranchIcon, label: "Blog registration" },
+	{ href: "#trash", icon: Trash2Icon, label: "Trash" },
+];
+
 function SettingsPage() {
+	const { resolved } = useTheme();
 	const [raw, setRaw] = useState("");
 	const [values, setValues] = useState<Record<string, any>>({});
 	const [mtime, setMtime] = useState(0);
@@ -47,20 +70,21 @@ function SettingsPage() {
 	const [trash, setTrash] = useState<{ path: string }[]>([]);
 	const [loaded, setLoaded] = useState(false);
 	const [rawDialogOpen, setRawDialogOpen] = useState(false);
+	const [activeSection, setActiveSection] = useState("environment");
 	const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
 
 	const load = useCallback(async () => {
-		const r = await fetch("/api/cms/settings");
-		const j = await r.json();
-		setRaw(j.raw);
-		setValues(j.values ?? {});
-		setMtime(j.mtime);
-		setEnv(j.env);
-		setBlog(j.blog);
-		const t = await fetch("/api/cms/restore")
-			.then((x) => x.json())
+		const response = await fetch("/api/cms/settings");
+		const json = await response.json();
+		setRaw(json.raw);
+		setValues(json.values ?? {});
+		setMtime(json.mtime);
+		setEnv(json.env);
+		setBlog(json.blog);
+		const trashResponse = await fetch("/api/cms/restore")
+			.then((value) => value.json())
 			.catch(() => ({ trash: [] }));
-		setTrash(t.trash ?? []);
+		setTrash(trashResponse.trash ?? []);
 		setLoaded(true);
 	}, []);
 
@@ -71,22 +95,22 @@ function SettingsPage() {
 	async function saveRaw() {
 		setErr(null);
 		setMsg(null);
-		const r = await fetch("/api/cms/settings", {
+		const response = await fetch("/api/cms/settings", {
 			body: JSON.stringify({ mtime, raw }),
 			headers: { "Content-Type": "application/json" },
 			method: "PUT",
 		});
-		const j = await r.json();
-		if (!r.ok) {
+		const json = await response.json();
+		if (!response.ok) {
 			const message =
-				j.code === "CONFLICT"
+				json.code === "CONFLICT"
 					? "Conflict (409): constants changed — reload then retry with force"
-					: j.message;
+					: json.message;
 			setErr(message);
 			toast.error(message);
 			return;
 		}
-		setMtime(j.mtime);
+		setMtime(json.mtime);
 		setMsg("Settings saved (raw)");
 		toast.success("Settings saved (raw)");
 	}
@@ -94,245 +118,360 @@ function SettingsPage() {
 	async function saveForm() {
 		setErr(null);
 		setMsg(null);
-		const r = await fetch("/api/cms/settings", {
+		const response = await fetch("/api/cms/settings", {
 			body: JSON.stringify({ mtime, values }),
 			headers: { "Content-Type": "application/json" },
 			method: "PUT",
 		});
-		const j = await r.json();
-		if (!r.ok) {
-			setErr(j.message);
-			toast.error(j.message);
+		const json = await response.json();
+		if (!response.ok) {
+			setErr(json.message);
+			toast.error(json.message);
 			return;
 		}
-		setMtime(j.mtime);
-		setRaw(j.raw);
+		setMtime(json.mtime);
+		setRaw(json.raw);
 		setMsg("Settings saved (typed form)");
 		toast.success("Settings saved (typed form)");
 	}
 
+	async function registerBlog(widen = false) {
+		const response = await fetch("/api/cms/collections/blog/register", {
+			body: JSON.stringify(widen ? { widenGlobs: true } : {}),
+			headers: { "Content-Type": "application/json" },
+			method: "POST",
+		});
+		const json = await response.json();
+		const message = response.ok
+			? widen
+				? `Widened=${json.widened}`
+				: `Register: already=${json.already} backup=${json.backup}`
+			: json.message;
+		setMsg(message);
+		if (response.ok) toast.success(message);
+		else toast.error(message);
+		void load();
+	}
+
+	async function restoreTrash(trashPath: string) {
+		const response = await fetch("/api/cms/restore", {
+			body: JSON.stringify({ trashPath }),
+			headers: { "Content-Type": "application/json" },
+			method: "POST",
+		});
+		const json = await response.json();
+		const message = response.ok ? `Restored → ${json.path}` : json.message;
+		setMsg(message);
+		if (response.ok) toast.success(message);
+		else toast.error(message);
+		void load();
+	}
+
 	if (!loaded) {
 		return (
-			<div className="grid gap-3">
-				<Skeleton className="h-16 w-full" />
-				<Skeleton className="h-64 w-full" />
-				<Skeleton className="h-64 w-full" />
+			<div className="mx-auto w-page px-5 py-10">
+				<Skeleton className="h-10 w-56" />
+				<Skeleton className="mt-6 h-48 w-full" />
+				<Skeleton className="mt-4 h-64 w-full" />
 			</div>
 		);
 	}
 
 	return (
-		<div className="grid gap-4">
-			<h2 className="text-lg font-semibold tracking-tight">Settings</h2>
-			{err && (
-				<Alert variant="destructive">
-					<TriangleAlertIcon />
-					<AlertTitle>Error</AlertTitle>
-					<AlertDescription>{err}</AlertDescription>
-				</Alert>
-			)}
-			{msg && (
-				<Alert>
-					<AlertTitle>Saved</AlertTitle>
-					<AlertDescription>{msg}</AlertDescription>
-				</Alert>
-			)}
-			{env && (
-				<Card>
-					<CardContent className="flex flex-wrap items-center gap-1.5">
-						<Badge className="font-mono" variant="outline">
-							ASTRO_ROOT: {env.astroRoot} {env.astroRootReachable ? "✓ reachable" : "✗ missing"}
-						</Badge>
-						<Badge className="font-mono" variant="outline">
-							ASTRO_URL: {env.astroUrl ?? "unset"}
-						</Badge>
-						<Badge variant={env.aiEnabled ? "default" : "secondary"}>
-							AI: {env.aiEnabled ? "enabled (BYOK)" : "disabled"}
-						</Badge>
-						<Badge className="font-mono" variant="secondary">
-							PORT {env.port} · TRASH_TTL {env.trashTtlDays}d
-						</Badge>
-					</CardContent>
-				</Card>
-			)}
-			<Card>
-				<CardHeader>
-					<CardTitle>Typed form</CardTitle>
-					<CardDescription>Edit the known settings fields with validation.</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<FieldGroup>
-						<Field>
-							<FieldLabel htmlFor="site-url">SITE_URL</FieldLabel>
-							<Input
-								id="site-url"
-								onChange={(e) => setValues((p) => ({ ...p, SITE_URL: e.target.value }))}
-								value={String(values.SITE_URL ?? "")}
-							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="labs-url">LABS_URL</FieldLabel>
-							<Input
-								id="labs-url"
-								onChange={(e) => setValues((p) => ({ ...p, LABS_URL: e.target.value }))}
-								value={String(values.LABS_URL ?? "")}
-							/>
-						</Field>
-						<Field orientation="horizontal">
-							<FieldLabel htmlFor="available-now">IS_AVAILABLE_NOW</FieldLabel>
-							<Switch
-								checked={Boolean(values.IS_AVAILABLE_NOW ?? true)}
-								id="available-now"
-								onCheckedChange={(checked) =>
-									setValues((p) => ({ ...p, IS_AVAILABLE_NOW: checked }))
-								}
-							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="socials-email">SOCIALS.email</FieldLabel>
-							<Input
-								id="socials-email"
-								onChange={(e) =>
-									setValues((p) => ({ ...p, SOCIALS: { ...p.SOCIALS, email: e.target.value } }))
-								}
-								value={String(values.SOCIALS?.email ?? "")}
-							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="pricing">PRICING (JSON)</FieldLabel>
-							<Textarea
-								className="font-mono"
-								id="pricing"
-								onChange={(e) => {
-									try {
-										setValues((p) => ({ ...p, PRICING: JSON.parse(e.target.value) }));
-									} catch {
-										/* keep typing */
+		<div className="mx-auto w-page px-5 py-8 sm:py-10">
+			<div className="animate-rise flex flex-wrap items-end justify-between gap-5">
+				<div>
+					<p className="text-11 font-bold tracking-14 text-brand uppercase">Configuration</p>
+					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">Settings</h1>
+					<p className="gb-sub mt-3 max-w-xl text-base">
+						Environment, typed constants, raw TypeScript, and the soft-delete queue — all in one
+						quiet surface.
+					</p>
+				</div>
+				<Button onClick={() => void load()} size="sm" variant="outline">
+					<RefreshCwIcon className="size-3.5" />
+					Reload
+				</Button>
+			</div>
+
+			<div className="mt-6 grid gap-6 lg:grid-cols-settings">
+				<aside className="hidden lg:block">
+					<nav aria-label="Settings sections" className="sticky top-24 grid gap-0.5">
+						{sections.map((section) => {
+							const Icon = section.icon;
+							const isActive = activeSection === section.href.slice(1);
+							return (
+								<a
+									aria-current={isActive ? "true" : undefined}
+									className={
+										isActive
+											? "flex items-center gap-2 rounded-md border-l-2 border-brand bg-brand-soft px-2.5 py-1.5 text-sm font-semibold text-brand"
+											: "flex items-center gap-2 rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 									}
-								}}
-								value={JSON.stringify(values.PRICING ?? {}, null, 2)}
-							/>
-						</Field>
-						<div className="flex flex-wrap items-center gap-2">
-							<Button onClick={() => void saveForm()}>Save typed form</Button>
-						</div>
-					</FieldGroup>
-				</CardContent>
-			</Card>
-			<Card>
-				<CardHeader>
-					<CardTitle>Advanced: raw TS (Monaco)</CardTitle>
-					<CardDescription>
-						Direct edit of cms/constants.ts. Requires danger-zone confirmation.
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="grid gap-3">
-					<Editor
-						height="420px"
-						language="typescript"
-						onChange={(v) => setRaw(v ?? "")}
-						value={raw}
-					/>
-					<div className="flex flex-wrap items-center gap-2">
-						<Button onClick={() => setRawDialogOpen(true)}>Save raw (danger zone)</Button>
-						<Button onClick={() => void load()} variant="outline">
-							Reload
-						</Button>
-					</div>
-				</CardContent>
-			</Card>
-			<Card>
-				<CardHeader>
-					<CardTitle>Blog registration (§5.1)</CardTitle>
-					<CardDescription>
-						registered: {String(blog?.registered)} · projectsExtended:{" "}
-						{String(blog?.projectsExtended)} · {blog?.path}
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-wrap items-center gap-2">
-					<Button onClick={() => setRegisterDialogOpen(true)} variant="outline">
-						Register blog collection
-					</Button>
-					<Button
-						onClick={() => {
-							fetch("/api/cms/collections/blog/register", {
-								body: JSON.stringify({ widenGlobs: true }),
-								headers: { "Content-Type": "application/json" },
-								method: "POST",
-							})
-								.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-								.then(({ body, ok }) => {
-									const message = ok ? `Widened=${body.widened}` : body.message;
-									setMsg(message);
-									if (ok) toast.success(message);
-									else toast.error(message);
-								})
-								.catch((e: unknown) => toast.error(String(e)));
-						}}
-						variant="ghost"
-					>
-						Widen globs to MDX
-					</Button>
-				</CardContent>
-			</Card>
-			<Card>
-				<CardHeader>
-					<CardTitle>Trash</CardTitle>
-					<CardDescription>
-						{trash.length} soft-deleted {trash.length === 1 ? "entry" : "entries"}
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{trash.length === 0 ? (
-						<Empty>
-							<EmptyHeader>
-								<EmptyTitle>Trash is empty</EmptyTitle>
-								<EmptyDescription>Deleted entries will show up here.</EmptyDescription>
-							</EmptyHeader>
-						</Empty>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Path</TableHead>
-									<TableHead className="w-28">Action</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{trash.slice(0, 50).map((t) => (
-									<TableRow key={t.path}>
-										<TableCell className="font-mono">{t.path}</TableCell>
-										<TableCell>
-											<Button
-												onClick={() => {
-													fetch("/api/cms/restore", {
-														body: JSON.stringify({ trashPath: t.path }),
-														headers: { "Content-Type": "application/json" },
-														method: "POST",
-													})
-														.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-														.then(({ body, ok }) => {
-															const message = ok ? `Restored → ${body.path}` : body.message;
-															setMsg(message);
-															if (ok) toast.success(message);
-															else toast.error(message);
-															void load();
-														})
-														.catch((e: unknown) => toast.error(String(e)));
-												}}
-												size="sm"
-												variant="outline"
-											>
-												Restore
-											</Button>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
-				</CardContent>
-			</Card>
+									href={section.href}
+									key={section.href}
+									onClick={() => setActiveSection(section.href.slice(1))}
+								>
+									<Icon className="size-3.5" />
+									{section.label}
+								</a>
+							);
+						})}
+					</nav>
+				</aside>
+
+				<div className="grid min-w-0 gap-4">
+					{err ? (
+						<Hint title="Error" variant="danger">
+							{err}
+						</Hint>
+					) : null}
+					{msg ? (
+						<Hint title="Saved" variant="success">
+							{msg}
+						</Hint>
+					) : null}
+
+					<Card id="environment">
+						<CardHeader>
+							<CardTitle className="flex items-center gap-2">
+								<DatabaseIcon className="size-4 text-brand" />
+								Environment
+							</CardTitle>
+							<CardDescription>
+								Runtime values are read from <code>.env</code> and the Astro repo jail.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="flex flex-wrap items-center gap-1.5">
+							{env ? (
+								<>
+									<Badge
+										className="font-mono"
+										variant={env.astroRootReachable ? "success" : "destructive"}
+									>
+										ASTRO_ROOT {env.astroRootReachable ? "✓ reachable" : "✗ missing"}
+									</Badge>
+									<Badge className="font-mono" variant="outline">
+										{env.astroRoot}
+									</Badge>
+									<Badge className="font-mono" variant="outline">
+										ASTRO_URL {env.astroUrl ?? "unset"}
+									</Badge>
+									<Badge variant={env.aiEnabled ? "brand" : "secondary"}>
+										AI {env.aiEnabled ? "enabled · BYOK" : "disabled"}
+									</Badge>
+									<Badge className="font-mono" variant="secondary">
+										PORT {env.port} · TRASH_TTL {env.trashTtlDays}d
+									</Badge>
+								</>
+							) : null}
+						</CardContent>
+					</Card>
+
+					<Card id="appearance">
+						<CardHeader>
+							<CardTitle className="flex items-center gap-2">
+								<PaletteIcon className="size-4 text-brand" />
+								Appearance
+							</CardTitle>
+							<CardDescription>
+								The theme switcher lives here now. The choice is stored in this browser and applied
+								before paint.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<div className="flex flex-wrap items-center justify-between gap-3">
+								<div>
+									<p className="text-sm font-semibold">Theme</p>
+									<p className="text-xs text-muted-foreground">
+										Light, dark, or follow the system preference.
+									</p>
+								</div>
+								<ThemeToggle />
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card id="typed-form">
+						<CardHeader>
+							<CardTitle>Typed form</CardTitle>
+							<CardDescription>
+								Edit the known settings fields. Validation runs before anything is written.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<FieldGroup className="gap-4">
+								<Field>
+									<FieldLabel htmlFor="site-url">SITE_URL</FieldLabel>
+									<Input
+										id="site-url"
+										onChange={(event) =>
+											setValues((previous) => ({ ...previous, SITE_URL: event.target.value }))
+										}
+										value={String(values.SITE_URL ?? "")}
+									/>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="labs-url">LABS_URL</FieldLabel>
+									<Input
+										id="labs-url"
+										onChange={(event) =>
+											setValues((previous) => ({ ...previous, LABS_URL: event.target.value }))
+										}
+										value={String(values.LABS_URL ?? "")}
+									/>
+								</Field>
+								<Field orientation="horizontal">
+									<FieldLabel htmlFor="available-now">IS_AVAILABLE_NOW</FieldLabel>
+									<Switch
+										checked={Boolean(values.IS_AVAILABLE_NOW ?? true)}
+										id="available-now"
+										onCheckedChange={(checked) =>
+											setValues((previous) => ({ ...previous, IS_AVAILABLE_NOW: checked }))
+										}
+									/>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="socials-email">SOCIALS.email</FieldLabel>
+									<Input
+										id="socials-email"
+										onChange={(event) =>
+											setValues((previous) => ({
+												...previous,
+												SOCIALS: { ...previous.SOCIALS, email: event.target.value },
+											}))
+										}
+										value={String(values.SOCIALS?.email ?? "")}
+									/>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="pricing">PRICING (JSON)</FieldLabel>
+									<Textarea
+										className="min-h-40 font-mono text-xs"
+										id="pricing"
+										onChange={(event) => {
+											try {
+												setValues((previous) => ({
+													...previous,
+													PRICING: JSON.parse(event.target.value),
+												}));
+											} catch {
+												/* keep typing */
+											}
+										}}
+										value={JSON.stringify(values.PRICING ?? {}, null, 2)}
+									/>
+								</Field>
+								<div>
+									<Button onClick={() => void saveForm()}>
+										<SaveIcon className="size-3.5" />
+										Save typed form
+									</Button>
+								</div>
+							</FieldGroup>
+						</CardContent>
+					</Card>
+
+					<Card id="advanced">
+						<CardHeader>
+							<CardTitle>Advanced: raw TypeScript</CardTitle>
+							<CardDescription>
+								Direct edit of <code>cms/constants.ts</code>. Requires danger-zone confirmation.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="grid gap-3">
+							<div className="overflow-hidden rounded-lg border border-border">
+								<Editor
+									height="380px"
+									language="typescript"
+									onChange={(value) => setRaw(value ?? "")}
+									options={{
+										fontFamily: "Geist Mono Variable, monospace",
+										fontSize: 12,
+										minimap: { enabled: false },
+										scrollBeyondLastLine: false,
+									}}
+									theme={resolved === "dark" ? "vs-dark" : "vs"}
+									value={raw}
+								/>
+							</div>
+							<div className="flex flex-wrap items-center gap-2">
+								<Button onClick={() => setRawDialogOpen(true)} variant="destructive">
+									Save raw (danger zone)
+								</Button>
+								<Button onClick={() => void load()} variant="outline">
+									Reload
+								</Button>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card id="blog">
+						<CardHeader>
+							<CardTitle>Blog registration</CardTitle>
+							<CardDescription>
+								registered: {String(blog?.registered)} · projectsExtended:{" "}
+								{String(blog?.projectsExtended)} · {blog?.path}
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="flex flex-wrap items-center gap-2">
+							<Button onClick={() => setRegisterDialogOpen(true)} variant="outline">
+								<GitBranchIcon className="size-3.5" />
+								Register blog collection
+							</Button>
+							<Button onClick={() => void registerBlog(true)} variant="ghost">
+								Widen globs to MDX
+								<ArrowRightIcon className="size-3.5" />
+							</Button>
+						</CardContent>
+					</Card>
+
+					<Card id="trash">
+						<CardHeader>
+							<CardTitle>Trash</CardTitle>
+							<CardDescription>
+								{trash.length} soft-deleted {trash.length === 1 ? "entry" : "entries"} · restores
+								back into the repo
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							{trash.length === 0 ? (
+								<Empty>
+									<EmptyHeader>
+										<EmptyTitle>Trash is empty</EmptyTitle>
+										<EmptyDescription>Deleted entries will show up here.</EmptyDescription>
+									</EmptyHeader>
+								</Empty>
+							) : (
+								<Table>
+									<TableHeader>
+										<TableRow className="bg-muted/40 hover:bg-muted/40">
+											<TableHead>Path</TableHead>
+											<TableHead className="w-28 text-right">Action</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{trash.slice(0, 50).map((entry) => (
+											<TableRow key={entry.path}>
+												<TableCell className="font-mono text-xs">{entry.path}</TableCell>
+												<TableCell className="text-right">
+													<Button
+														onClick={() => void restoreTrash(entry.path)}
+														size="sm"
+														variant="outline"
+													>
+														Restore
+													</Button>
+												</TableCell>
+											</TableRow>
+										))}
+									</TableBody>
+								</Table>
+							)}
+						</CardContent>
+					</Card>
+				</div>
+			</div>
 
 			<AlertDialog onOpenChange={setRawDialogOpen} open={rawDialogOpen}>
 				<AlertDialogContent>
@@ -349,6 +488,7 @@ function SettingsPage() {
 								setRawDialogOpen(false);
 								void saveRaw();
 							}}
+							variant="destructive"
 						>
 							Save raw
 						</Button>
@@ -370,22 +510,7 @@ function SettingsPage() {
 						<Button
 							onClick={() => {
 								setRegisterDialogOpen(false);
-								fetch("/api/cms/collections/blog/register", {
-									body: "{}",
-									headers: { "Content-Type": "application/json" },
-									method: "POST",
-								})
-									.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-									.then(({ body, ok }) => {
-										const message = ok
-											? `Register: already=${body.already} backup=${body.backup}`
-											: body.message;
-										setMsg(message);
-										if (ok) toast.success(message);
-										else toast.error(message);
-										void load();
-									})
-									.catch((e: unknown) => toast.error(String(e)));
+								void registerBlog(false);
 							}}
 						>
 							Register

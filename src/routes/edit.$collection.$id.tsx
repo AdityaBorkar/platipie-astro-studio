@@ -47,9 +47,12 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
+import { useTheme } from "#/hooks/use-theme";
+import { useUiPref } from "#/hooks/use-ui-prefs";
 
 export const Route = createFileRoute("/edit/$collection/$id")({
 	component: UnifiedEditor,
+	head: ({ params }) => ({ meta: [{ title: `${params.id} · platipie-cms` }] }),
 	validateSearch: (s: Record<string, unknown>) => ({ path: (s.path as string) ?? "" }),
 });
 
@@ -110,6 +113,8 @@ function useQueryPath(): string {
 
 function UnifiedEditor() {
 	const filePath = useQueryPath();
+	const { resolved } = useTheme();
+	const showContentSeo = useUiPref("showContentSeo");
 	const [loaded, setLoaded] = useState<Loaded | null>(null);
 	const [fm, setFm] = useState<Record<string, unknown>>({});
 	const [body, setBody] = useState("");
@@ -273,342 +278,407 @@ function UnifiedEditor() {
 	if (!loaded) {
 		if (err) {
 			return (
-				<Alert variant="destructive">
-					<TriangleAlertIcon />
-					<AlertTitle>Failed to load entry</AlertTitle>
-					<AlertDescription>{err}</AlertDescription>
-				</Alert>
+				<div className="mx-auto w-page px-5 py-10">
+					<Alert variant="destructive">
+						<TriangleAlertIcon />
+						<AlertTitle>Failed to load entry</AlertTitle>
+						<AlertDescription>{err}</AlertDescription>
+					</Alert>
+				</div>
 			);
 		}
 		return (
-			<div className="grid gap-3">
-				<Skeleton className="h-10 w-full" />
-				<Skeleton className="h-96 w-full" />
+			<div className="mx-auto w-page px-5 py-10">
+				<div className="grid gap-3">
+					<Skeleton className="h-10 w-64" />
+					<Skeleton className="h-96 w-full" />
+				</div>
 			</div>
 		);
 	}
 
 	if (loaded.readOnly) {
 		return (
-			<Alert>
-				<TriangleAlertIcon />
-				<AlertTitle>Read-only</AlertTitle>
-				<AlertDescription>
-					{loaded.ref.path} ({(loaded.body ?? "").length} bytes &gt; 1 MB guard)
-				</AlertDescription>
-			</Alert>
+			<div className="mx-auto w-page px-5 py-10">
+				<Alert>
+					<TriangleAlertIcon />
+					<AlertTitle>Read-only</AlertTitle>
+					<AlertDescription>
+						{loaded.ref.path} ({(loaded.body ?? "").length} bytes &gt; 1 MB guard)
+					</AlertDescription>
+				</Alert>
+			</div>
 		);
 	}
 
 	const collection = loaded.ref.collection;
 
 	return (
-		<div className="grid gap-4">
-			<Card>
-				<CardContent className="flex flex-wrap items-center gap-2">
-					<Badge className="font-mono" variant="outline">
-						{loaded.ref.path}
+		<div className="mx-auto w-page px-5 py-8 sm:py-10">
+			<div className="animate-rise flex flex-wrap items-end justify-between gap-4">
+				<div className="min-w-0">
+					<p className="text-11 font-bold tracking-14 text-brand uppercase">Editor</p>
+					<h1 className="gb-display mt-2 truncate text-2xl sm:text-3xl">
+						{loaded.ref.path.split("/").pop()}
+					</h1>
+					<div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+						<Badge variant="secondary">{collection}</Badge>
+						<span className="truncate font-mono">{loaded.ref.path}</span>
+					</div>
+				</div>
+				<div className="flex items-center gap-2">
+					<Badge variant={fm.status === "published" ? "success" : "outline"}>
+						{String(fm.status ?? "draft")}
 					</Badge>
-					<Separator className="h-4" orientation="vertical" />
-					<Button onClick={() => void save(false)} size="sm">
-						<SaveIcon />
-						Save
-					</Button>
-					<Button onClick={() => void save(true)} size="sm" variant="outline">
-						Force save
-					</Button>
-					<Button
-						onClick={() => {
-							fetch("/api/cms/diff?path=" + encodeURIComponent(filePath.split("#")[0]))
-								.then((r) => r.json())
-								.then((j) => setDiff(j.diff ?? ""))
-								.catch((e: unknown) => toast.error(String(e)));
-						}}
-						size="sm"
-						variant="ghost"
-					>
-						<HistoryIcon />
-						Diff vs .bak
-					</Button>
-					<Button onClick={() => setDeleteOpen(true)} size="sm" variant="destructive">
-						<Trash2Icon />
-						Delete
-					</Button>
-					<Button
-						onClick={() => {
-							fetch("/api/cms/duplicate", {
-								body: JSON.stringify({ path: filePath.split("#")[0] }),
-								headers: { "Content-Type": "application/json" },
-								method: "POST",
-							})
-								.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-								.then(({ body: res, ok }) => {
-									const message = ok ? `Duplicated → ${res.path}` : res.message;
-									setMsg(message);
-									if (ok) toast.success(message);
-									else toast.error(message);
-								})
-								.catch((e: unknown) => toast.error(String(e)));
-						}}
-						size="sm"
-						variant="outline"
-					>
-						<CopyIcon />
-						Duplicate
-					</Button>
-				</CardContent>
-			</Card>
+					<Badge className="font-mono" variant="outline">
+						{new Date(mtime).toLocaleTimeString()}
+					</Badge>
+				</div>
+			</div>
 
-			{err && (
-				<Alert variant="destructive">
-					<TriangleAlertIcon />
-					<AlertTitle>Error</AlertTitle>
-					<AlertDescription>{err}</AlertDescription>
-				</Alert>
-			)}
-			{msg && (
-				<Alert>
-					<CircleCheckIcon />
-					<AlertTitle>Saved</AlertTitle>
-					<AlertDescription>{msg}</AlertDescription>
-				</Alert>
-			)}
-			{Object.keys(fieldErrors).length > 0 && (
-				<Alert variant="destructive">
-					<CircleXIcon />
-					<AlertTitle>Validation failed</AlertTitle>
-					<AlertDescription>
-						{Object.entries(fieldErrors)
-							.map(([k, v]) => `${k}: ${v}`)
-							.join("; ")}
-					</AlertDescription>
-				</Alert>
-			)}
-			{warnings.length > 0 && (
-				<Alert>
-					<TriangleAlertIcon />
-					<AlertTitle>Warnings</AlertTitle>
-					<AlertDescription>{warnings.join(" · ")}</AlertDescription>
-				</Alert>
-			)}
-			{unknownKeys.length > 0 && (
-				<Alert>
-					<TriangleAlertIcon />
-					<AlertTitle>Drift</AlertTitle>
-					<AlertDescription>
-						Unknown keys round-trip untouched: {unknownKeys.join(", ")}
-					</AlertDescription>
-				</Alert>
-			)}
-
-			{(collection === "projects" || collection === "blog") && (
+			<div className="mt-6 grid gap-4">
 				<Card>
-					<CardContent className="flex flex-wrap items-end gap-2">
-						<Field className="min-w-52 flex-1">
-							<FieldLabel htmlFor="slug-edit">Slug (filename)</FieldLabel>
-							<Input
-								id="slug-edit"
-								onChange={(e) => setSlugEdit(e.target.value)}
-								value={slugEdit}
-							/>
-						</Field>
+					<CardContent className="flex flex-wrap items-center gap-2">
+						<Badge className="font-mono" variant="outline">
+							{loaded.ref.path}
+						</Badge>
+						<Separator className="h-4" orientation="vertical" />
+						<Button onClick={() => void save(false)} size="sm">
+							<SaveIcon />
+							Save
+						</Button>
+						<Button onClick={() => void save(true)} size="sm" variant="outline">
+							Force save
+						</Button>
 						<Button
 							onClick={() => {
-								const [fp] = filePath.split("#");
-								fetch("/api/cms/rename", {
-									body: JSON.stringify({ newSlug: slugEdit, path: fp }),
+								fetch("/api/cms/diff?path=" + encodeURIComponent(filePath.split("#")[0]))
+									.then((r) => r.json())
+									.then((j) => setDiff(j.diff ?? ""))
+									.catch((e: unknown) => toast.error(String(e)));
+							}}
+							size="sm"
+							variant="ghost"
+						>
+							<HistoryIcon />
+							Diff vs .bak
+						</Button>
+						<Button onClick={() => setDeleteOpen(true)} size="sm" variant="destructive">
+							<Trash2Icon />
+							Delete
+						</Button>
+						<Button
+							onClick={() => {
+								fetch("/api/cms/duplicate", {
+									body: JSON.stringify({ path: filePath.split("#")[0] }),
 									headers: { "Content-Type": "application/json" },
 									method: "POST",
 								})
 									.then(async (r) => ({ body: await r.json(), ok: r.ok }))
 									.then(({ body: res, ok }) => {
-										if (ok) {
-											setMsg(`Renamed → ${res.path}`);
-											toast.success(`Renamed → ${res.path}`);
-											window.location.href = `/edit/${collection}/${encodeURIComponent(slugEdit)}?path=${encodeURIComponent(res.path)}`;
-										} else {
-											setErr(res.message);
-											toast.error(res.message);
-										}
-									})
-									.catch((e: unknown) => toast.error(String(e)));
-							}}
-							size="sm"
-							variant="outline"
-						>
-							Rename via slug
-						</Button>
-					</CardContent>
-				</Card>
-			)}
-
-			{isJsonFile ? (
-				<JsonTableEditor
-					media={media}
-					rowId={jsonRowId}
-					rows={jsonRows}
-					setRowId={setJsonRowId}
-					setRows={setJsonRows}
-				/>
-			) : filePath.endsWith(".ts") ? (
-				<Card>
-					<CardHeader>
-						<CardTitle>Settings file</CardTitle>
-						<CardDescription>
-							Settings file — use <a href="/settings">/settings</a> typed form + raw fallback.
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<Editor
-							height="400px"
-							language="typescript"
-							onChange={(v) => setBody(v ?? "")}
-							value={body}
-						/>
-					</CardContent>
-				</Card>
-			) : (
-				<div className="grid-cols-editor grid items-start gap-4">
-					<Card>
-						<CardHeader>
-							<CardTitle>Frontmatter</CardTitle>
-							{aiDraft && <CardDescription>AI-drafted until edited: {aiDraft}</CardDescription>}
-						</CardHeader>
-						<CardContent>
-							<FrontmatterForm
-								aiDraft={aiDraft}
-								fieldErrors={fieldErrors}
-								fm={fm}
-								media={media}
-								setFm={setFm}
-							/>
-						</CardContent>
-					</Card>
-					<div className="grid min-w-0 gap-4">
-						<Tabs onValueChange={(v) => setMode(v as "markdown" | "visual")} value={mode}>
-							<Card>
-								<CardHeader className="flex-row items-center justify-between gap-2">
-									<CardTitle>Source</CardTitle>
-									<TabsList>
-										<TabsTrigger value="markdown">Markdown</TabsTrigger>
-										<TabsTrigger value="visual">Visual</TabsTrigger>
-									</TabsList>
-								</CardHeader>
-								<CardContent>
-									<TabsContent value="markdown">
-										<Editor
-											height="420px"
-											language="markdown"
-											onChange={(v) => setBody(v ?? "")}
-											value={body}
-										/>
-										{(body.includes("import ") || /\{[A-Z_]+\./u.test(body)) && (
-											<Alert className="mt-3">
-												<TriangleAlertIcon />
-												<AlertDescription>
-													MDX constructs detected — Visual mode shows opaque placeholders; Markdown
-													preserves byte-for-byte.
-												</AlertDescription>
-											</Alert>
-										)}
-									</TabsContent>
-									<TabsContent value="visual">
-										{tiptap && <EditorContent editor={tiptap} />}
-										<p className="mt-2 text-xs text-muted-foreground">
-											Uneditable blocks preserved as opaque placeholders — switch to Markdown for
-											JSX.
-										</p>
-									</TabsContent>
-								</CardContent>
-							</Card>
-						</Tabs>
-						<Card>
-							<CardHeader>
-								<CardTitle>Local preview</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<div className="prose-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-							</CardContent>
-						</Card>
-						<Card>
-							<CardHeader>
-								<CardTitle>Faithful preview (read-only iframe)</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<FaithfulPreview collection={collection} slug={slugEdit} />
-							</CardContent>
-						</Card>
-						{diff && (
-							<Card>
-								<CardHeader>
-									<CardTitle>Diff</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<ScrollArea className="max-h-58vh">
-										<pre className="code-surface p-3 font-mono text-xs whitespace-pre-wrap">
-											{diff.slice(0, 8000)}
-										</pre>
-									</ScrollArea>
-								</CardContent>
-							</Card>
-						)}
-					</div>
-					<Card>
-						<CardHeader>
-							<CardTitle>SEO assistant</CardTitle>
-						</CardHeader>
-						<CardContent>
-							<SeoPane
-								aiBusy={aiBusy}
-								body={body}
-								fm={fm}
-								seo={seo}
-								setAiBusy={setAiBusy}
-								setAiDraft={setAiDraft}
-								setFm={setFm}
-							/>
-						</CardContent>
-					</Card>
-				</div>
-			)}
-
-			<AlertDialog onOpenChange={setDeleteOpen} open={deleteOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Delete this entry?</AlertDialogTitle>
-						<AlertDialogDescription>
-							The entry is soft-deleted to trash and can be restored from Settings.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<Button
-							onClick={() => {
-								setDeleteOpen(false);
-								const [fp] = filePath.split("#");
-								fetch("/api/cms/entry", {
-									body: JSON.stringify({ path: fp, rowId: jsonRowId ?? undefined }),
-									headers: { "Content-Type": "application/json" },
-									method: "DELETE",
-								})
-									.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-									.then(({ body: res, ok }) => {
-										const message = ok
-											? `Trashed → ${res.trashPath}`
-											: `Delete failed: ${res.message}`;
+										const message = ok ? `Duplicated → ${res.path}` : res.message;
 										setMsg(message);
 										if (ok) toast.success(message);
 										else toast.error(message);
 									})
 									.catch((e: unknown) => toast.error(String(e)));
 							}}
-							variant="destructive"
+							size="sm"
+							variant="outline"
 						>
-							Delete
+							<CopyIcon />
+							Duplicate
 						</Button>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+					</CardContent>
+				</Card>
+
+				{err && (
+					<Alert variant="destructive">
+						<TriangleAlertIcon />
+						<AlertTitle>Error</AlertTitle>
+						<AlertDescription>{err}</AlertDescription>
+					</Alert>
+				)}
+				{msg && (
+					<Alert>
+						<CircleCheckIcon />
+						<AlertTitle>Saved</AlertTitle>
+						<AlertDescription>{msg}</AlertDescription>
+					</Alert>
+				)}
+				{Object.keys(fieldErrors).length > 0 && (
+					<Alert variant="destructive">
+						<CircleXIcon />
+						<AlertTitle>Validation failed</AlertTitle>
+						<AlertDescription>
+							{Object.entries(fieldErrors)
+								.map(([k, v]) => `${k}: ${v}`)
+								.join("; ")}
+						</AlertDescription>
+					</Alert>
+				)}
+				{warnings.length > 0 && (
+					<Alert>
+						<TriangleAlertIcon />
+						<AlertTitle>Warnings</AlertTitle>
+						<AlertDescription>{warnings.join(" · ")}</AlertDescription>
+					</Alert>
+				)}
+				{unknownKeys.length > 0 && (
+					<Alert>
+						<TriangleAlertIcon />
+						<AlertTitle>Drift</AlertTitle>
+						<AlertDescription>
+							Unknown keys round-trip untouched: {unknownKeys.join(", ")}
+						</AlertDescription>
+					</Alert>
+				)}
+
+				{(collection === "projects" || collection === "blog") && (
+					<Card>
+						<CardContent className="flex flex-wrap items-end gap-2">
+							<Field className="min-w-52 flex-1">
+								<FieldLabel htmlFor="slug-edit">Slug (filename)</FieldLabel>
+								<Input
+									id="slug-edit"
+									onChange={(e) => setSlugEdit(e.target.value)}
+									value={slugEdit}
+								/>
+							</Field>
+							<Button
+								onClick={() => {
+									const [fp] = filePath.split("#");
+									fetch("/api/cms/rename", {
+										body: JSON.stringify({ newSlug: slugEdit, path: fp }),
+										headers: { "Content-Type": "application/json" },
+										method: "POST",
+									})
+										.then(async (r) => ({ body: await r.json(), ok: r.ok }))
+										.then(({ body: res, ok }) => {
+											if (ok) {
+												setMsg(`Renamed → ${res.path}`);
+												toast.success(`Renamed → ${res.path}`);
+												window.location.href = `/edit/${collection}/${encodeURIComponent(slugEdit)}?path=${encodeURIComponent(res.path)}`;
+											} else {
+												setErr(res.message);
+												toast.error(res.message);
+											}
+										})
+										.catch((e: unknown) => toast.error(String(e)));
+								}}
+								size="sm"
+								variant="outline"
+							>
+								Rename via slug
+							</Button>
+						</CardContent>
+					</Card>
+				)}
+
+				{isJsonFile ? (
+					<JsonTableEditor
+						media={media}
+						rowId={jsonRowId}
+						rows={jsonRows}
+						setRowId={setJsonRowId}
+						setRows={setJsonRows}
+					/>
+				) : filePath.endsWith(".ts") ? (
+					<Card>
+						<CardHeader>
+							<CardTitle>Settings file</CardTitle>
+							<CardDescription>
+								Settings file — use <a href="/settings">/settings</a> typed form + raw fallback.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<Editor
+								height="400px"
+								language="typescript"
+								onChange={(v) => setBody(v ?? "")}
+								options={{ minimap: { enabled: false } }}
+								theme={resolved === "dark" ? "vs-dark" : "vs"}
+								value={body}
+							/>
+						</CardContent>
+					</Card>
+				) : (
+					<div className="grid-cols-editor grid items-start gap-4">
+						<Card>
+							<CardHeader>
+								<CardTitle>Frontmatter</CardTitle>
+								{aiDraft && <CardDescription>AI-drafted until edited: {aiDraft}</CardDescription>}
+							</CardHeader>
+							<CardContent>
+								<FrontmatterForm
+									aiDraft={aiDraft}
+									fieldErrors={fieldErrors}
+									fm={fm}
+									media={media}
+									setFm={setFm}
+								/>
+							</CardContent>
+						</Card>
+						<div className="grid min-w-0 gap-4">
+							<Tabs onValueChange={(v) => setMode(v as "markdown" | "visual")} value={mode}>
+								<Card>
+									<CardHeader className="flex-row items-center justify-between gap-2">
+										<CardTitle>Source</CardTitle>
+										<TabsList>
+											<TabsTrigger value="markdown">Markdown</TabsTrigger>
+											<TabsTrigger value="visual">Visual</TabsTrigger>
+										</TabsList>
+									</CardHeader>
+									<CardContent>
+										<TabsContent value="markdown">
+											<Editor
+												height="420px"
+												language="markdown"
+												onChange={(v) => setBody(v ?? "")}
+												options={{ minimap: { enabled: false }, wordWrap: "on" }}
+												theme={resolved === "dark" ? "vs-dark" : "vs"}
+												value={body}
+											/>
+											{(body.includes("import ") || /\{[A-Z_]+\./u.test(body)) && (
+												<Alert className="mt-3">
+													<TriangleAlertIcon />
+													<AlertDescription>
+														MDX constructs detected — Visual mode shows opaque placeholders;
+														Markdown preserves byte-for-byte.
+													</AlertDescription>
+												</Alert>
+											)}
+										</TabsContent>
+										<TabsContent value="visual">
+											{tiptap && <EditorContent editor={tiptap} />}
+											<p className="mt-2 text-xs text-muted-foreground">
+												Uneditable blocks preserved as opaque placeholders — switch to Markdown for
+												JSX.
+											</p>
+										</TabsContent>
+									</CardContent>
+								</Card>
+							</Tabs>
+							<Card>
+								<CardHeader>
+									<CardTitle>Local preview</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<div
+										className="prose-preview"
+										dangerouslySetInnerHTML={{ __html: previewHtml }}
+									/>
+								</CardContent>
+							</Card>
+							<Card>
+								<CardHeader>
+									<CardTitle>Faithful preview (read-only iframe)</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<FaithfulPreview collection={collection} slug={slugEdit} />
+								</CardContent>
+							</Card>
+							{diff && (
+								<Card>
+									<CardHeader>
+										<CardTitle>Diff</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<ScrollArea className="max-h-58vh">
+											<pre className="code-surface p-3 font-mono text-xs whitespace-pre-wrap">
+												{diff.slice(0, 8000)}
+											</pre>
+										</ScrollArea>
+									</CardContent>
+								</Card>
+							)}
+						</div>
+						{showContentSeo ? (
+							<>
+								<Card>
+									<CardHeader>
+										<CardTitle>SEO assistant</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<SeoPane
+											aiBusy={aiBusy}
+											body={body}
+											fm={fm}
+											seo={seo}
+											setAiBusy={setAiBusy}
+											setAiDraft={setAiDraft}
+											setFm={setFm}
+										/>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader>
+										<CardTitle>Schema markup</CardTitle>
+										<CardDescription>
+											{String(fm.schemaType ?? "No schemaType selected")}
+										</CardDescription>
+									</CardHeader>
+									<CardContent>
+										<pre className="code-surface p-3 font-mono text-10 whitespace-pre-wrap">
+											{JSON.stringify(
+												{
+													"@context": "https://schema.org",
+													"@type": String(fm.schemaType ?? "WebPage"),
+													...(typeof fm.schemaFields === "object" &&
+													fm.schemaFields !== null &&
+													!Array.isArray(fm.schemaFields)
+														? (fm.schemaFields as Record<string, unknown>)
+														: {}),
+												},
+												null,
+												2,
+											)}
+										</pre>
+									</CardContent>
+								</Card>
+							</>
+						) : null}
+					</div>
+				)}
+
+				<AlertDialog onOpenChange={setDeleteOpen} open={deleteOpen}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Delete this entry?</AlertDialogTitle>
+							<AlertDialogDescription>
+								The entry is soft-deleted to trash and can be restored from Settings.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<Button
+								onClick={() => {
+									setDeleteOpen(false);
+									const [fp] = filePath.split("#");
+									fetch("/api/cms/entry", {
+										body: JSON.stringify({ path: fp, rowId: jsonRowId ?? undefined }),
+										headers: { "Content-Type": "application/json" },
+										method: "DELETE",
+									})
+										.then(async (r) => ({ body: await r.json(), ok: r.ok }))
+										.then(({ body: res, ok }) => {
+											const message = ok
+												? `Trashed → ${res.trashPath}`
+												: `Delete failed: ${res.message}`;
+											setMsg(message);
+											if (ok) toast.success(message);
+											else toast.error(message);
+										})
+										.catch((e: unknown) => toast.error(String(e)));
+								}}
+								variant="destructive"
+							>
+								Delete
+							</Button>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			</div>
 		</div>
 	);
 }
@@ -1062,9 +1132,9 @@ function SeoPane({ seo, fm, setFm, setAiDraft, setAiBusy, aiBusy, body }: any) {
 					Suggest titles
 				</Button>
 				{!seo.aiEnabled && (
-					<Badge className="font-mono" variant="secondary">
-						AI off — set AI_BASE_URL + AI_API_KEY (BYOK)
-					</Badge>
+					<p className="text-xs text-muted-foreground">
+						AI off — set <code>AI_BASE_URL</code> + <code>AI_API_KEY</code> (BYOK)
+					</p>
 				)}
 			</div>
 			{suggest.length > 0 && (
