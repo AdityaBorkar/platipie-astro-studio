@@ -88,12 +88,14 @@ function overallLastSync(status: SyncScopeStatus[] | null): number | null {
 
 const designLinks: ShellLink[] = [
 	{ href: "/design", label: "Design System" },
+	{ href: "/design#tokens", label: "Tokens" },
 	{ href: "/design#brand", label: "Brand Guidelines" },
 	{ href: "/design#style", label: "Style Guide" },
 	{ href: "/design#languages", label: "Design Languages" },
+	{ href: "/design#components", label: "Component gallery" },
 	{ href: "/design#motion", label: "Animations" },
 	{ href: "/design#viewports", label: "Viewports" },
-	{ href: "/design#tokens", label: "Tokens" },
+	{ href: "/design#patterns", label: "Patterns" },
 ];
 
 const componentLinks: ShellLink[] = [

@@ -1,8 +1,9 @@
 # Design system
 
 GitBook-inspired, built on shadcn tokens. The live reference is the `/design`
-route — it renders the complete marketing flow, the token table, the component
-gallery, the motion demos, and the docs shell in one page.
+route — a single-page design-system overview with the token table, brand and
+style rules, design-language layers, a live component gallery, motion demos,
+viewport rails, and the app/docs/marketing patterns.
 
 The goal is not to clone GitBook pixel-for-pixel. It is to carry the parts that
 make the site feel calm and confident — warm paper, one orange, black actions,
@@ -146,25 +147,26 @@ The CMS is a fixed left rail plus a scrolling content pane, not a top nav.
   label, relative age). Hovering or clicking it reveals the exact last-sync
   timestamp and a `Sync now` action.
 
-## Patterns and page flow
+## The `/design` reference
 
-The `/design` route mirrors GitBook's marketing order:
+The `/design` route is a single-page design-system reference with a sticky
+section nav. Sections match the sidebar's Design group:
 
-1. Sticky floating nav.
-2. Announcement pill → display headline → sub → black + gray pills.
-3. Product stage with orange halo and browser frame.
-4. Logo marquee.
-5. Agent pill capsule + copy prompt.
-6. Alternating story rows (stale-content art, agent-network art).
-7. Orbit + four-up bento.
-8. Customer quote.
-9. Enterprise feature ring around certification art.
-10. Customer carousel with progress dashes.
-11. Reference card, token table, brand/style/language sections, component gallery,
-    motion demos, and viewport rail demos.
-12. Three-rail docs shell.
-13. Final CTA with watermark logo.
-14. Light footer with orange enterprise card.
+1. **Overview** — principles, counts, source files, and a section map.
+2. **Tokens** — semantic color roles grouped by surface, action, brand, chrome,
+   and charts; the exact type scale; radius, elevation, spacing, layout rails,
+   and the `:root` / `@theme inline` source.
+3. **Brand guidelines** — mark, lockup, voice, brand surfaces, and logo rules.
+4. **Style guide** — action hierarchy, surface hierarchy, do/don't, and copy.
+5. **Design languages** — token → theme → utility → surface, naming rules, and
+   the complete named-utility inventory.
+6. **Components** — live primitives, the 25-file primitive index, 22 GitBook
+   surfaces, and a `ShowcaseTabs` demo.
+7. **Motion** — live reveal, disclosure, marquee, dash, glow, and hover demos;
+   easing and duration tokens; the keyframe inventory; reduced-motion behavior.
+8. **Viewports** — breakpoints, fixed rails, and every named column recipe.
+9. **Patterns** — the three-rail docs shell, app-page anatomy, the app shell,
+   and the marketing composition order.
 
 App pages reuse the same language, denser:
 
