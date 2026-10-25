@@ -83,7 +83,7 @@ export function ThemeToggle() {
 			</Tooltip>
 			<fieldset
 				aria-label="Theme"
-				className="m-0 hidden items-center gap-px rounded-none border bg-background/70 p-px backdrop-blur-sm sm:inline-flex"
+				className="m-0 hidden items-center gap-px rounded-full border bg-background/70 p-px backdrop-blur-sm sm:inline-flex"
 			>
 				<legend className="sr-only">Theme</legend>
 				{options.map((option) => (

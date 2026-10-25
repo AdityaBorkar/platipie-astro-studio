@@ -69,11 +69,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<script suppressHydrationWarning>{themeScript}</script>
 			</head>
 			<body>
-				<nav className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
+				<nav className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background/70 px-4 py-2 backdrop-blur-xl">
 					<strong className="text-sm font-semibold tracking-tight">platipie-cms</strong>
 					<Separator className="h-4" orientation="vertical" />
 					<Button nativeButton={false} render={<Link to="/" />} size="sm" variant="ghost">
 						Dashboard
+					</Button>
+					<Button nativeButton={false} render={<Link to="/design" />} size="sm" variant="ghost">
+						Design
 					</Button>
 					<Button nativeButton={false} render={<Link to="/settings" />} size="sm" variant="ghost">
 						Settings

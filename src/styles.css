@@ -6,7 +6,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	/* TallyPrime light theme: white paper, blue ink, sparing amber accents. */
+	/* TallyPrime light theme: white paper, blue ink, sparing amber accents.
+	   GitBook-inspired softness: rounded surfaces (pill CTAs, 12–20px cards). */
 	--brand-blue: #075593;
 	--brand-amber: #eda915;
 	--brand-sky: #328ab0;
@@ -35,8 +36,15 @@
 	--chart-3: #eda915;
 	--chart-4: #6bb4cf;
 	--chart-5: #f2c454;
-	/* TallyPrime draws every control with square corners. */
-	--radius: 0rem;
+	/* GitBook reads soft: pill buttons, 12px cards, 20px feature panels. */
+	--radius: 0.75rem;
+	--radius-sm: 0.5rem;
+	--radius-md: 0.75rem;
+	--radius-lg: 1rem;
+	--radius-xl: 1.25rem;
+	--radius-2xl: 1.5rem;
+	--radius-3xl: 1.75rem;
+	--radius-4xl: 2rem;
 	--sidebar: #f7fbfd;
 	--sidebar-foreground: #0c2434;
 	--sidebar-primary: #075593;
@@ -50,6 +58,10 @@
 	--code-foreground: #12293a;
 	--scrim: #000000;
 	--secondary-hover: color-mix(in oklch, var(--secondary), var(--foreground) 5%);
+	/* GitBook-like elevation + motion tokens, derived from shadcn tokens. */
+	--shadow-soft: 0 1px 2px rgb(12 36 52 / 0.05), 0 8px 24px -12px rgb(12 36 52 / 0.18);
+	--shadow-lift: 0 2px 4px rgb(12 36 52 / 0.06), 0 16px 40px -16px rgb(12 36 52 / 0.28);
+	--ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dark {
@@ -93,6 +105,9 @@
 	--code-foreground: #e8e8e8;
 	--scrim: #000000;
 	--secondary-hover: color-mix(in oklch, var(--secondary), var(--foreground) 5%);
+	--shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+	--shadow-lift: 0 2px 6px rgb(0 0 0 / 0.5), 0 24px 56px -16px rgb(0 0 0 / 0.7);
+	--ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @theme inline {
@@ -147,13 +162,13 @@
 	--tracking-neg-45: -0.045em;
 	--leading-102: 1.02;
 	--leading-108: 1.08;
-	--radius-sm: 0rem;
-	--radius-md: 0rem;
-	--radius-lg: 0rem;
-	--radius-xl: 0rem;
-	--radius-2xl: 0rem;
-	--radius-3xl: 0rem;
-	--radius-4xl: 0rem;
+	--radius-sm: 0.5rem;
+	--radius-md: 0.75rem;
+	--radius-lg: 1rem;
+	--radius-xl: 1.25rem;
+	--radius-2xl: 1.5rem;
+	--radius-3xl: 1.75rem;
+	--radius-4xl: 2rem;
 	--color-sidebar: var(--sidebar);
 	--color-sidebar-foreground: var(--sidebar-foreground);
 	--color-sidebar-primary: var(--sidebar-primary);
@@ -255,6 +270,18 @@
 	grid-template-columns: 320px minmax(0, 1fr);
 }
 
+@utility grid-cols-docs-shell {
+	grid-template-columns: 240px minmax(0, 1fr);
+}
+
+@utility grid-cols-docs-wide {
+	grid-template-columns: 240px minmax(0, 1fr) 220px;
+}
+
+@utility max-h-docs-rail {
+	max-height: calc(100dvh - 7rem);
+}
+
 @utility grid-cols-docs {
 	grid-template-columns: minmax(0, 1fr) 600px;
 }
@@ -317,14 +344,9 @@ h4 {
 	background-color: color-mix(in oklab, var(--brand-amber) 28%, transparent);
 }
 
-/* Square corners are the default for every box, matching TallyPrime. */
+/* Soft GitBook-like corners come from per-component radius tokens.
+   No global radius reset — shadcn components opt into their own radii. */
 @layer base {
-	*,
-	*::before,
-	*::after {
-		border-radius: 0;
-	}
-
 	a {
 		color: var(--primary);
 		text-decoration: none;
@@ -585,6 +607,49 @@ pre {
 	}
 }
 
+@keyframes gb-fade-up {
+	from {
+		opacity: 0;
+		transform: translateY(16px) scale(0.99);
+		filter: blur(4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+		filter: blur(0);
+	}
+}
+
+@keyframes gb-marquee {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+@keyframes gb-tab-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px) scale(0.995);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes gb-pulse-glow {
+	0%,
+	100% {
+		opacity: 0.55;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
 .animate-rise {
 	animation: rise-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -593,14 +658,61 @@ pre {
 	animation: rise-in 650ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
 }
 
+/* GitBook-inspired motion: soft scroll reveal + tab crossfade + logo marquee.
+   All motion is transform/opacity only and disabled under reduced-motion. */
+.animate-gb-fade-up {
+	animation: gb-fade-up 700ms var(--ease-spring) both;
+}
+
+.animate-gb-tab-in {
+	animation: gb-tab-in 380ms var(--ease-spring) both;
+}
+
+.animate-gb-marquee {
+	animation: gb-marquee 32s linear infinite;
+}
+
+.animate-gb-marquee:hover {
+	animation-play-state: paused;
+}
+
+.gb-reveal {
+	opacity: 0;
+	transform: translateY(18px) scale(0.995);
+	filter: blur(4px);
+	transition:
+		opacity 700ms var(--ease-spring),
+		transform 700ms var(--ease-spring),
+		filter 700ms var(--ease-spring);
+	transition-delay: var(--gb-reveal-delay, 0ms);
+	will-change: opacity, transform;
+}
+
+.gb-reveal.is-visible {
+	opacity: 1;
+	transform: translateY(0) scale(1);
+	filter: blur(0);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	html {
 		scroll-behavior: auto;
 	}
 
 	.animate-rise,
-	.animate-rise-delayed {
+	.animate-rise-delayed,
+	.animate-gb-fade-up,
+	.animate-gb-tab-in,
+	.animate-gb-marquee,
+	.gb-reveal {
 		animation: none;
+		transition: none;
+	}
+
+	.gb-reveal {
+		opacity: 1;
+		transform: none;
+		filter: none;
 	}
 }
 
@@ -636,6 +748,117 @@ pre {
 	.prose-preview h1,
 	.prose-preview h2 {
 		margin-top: 0.5em;
+	}
+}
+
+/* GitBook-inspired surfaces. Every value resolves to a shadcn token so the
+   palette, borders and radii stay theme-driven (light + dark). */
+@layer components {
+	.gb-eyebrow {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background-color: color-mix(in oklab, var(--muted) 70%, transparent);
+		padding: 0.25rem 0.75rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--muted-foreground);
+	}
+
+	.gb-display {
+		letter-spacing: -0.045em;
+		line-height: 1.02;
+		text-wrap: balance;
+	}
+
+	.gb-sub {
+		text-wrap: pretty;
+		color: var(--muted-foreground);
+	}
+
+	.gb-dotgrid {
+		background-image: radial-gradient(
+			circle at 1px 1px,
+			color-mix(in oklab, var(--foreground) 14%, transparent) 1px,
+			transparent 0
+		);
+		background-size: 22px 22px;
+		mask-image: radial-gradient(ellipse 75% 65% at 50% 0%, #000 25%, transparent 78%);
+	}
+
+	.gb-mask-fade-x {
+		mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+	}
+
+	.gb-card-hover {
+		box-shadow: var(--shadow-soft);
+		transition:
+			transform 350ms var(--ease-spring),
+			box-shadow 350ms var(--ease-spring),
+			border-color 350ms var(--ease-spring);
+	}
+
+	.gb-card-hover:hover {
+		transform: translateY(-3px);
+		box-shadow: var(--shadow-lift);
+		border-color: color-mix(in oklab, var(--primary) 38%, var(--border));
+	}
+
+	.gb-tab-pill {
+		transition:
+			color 250ms var(--ease-spring),
+			background-color 250ms var(--ease-spring),
+			box-shadow 250ms var(--ease-spring);
+	}
+
+	.gb-frame {
+		box-shadow: var(--shadow-lift);
+	}
+
+	.gb-glow {
+		animation: gb-pulse-glow 5s ease-in-out infinite;
+	}
+
+	.gb-search-trigger {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		height: 2rem;
+		width: 100%;
+		max-width: 16rem;
+		cursor: pointer;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background-color: color-mix(in oklab, var(--muted) 60%, transparent);
+		padding-inline: 0.75rem;
+		font-size: 0.875rem;
+		color: var(--muted-foreground);
+		transition:
+			color 250ms var(--ease-spring),
+			border-color 250ms var(--ease-spring),
+			background-color 250ms var(--ease-spring);
+	}
+
+	.gb-search-trigger:hover {
+		border-color: color-mix(in oklab, var(--primary) 40%, transparent);
+		background-color: var(--muted);
+		color: var(--foreground);
+	}
+
+	.gb-search-trigger:focus-visible {
+		outline: none;
+		border-color: var(--ring);
+		box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+	}
+
+	@media (min-width: 1024px) {
+		.gb-search-trigger {
+			max-width: 14rem;
+		}
 	}
 }
 

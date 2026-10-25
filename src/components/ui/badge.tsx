@@ -5,7 +5,7 @@ import { cn } from "cn";
 
 const badgeVariants = cva(
 	[
-		"group/badge inline-flex h-4.5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-none border border-transparent px-1.5 py-0.5 text-11 font-medium whitespace-nowrap transition-all",
+		"group/badge inline-flex h-4.5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-1.5 py-0.5 text-11 font-medium whitespace-nowrap transition-all",
 		"focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
 	],
 	{
