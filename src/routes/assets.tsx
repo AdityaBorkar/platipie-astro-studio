@@ -1,5 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CopyIcon, ImageIcon, RefreshCwIcon, SearchIcon, UploadIcon } from "lucide-react";
+import {
+	CopyIcon,
+	FileIcon,
+	FilmIcon,
+	ImageIcon,
+	RefreshCwIcon,
+	SearchIcon,
+	TypeIcon,
+	UploadIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -10,11 +19,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/com
 import { InputGroup, InputGroupAddon, InputGroupInput } from "#/components/ui/input-group";
 import { Skeleton } from "#/components/ui/skeleton";
 
-interface MediaItem {
+interface AssetRow {
+	dir: string;
+	ext: string;
+	kind: string;
 	mtime: number;
+	name: string;
 	path: string;
 	size: number;
-	url: string;
+}
+
+interface InventoryResponse {
+	rows: AssetRow[];
+	status: { fileCount: number; lastSync: number | null; scope: string }[];
 }
 
 export const Route = createFileRoute("/assets")({
@@ -37,25 +54,48 @@ async function copyPath(path: string) {
 	}
 }
 
+function kindIcon(kind: string) {
+	switch (kind) {
+		case "image":
+		case "svg":
+			return ImageIcon;
+		case "video":
+			return FilmIcon;
+		case "font":
+			return TypeIcon;
+		default:
+			return FileIcon;
+	}
+}
+
+function isPreviewable(row: AssetRow): boolean {
+	return row.kind === "image" || row.kind === "svg";
+}
+
 function AssetsPage() {
-	const [media, setMedia] = useState<MediaItem[] | null>(null);
+	const [assets, setAssets] = useState<AssetRow[] | null>(null);
+	const [lastSync, setLastSync] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [query, setQuery] = useState("");
 	const [tick, setTick] = useState(0);
+	const [syncing, setSyncing] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		let alive = true;
 		setError(null);
-		fetch(`/api/cms/media?tick=${tick}`)
+		fetch(`/api/cms/inventory?scope=assets&tick=${tick}`)
 			.then(async (response) => {
 				const json = await response.json();
-				if (!response.ok) throw new Error(json.message ?? "Failed to list assets");
-				return json as { media: MediaItem[] };
+				if (!response.ok) throw new Error(json.message ?? "Failed to load assets");
+				return json as InventoryResponse;
 			})
 			.then((json) => {
-				if (alive) setMedia(json.media ?? []);
+				if (alive) {
+					setAssets(json.rows ?? []);
+					setLastSync(json.status.find((entry) => entry.scope === "assets")?.lastSync ?? null);
+				}
 			})
 			.catch((e: unknown) => {
 				if (alive) setError(String((e as Error).message ?? e));
@@ -67,11 +107,39 @@ function AssetsPage() {
 
 	const filtered = useMemo(() => {
 		const needle = query.trim().toLowerCase();
-		if (!needle) return media ?? [];
-		return (media ?? []).filter((item) => item.path.toLowerCase().includes(needle));
-	}, [media, query]);
+		if (!needle) return assets ?? [];
+		return (assets ?? []).filter(
+			(item) =>
+				item.path.toLowerCase().includes(needle) || item.kind.toLowerCase().includes(needle),
+		);
+	}, [assets, query]);
 
-	const totalBytes = (media ?? []).reduce((sum, item) => sum + item.size, 0);
+	const kindCounts = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const item of assets ?? []) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
+		return [...counts.entries()].toSorted((a, b) => b[1] - a[1]);
+	}, [assets]);
+
+	const totalBytes = (assets ?? []).reduce((sum, item) => sum + item.size, 0);
+
+	async function resync() {
+		setSyncing(true);
+		try {
+			const response = await fetch("/api/cms/sync", {
+				body: JSON.stringify({ scope: "assets" }),
+				headers: { "Content-Type": "application/json" },
+				method: "POST",
+			});
+			const json = await response.json();
+			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
+			toast.success(`Re-synced ${json.fileCount} assets`);
+			setTick((value) => value + 1);
+		} catch (e: unknown) {
+			toast.error(String((e as Error).message ?? e));
+		} finally {
+			setSyncing(false);
+		}
+	}
 
 	async function upload(file: File) {
 		setUploading(true);
@@ -83,7 +151,7 @@ function AssetsPage() {
 			const json = await response.json();
 			if (!response.ok) throw new Error(json.message ?? "Upload failed");
 			toast.success(`Uploaded → ${json.path}`);
-			setTick((value) => value + 1);
+			await resync();
 		} catch (e: unknown) {
 			toast.error(String((e as Error).message ?? e));
 		} finally {
@@ -98,11 +166,12 @@ function AssetsPage() {
 				<div>
 					<p className="text-11 font-bold tracking-14 text-brand uppercase">Assets</p>
 					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">
-						Images, <span className="text-brand">ready to reference.</span>
+						The <span className="text-brand">assets directory,</span> in view.
 					</h1>
 					<p className="gb-sub mt-3 max-w-xl text-base">
-						Everything under <code>assets/images</code> and <code>public</code>. Uploads land in the
-						Astro checkout and return a site-relative path.
+						Every file under <code>assets/</code> in the Astro checkout, mirrored into the SQLite
+						read-model by the FS watcher. Uploads land in <code>assets/images</code> and return a
+						site-relative path.
 					</p>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
@@ -125,27 +194,31 @@ function AssetsPage() {
 						<UploadIcon className="size-3.5" />
 						{uploading ? "Uploading…" : "Upload"}
 					</Button>
-					<Button onClick={() => setTick((value) => value + 1)} size="sm" variant="outline">
+					<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
 						<RefreshCwIcon className="size-3.5" />
-						Reload
+						{syncing ? "Syncing…" : "Re-sync"}
 					</Button>
 				</div>
 			</div>
 
 			<div className="mt-6 flex flex-wrap items-center gap-1.5">
-				<Badge variant="secondary">{media?.length ?? 0} assets</Badge>
+				<Badge variant="secondary">{assets?.length ?? 0} files</Badge>
 				<Badge className="font-mono" variant="outline">
 					{formatBytes(totalBytes)}
 				</Badge>
-				<Badge variant="brand">
-					<ImageIcon className="size-3" />
-					assets/images + public
+				<Badge className="font-mono" variant={lastSync ? "success" : "destructive"}>
+					{lastSync ? `synced ${new Date(lastSync).toLocaleString()}` : "never synced"}
 				</Badge>
+				{kindCounts.map(([kind, count]) => (
+					<Badge key={kind} variant="outline">
+						{kind} · {count}
+					</Badge>
+				))}
 			</div>
 
 			{error ? (
 				<Hint title="Failed to load assets" variant="danger">
-					{error}
+					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
 				</Hint>
 			) : null}
 
@@ -153,7 +226,7 @@ function AssetsPage() {
 				<CardHeader className="gap-3">
 					<div className="flex flex-wrap items-center justify-between gap-2">
 						<div>
-							<CardTitle>Media library</CardTitle>
+							<CardTitle>Assets Viewer</CardTitle>
 							<CardDescription>
 								Copy a path into <code>featuredImage</code>, <code>ogImage</code>, or{" "}
 								<code>hero_image</code>.
@@ -166,14 +239,14 @@ function AssetsPage() {
 							<InputGroupInput
 								aria-label="Filter assets"
 								onChange={(event) => setQuery(event.target.value)}
-								placeholder="Filter assets…"
+								placeholder="Filter by path or kind…"
 								value={query}
 							/>
 						</InputGroup>
 					</div>
 				</CardHeader>
 				<CardContent>
-					{media === null ? (
+					{assets === null ? (
 						<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 							<Skeleton className="h-48 w-full" />
 							<Skeleton className="h-48 w-full" />
@@ -182,51 +255,62 @@ function AssetsPage() {
 						</div>
 					) : filtered.length === 0 ? (
 						<Hint title="No assets match" variant="info">
-							Upload an image or clear the filter to see the library.
+							Upload a file or clear the filter to see the directory.
 						</Hint>
 					) : (
 						<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-							{filtered.map((item) => (
-								<li
-									className="overflow-hidden rounded-xl border border-border bg-card"
-									key={item.path}
-								>
-									<div className="flex h-36 items-center justify-center bg-muted">
-										<img
-											alt={item.path}
-											className="size-full object-contain"
-											loading="lazy"
-											src={`/api/cms/media?path=${encodeURIComponent(item.path)}`}
-										/>
-									</div>
-									<div className="p-3">
-										<p className="truncate font-mono text-11 text-foreground" title={item.path}>
-											{item.path}
-										</p>
-										<div className="mt-2 flex items-center justify-between gap-2">
-											<span className="font-mono text-10 text-muted-foreground">
-												{formatBytes(item.size)} · {new Date(item.mtime).toLocaleDateString()}
-											</span>
-											<Button
-												aria-label={`Copy ${item.path}`}
-												onClick={() => void copyPath(item.path)}
-												size="icon-xs"
-												variant="ghost"
-											>
-												<CopyIcon className="size-3.5" />
-											</Button>
+							{filtered.map((item) => {
+								const Icon = kindIcon(item.kind);
+								return (
+									<li
+										className="overflow-hidden rounded-xl border border-border bg-card"
+										key={item.path}
+									>
+										<div className="flex h-36 items-center justify-center bg-muted">
+											{isPreviewable(item) ? (
+												<img
+													alt={item.path}
+													className="size-full object-contain"
+													loading="lazy"
+													src={`/api/cms/media?path=${encodeURIComponent(item.path)}`}
+												/>
+											) : (
+												<span className="flex flex-col items-center gap-1 text-muted-foreground">
+													<Icon className="size-8" />
+													<span className="font-mono text-10">.{item.ext.replace(".", "")}</span>
+												</span>
+											)}
 										</div>
-									</div>
-								</li>
-							))}
+										<div className="p-3">
+											<p className="truncate font-mono text-11 text-foreground" title={item.path}>
+												{item.path}
+											</p>
+											<div className="mt-2 flex items-center justify-between gap-2">
+												<span className="font-mono text-10 text-muted-foreground">
+													{item.kind} · {formatBytes(item.size)} ·{" "}
+													{new Date(item.mtime).toLocaleDateString()}
+												</span>
+												<Button
+													aria-label={`Copy ${item.path}`}
+													onClick={() => void copyPath(item.path)}
+													size="icon-xs"
+													variant="ghost"
+												>
+													<CopyIcon className="size-3.5" />
+												</Button>
+											</div>
+										</div>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 				</CardContent>
 			</Card>
 
-			<Hint className="mt-4" title="Upload rules" variant="info">
-				Images only, 10 MB cap, sanitized filenames. The picker writes the returned path; remote{" "}
-				<code>http(s)</code> URLs are also accepted as plain strings.
+			<Hint className="mt-4" title="Sync source" variant="info">
+				Rows come from the <code>assets</code> SQLite table, kept fresh by <code>bun run sync</code>
+				. Uploads still write straight to the Astro checkout.
 			</Hint>
 		</div>
 	);

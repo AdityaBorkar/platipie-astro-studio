@@ -55,7 +55,7 @@ export const Route = createRootRoute({
 			{ title: "platipie-cms" },
 			{
 				content:
-					"Standalone content-management server for the Astro site at ASTRO_ROOT. No database — cms/ files are the source of truth.",
+					"Standalone content-management server for the Astro site at ASTRO_ROOT. Files are the source of truth; SQLite holds a synced read-model.",
 				name: "description",
 			},
 		],

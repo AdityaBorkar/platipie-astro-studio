@@ -8,6 +8,7 @@ import {
 	SearchIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { Badge } from "#/components/ui/badge";
@@ -18,29 +19,36 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { setUiPref, useUiPref } from "#/hooks/use-ui-prefs";
 import { cn } from "#/lib/utils";
 
-interface SitePageSummary {
-	dynamic: boolean;
+interface DbPage {
+	dynamic: number;
+	hasSeo: number;
 	mtime: number;
 	path: string;
+	prerender: string;
+	private: number;
 	route: string;
+	schemaTypes: string;
+	seoDescription: string | null;
+	seoKeywords: string;
+	seoTitle: string | null;
+	size: number;
 	title: string;
 	type: string;
 }
 
+interface InventoryResponse {
+	rows: DbPage[];
+	status: { fileCount: number; lastSync: number | null; scope: string }[];
+}
+
 interface WorkspaceResponse {
 	branch: string;
-	pages: SitePageSummary[];
 	project: string;
 	reachable: boolean;
 	root: string;
 }
 
 interface SettingsResponse {
-	env?: {
-		astroRoot?: string;
-		astroRootReachable?: boolean;
-		astroUrl?: string | null;
-	};
 	values?: { SITE_URL?: string };
 }
 
@@ -52,38 +60,58 @@ export const Route = createFileRoute("/website")({
 	}),
 });
 
-function schemaFor(page: SitePageSummary | null): string {
-	if (!page) return "WebPage";
-	if (page.route.startsWith("/work")) return "CreativeWork";
-	if (page.route.startsWith("/blog")) return "BlogPosting";
-	return "WebPage";
+function parseList(raw: string): string[] {
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed.map(String) : [];
+	} catch {
+		return [];
+	}
+}
+
+function prerenderVariant(prerender: string): "success" | "secondary" | "outline" {
+	if (prerender === "true") return "success";
+	if (prerender === "false") return "secondary";
+	return "outline";
 }
 
 function WebsitePage() {
 	const search = Route.useSearch();
 	const showMeta = useUiPref("showWebsiteMeta");
+	const [inventory, setInventory] = useState<DbPage[] | null>(null);
+	const [lastSync, setLastSync] = useState<number | null>(null);
 	const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null);
 	const [settings, setSettings] = useState<SettingsResponse | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [query, setQuery] = useState("");
 	const [selected, setSelected] = useState<string | null>(search.page ?? null);
 	const [tick, setTick] = useState(0);
+	const [syncing, setSyncing] = useState(false);
 
 	useEffect(() => {
 		let alive = true;
 		setError(null);
-		fetch(`/api/cms/workspace?tick=${tick}`)
+		fetch(`/api/cms/inventory?scope=pages&tick=${tick}`)
 			.then(async (response) => {
 				const json = await response.json();
 				if (!response.ok) throw new Error(json.message ?? "Failed to load pages");
-				return json as WorkspaceResponse;
+				return json as InventoryResponse;
 			})
 			.then((json) => {
-				if (alive) setWorkspace(json);
+				if (alive) {
+					setInventory(json.rows ?? []);
+					setLastSync(json.status.find((entry) => entry.scope === "pages")?.lastSync ?? null);
+				}
 			})
 			.catch((e: unknown) => {
 				if (alive) setError(String((e as Error).message ?? e));
 			});
+		fetch("/api/cms/workspace")
+			.then((response) => response.json())
+			.then((json: WorkspaceResponse) => {
+				if (alive) setWorkspace(json);
+			})
+			.catch(() => {});
 		return () => {
 			alive = false;
 		};
@@ -106,7 +134,7 @@ function WebsitePage() {
 		if (search.page) setSelected(search.page);
 	}, [search.page]);
 
-	const pages = useMemo(() => workspace?.pages ?? [], [workspace]);
+	const pages = useMemo(() => inventory ?? [], [inventory]);
 	const filtered = useMemo(() => {
 		const needle = query.trim().toLowerCase();
 		if (!needle) return pages;
@@ -121,7 +149,27 @@ function WebsitePage() {
 	const selectedPage = pages.find((page) => page.path === selected) ?? pages[0] ?? null;
 	const siteUrl = settings?.values?.SITE_URL?.replace(/\/$/u, "") ?? "";
 	const previewUrl = selectedPage ? `${siteUrl}${selectedPage.route}` : siteUrl;
-	const schemaType = schemaFor(selectedPage);
+	const selectedKeywords = selectedPage ? parseList(selectedPage.seoKeywords) : [];
+	const selectedSchema = selectedPage ? parseList(selectedPage.schemaTypes) : [];
+
+	async function resync() {
+		setSyncing(true);
+		try {
+			const response = await fetch("/api/cms/sync", {
+				body: JSON.stringify({ scope: "pages" }),
+				headers: { "Content-Type": "application/json" },
+				method: "POST",
+			});
+			const json = await response.json();
+			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
+			toast.success(`Re-synced ${json.fileCount} pages`);
+			setTick((value) => value + 1);
+		} catch (e: unknown) {
+			toast.error(String((e as Error).message ?? e));
+		} finally {
+			setSyncing(false);
+		}
+	}
 
 	return (
 		<div className="mx-auto w-page px-5 py-8 sm:py-10">
@@ -132,24 +180,29 @@ function WebsitePage() {
 						Pages, <span className="text-brand">kept in view.</span>
 					</h1>
 					<p className="gb-sub mt-3 max-w-xl text-base">
-						The Astro routes under <code>src/pages</code>. Select a page to inspect its route,
-						metadata, and schema surface.
+						The Astro routes under <code>src/pages</code> with parsed SEO metadata and prerender
+						settings, mirrored into SQLite by the FS watcher.
 					</p>
 				</div>
-				<Button onClick={() => setTick((value) => value + 1)} size="sm" variant="outline">
-					<RefreshCwIcon className="size-3.5" />
-					Reload
-				</Button>
+				<div className="flex flex-wrap items-center gap-2">
+					<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
+						<RefreshCwIcon className="size-3.5" />
+						{syncing ? "Syncing…" : "Re-sync"}
+					</Button>
+				</div>
 			</div>
 
 			<div className="mt-6 flex flex-wrap items-center gap-1.5">
 				<Badge className="font-mono" variant={workspace?.reachable ? "success" : "destructive"}>
-					ASTRO_ROOT {workspace?.reachable ? "reachable" : "missing"}
+					ASTRO_ROOT {workspace?.reachable ? "reachable" : workspace ? "missing" : "…"}
 				</Badge>
 				<Badge className="font-mono" variant="outline">
 					{workspace?.project ?? "…"} · {workspace?.branch ?? "…"}
 				</Badge>
 				<Badge variant="secondary">{pages.length} pages</Badge>
+				<Badge className="font-mono" variant={lastSync ? "success" : "destructive"}>
+					{lastSync ? `synced ${new Date(lastSync).toLocaleString()}` : "never synced"}
+				</Badge>
 				<Badge variant={showMeta ? "brand" : "outline"}>
 					Metadata rail {showMeta ? "on" : "off"}
 				</Badge>
@@ -157,7 +210,7 @@ function WebsitePage() {
 
 			{error ? (
 				<Hint title="Failed to load the website" variant="danger">
-					{error}
+					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
 				</Hint>
 			) : null}
 
@@ -168,7 +221,8 @@ function WebsitePage() {
 							<div>
 								<CardTitle>Pages</CardTitle>
 								<CardDescription>
-									Private <code>_</code> files, API routes, and error pages are hidden.
+									Every file under <code>src/pages</code> — private <code>_</code> partials and API
+									routes are flagged, not hidden.
 								</CardDescription>
 							</div>
 							<InputGroup className="w-full max-w-64">
@@ -185,7 +239,7 @@ function WebsitePage() {
 						</div>
 					</CardHeader>
 					<CardContent className="p-0">
-						{workspace === null ? (
+						{inventory === null ? (
 							<div className="grid gap-2 p-4">
 								<Skeleton className="h-12 w-full" />
 								<Skeleton className="h-12 w-full" />
@@ -214,11 +268,15 @@ function WebsitePage() {
 												<span className="flex items-center gap-2">
 													<span className="truncate text-sm font-semibold">{page.title}</span>
 													{page.dynamic ? <Badge variant="brand">dynamic</Badge> : null}
+													{page.private ? <Badge variant="outline">private</Badge> : null}
 												</span>
 												<span className="mt-0.5 block truncate font-mono text-11 text-muted-foreground">
 													{page.route} · {page.path}
 												</span>
 											</span>
+											<Badge className="font-mono" variant={prerenderVariant(page.prerender)}>
+												{page.prerender === "unset" ? "ssr" : `pre:${page.prerender}`}
+											</Badge>
 											<Badge className="font-mono" variant="outline">
 												{page.type}
 											</Badge>
@@ -245,17 +303,25 @@ function WebsitePage() {
 									<CardContent className="grid gap-2">
 										<Badge
 											className="w-fit font-mono"
-											variant={siteUrl ? "outline" : "destructive"}
+											variant={selectedPage.seoTitle ? "success" : "destructive"}
 										>
-											SITE_URL {siteUrl || "unset"}
+											{selectedPage.seoTitle ?? "no title parsed"}
 										</Badge>
+										<p className="text-xs text-muted-foreground">
+											{selectedPage.seoDescription ?? "No description const parsed from the page."}
+										</p>
+										{selectedKeywords.length > 0 ? (
+											<div className="flex flex-wrap gap-1">
+												{selectedKeywords.slice(0, 12).map((keyword) => (
+													<Badge className="font-mono" key={keyword} variant="outline">
+														{keyword}
+													</Badge>
+												))}
+											</div>
+										) : null}
 										<p className="font-mono text-11 break-all text-muted-foreground">
 											{previewUrl || "Set SITE_URL in Settings to preview the canonical URL."}
 										</p>
-										<Hint title="Source of truth" variant="info">
-											Page-level titles and descriptions still live in the Astro file. Edit{" "}
-											<code>{selectedPage.path}</code> to change them.
-										</Hint>
 									</CardContent>
 								</Card>
 
@@ -282,6 +348,15 @@ function WebsitePage() {
 											</Badge>
 										</div>
 										<div className="flex items-center justify-between gap-2">
+											<span className="text-muted-foreground">Prerender</span>
+											<Badge
+												className="font-mono"
+												variant={prerenderVariant(selectedPage.prerender)}
+											>
+												{selectedPage.prerender}
+											</Badge>
+										</div>
+										<div className="flex items-center justify-between gap-2">
 											<span className="text-muted-foreground">Updated</span>
 											<span className="font-mono">
 												{new Date(selectedPage.mtime).toLocaleDateString()}
@@ -296,20 +371,22 @@ function WebsitePage() {
 											<Code2Icon className="size-4 text-brand" />
 											Schema markup
 										</CardTitle>
-										<CardDescription>Suggested JSON-LD for this route.</CardDescription>
+										<CardDescription>Types referenced by this page.</CardDescription>
 									</CardHeader>
 									<CardContent>
-										<pre className="code-surface p-3 font-mono text-10 whitespace-pre-wrap">
-											{JSON.stringify(
-												{
-													"@context": "https://schema.org",
-													"@type": schemaType,
-													url: previewUrl || selectedPage.route,
-												},
-												null,
-												2,
-											)}
-										</pre>
+										{selectedSchema.length === 0 ? (
+											<p className="text-xs text-muted-foreground">
+												No <code>SchemaMarkup</code> references parsed.
+											</p>
+										) : (
+											<div className="flex flex-wrap gap-1">
+												{selectedSchema.map((type) => (
+													<Badge className="font-mono" key={type} variant="outline">
+														{type}
+													</Badge>
+												))}
+											</div>
+										)}
 									</CardContent>
 								</Card>
 							</>

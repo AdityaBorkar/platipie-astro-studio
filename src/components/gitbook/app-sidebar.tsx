@@ -69,6 +69,7 @@ const designLinks: ShellLink[] = [
 
 const componentLinks: ShellLink[] = [
 	{ href: "/components", label: "Components" },
+	{ href: "/components#synced", label: "Synced inventory" },
 	{ href: "/components#templates", label: "Templates" },
 	{ href: "/components#ui", label: "UI" },
 ];

@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
 	ArrowRightIcon,
 	Code2Icon,
+	CogIcon,
 	DatabaseIcon,
 	GitBranchIcon,
 	PaletteIcon,
@@ -52,11 +53,44 @@ export const Route = createFileRoute("/settings")({
 const sections = [
 	{ href: "#environment", icon: DatabaseIcon, label: "Environment" },
 	{ href: "#appearance", icon: PaletteIcon, label: "Appearance" },
+	{ href: "#astro", icon: CogIcon, label: "Astro Settings" },
 	{ href: "#typed-form", icon: Settings2Icon, label: "Typed form" },
 	{ href: "#advanced", icon: Code2Icon, label: "Advanced" },
 	{ href: "#blog", icon: GitBranchIcon, label: "Blog registration" },
 	{ href: "#trash", icon: Trash2Icon, label: "Trash" },
 ];
+
+interface AstroSettings {
+	adapter: string | null;
+	filePath: string;
+	integrations: string;
+	mtime: number;
+	output: string | null;
+	raw: string;
+	redirects: string;
+	site: string | null;
+}
+
+function parseList(raw: string): string[] {
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed.map(String) : [];
+	} catch {
+		return [];
+	}
+}
+
+function parseRecord(raw: string): Record<string, string> {
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+			return parsed as Record<string, string>;
+		}
+		return {};
+	} catch {
+		return {};
+	}
+}
 
 function SettingsPage() {
 	const { resolved } = useTheme();
@@ -68,6 +102,8 @@ function SettingsPage() {
 	const [msg, setMsg] = useState<string | null>(null);
 	const [err, setErr] = useState<string | null>(null);
 	const [trash, setTrash] = useState<{ path: string }[]>([]);
+	const [astro, setAstro] = useState<AstroSettings | null>(null);
+	const [astroSync, setAstroSync] = useState<number | null>(null);
 	const [loaded, setLoaded] = useState(false);
 	const [rawDialogOpen, setRawDialogOpen] = useState(false);
 	const [activeSection, setActiveSection] = useState("environment");
@@ -85,6 +121,16 @@ function SettingsPage() {
 			.then((value) => value.json())
 			.catch(() => ({ trash: [] }));
 		setTrash(trashResponse.trash ?? []);
+		const astroResponse = await fetch("/api/cms/inventory?scope=astro")
+			.then((value) => value.json())
+			.catch(() => ({ rows: [], status: [] }));
+		const astroRows = (astroResponse.rows ?? []) as AstroSettings[];
+		setAstro(astroRows[0] ?? null);
+		const astroStatus = (astroResponse.status ?? []) as {
+			lastSync: number | null;
+			scope: string;
+		}[];
+		setAstroSync(astroStatus.find((entry) => entry.scope === "astro")?.lastSync ?? null);
 		setLoaded(true);
 	}, []);
 
@@ -289,6 +335,86 @@ function SettingsPage() {
 								</div>
 								<ThemeToggle />
 							</div>
+						</CardContent>
+					</Card>
+
+					<Card id="astro">
+						<CardHeader>
+							<CardTitle className="flex items-center gap-2">
+								<CogIcon className="size-4 text-brand" />
+								Astro Settings
+							</CardTitle>
+							<CardDescription>
+								Parsed from <code>{astro?.filePath ?? "astro.config.mjs"}</code> in the Astro
+								checkout · mirrored into SQLite by the FS watcher · read-only in V1.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="grid gap-3">
+							{astro ? (
+								<>
+									<div className="flex flex-wrap items-center gap-1.5">
+										<Badge className="font-mono" variant="outline">
+											site {astro.site ?? "unset"}
+										</Badge>
+										<Badge className="font-mono" variant="outline">
+											output {astro.output ?? "unset"}
+										</Badge>
+										<Badge className="font-mono" variant="outline">
+											adapter {astro.adapter ?? "unset"}
+										</Badge>
+										<Badge className="font-mono" variant="secondary">
+											{parseList(astro.integrations).length} integrations
+										</Badge>
+										<Badge className="font-mono" variant="secondary">
+											{Object.keys(parseRecord(astro.redirects)).length} redirects
+										</Badge>
+										<Badge className="font-mono" variant="success">
+											{astroSync
+												? `synced ${new Date(astroSync).toLocaleString()}`
+												: "never synced"}
+										</Badge>
+									</div>
+									{parseList(astro.integrations).length > 0 ? (
+										<div className="flex flex-wrap gap-1">
+											{parseList(astro.integrations).map((integration) => (
+												<Badge className="font-mono" key={integration} variant="outline">
+													{integration}
+												</Badge>
+											))}
+										</div>
+									) : null}
+									{Object.keys(parseRecord(astro.redirects)).length > 0 ? (
+										<Table>
+											<TableHeader>
+												<TableRow className="bg-muted/40 hover:bg-muted/40">
+													<TableHead>From</TableHead>
+													<TableHead className="text-right">To</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{Object.entries(parseRecord(astro.redirects)).map(([from, to]) => (
+													<TableRow key={from}>
+														<TableCell className="font-mono text-xs">{from}</TableCell>
+														<TableCell className="text-right font-mono text-xs">{to}</TableCell>
+													</TableRow>
+												))}
+											</TableBody>
+										</Table>
+									) : null}
+									<pre className="code-surface max-h-96 overflow-auto p-3 font-mono text-10 whitespace-pre-wrap">
+										{astro.raw}
+									</pre>
+									<Hint title="Read-only" variant="info">
+										Editing <code>astro.config.mjs</code> from the CMS is out of scope for V1 —
+										change it in the Astro checkout. The watcher re-syncs this view on save.
+									</Hint>
+								</>
+							) : (
+								<Hint title="Astro config not mirrored yet" variant="info">
+									Run <code>bun run sync:once</code> to parse <code>astro.config.mjs</code> into the
+									SQLite mirror.
+								</Hint>
+							)}
 						</CardContent>
 					</Card>
 

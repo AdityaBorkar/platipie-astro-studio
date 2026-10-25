@@ -5,17 +5,27 @@ import {
 	DatabaseIcon,
 	FileTextIcon,
 	FolderIcon,
+	RefreshCwIcon,
 	SearchIcon,
 	SparklesIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Skeleton } from "#/components/ui/skeleton";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "#/components/ui/table";
 import { useUiPref } from "#/hooks/use-ui-prefs";
 import { cn } from "#/lib/utils";
 
@@ -49,6 +59,21 @@ interface CollectionsResponse {
 	recent: RecentEntry[];
 }
 
+interface DbCollection {
+	base: string;
+	count: number;
+	filePath: string;
+	loader: string;
+	name: string;
+	pattern: string;
+	schemaKeys: string;
+}
+
+interface ContentModelResponse {
+	rows: DbCollection[];
+	status: { fileCount: number; lastSync: number | null; scope: string }[];
+}
+
 export const Route = createFileRoute("/content")({
 	component: ContentPage,
 	head: () => ({ meta: [{ title: "Content · platipie-cms" }] }),
@@ -57,7 +82,10 @@ export const Route = createFileRoute("/content")({
 function ContentPage() {
 	const showSeo = useUiPref("showContentSeo");
 	const [data, setData] = useState<CollectionsResponse | null>(null);
+	const [model, setModel] = useState<DbCollection[] | null>(null);
+	const [modelSync, setModelSync] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [syncing, setSyncing] = useState(false);
 
 	useEffect(() => {
 		let alive = true;
@@ -73,10 +101,47 @@ function ContentPage() {
 			.catch((e: unknown) => {
 				if (alive) setError(String((e as Error).message ?? e));
 			});
+		fetch("/api/cms/inventory?scope=content")
+			.then(async (response) => {
+				const json = await response.json();
+				if (!response.ok) throw new Error(json.message ?? "Failed to load content model");
+				return json as ContentModelResponse;
+			})
+			.then((json) => {
+				if (alive) {
+					setModel(json.rows ?? []);
+					setModelSync(json.status.find((entry) => entry.scope === "content")?.lastSync ?? null);
+				}
+			})
+			.catch(() => {
+				if (alive) setModel([]);
+			});
 		return () => {
 			alive = false;
 		};
 	}, []);
+
+	async function resyncModel() {
+		setSyncing(true);
+		try {
+			const response = await fetch("/api/cms/sync", {
+				body: JSON.stringify({ scope: "content" }),
+				headers: { "Content-Type": "application/json" },
+				method: "POST",
+			});
+			const json = await response.json();
+			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
+			toast.success(`Content model re-synced (${json.fileCount} collections)`);
+			const reload = await fetch("/api/cms/inventory?scope=content");
+			const next = (await reload.json()) as ContentModelResponse;
+			setModel(next.rows ?? []);
+			setModelSync(next.status.find((entry) => entry.scope === "content")?.lastSync ?? null);
+		} catch (e: unknown) {
+			toast.error(String((e as Error).message ?? e));
+		} finally {
+			setSyncing(false);
+		}
+	}
 
 	const totalEntries = (data?.collections ?? []).reduce(
 		(sum, collection) => sum + collection.count,
@@ -93,7 +158,7 @@ function ContentPage() {
 					</h1>
 					<p className="gb-sub mt-3 max-w-xl text-base">
 						The CMS collections registered against the Astro checkout. Files stay the source of
-						truth; nothing is copied into a database.
+						truth; the SQLite mirror is a read-model kept fresh by the FS watcher.
 					</p>
 				</div>
 				<Button nativeButton={false} render={<Link to="/" />} size="sm" variant="outline">
@@ -124,6 +189,88 @@ function ContentPage() {
 
 			<div className={cn("mt-6 grid items-start gap-4", showSeo && "lg:grid-cols-app-rail")}>
 				<div className="grid min-w-0 gap-4">
+					<Card>
+						<CardHeader>
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<div>
+									<CardTitle className="flex items-center gap-2">
+										<DatabaseIcon className="size-4 text-brand" />
+										Content model
+									</CardTitle>
+									<CardDescription className="font-mono text-11">
+										Parsed from src/content.config.ts — the only CMS source ·{" "}
+										{modelSync ? `synced ${new Date(modelSync).toLocaleString()}` : "never synced"}
+									</CardDescription>
+								</div>
+								<Button
+									disabled={syncing}
+									onClick={() => void resyncModel()}
+									size="sm"
+									variant="outline"
+								>
+									<RefreshCwIcon className="size-3.5" />
+									{syncing ? "Syncing…" : "Re-sync"}
+								</Button>
+							</div>
+						</CardHeader>
+						<CardContent className="p-0">
+							{model === null ? (
+								<div className="grid gap-2 p-4">
+									<Skeleton className="h-9 w-full" />
+									<Skeleton className="h-9 w-full" />
+								</div>
+							) : model.length === 0 ? (
+								<Hint className="m-4" title="No content model yet" variant="info">
+									Run <code>bun run sync:once</code> to parse <code>src/content.config.ts</code>{" "}
+									into the SQLite mirror.
+								</Hint>
+							) : (
+								<Table>
+									<TableHeader>
+										<TableRow className="bg-muted/40 hover:bg-muted/40">
+											<TableHead className="pl-5">Collection</TableHead>
+											<TableHead>Loader</TableHead>
+											<TableHead>Schema keys</TableHead>
+											<TableHead className="text-right">Entries</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{model.map((collection) => (
+											<TableRow key={collection.name}>
+												<TableCell className="pl-5">
+													<span className="block font-mono text-xs font-semibold">
+														{collection.name}
+													</span>
+													<span className="block truncate font-mono text-10 text-muted-foreground">
+														{collection.base || "—"} · {collection.pattern || "file"}
+													</span>
+												</TableCell>
+												<TableCell>
+													<Badge className="font-mono" variant="outline">
+														{collection.loader}
+													</Badge>
+												</TableCell>
+												<TableCell className="max-w-64 truncate font-mono text-11 text-muted-foreground">
+													{(() => {
+														try {
+															const keys = JSON.parse(collection.schemaKeys) as string[];
+															return keys.join(", ");
+														} catch {
+															return "—";
+														}
+													})()}
+												</TableCell>
+												<TableCell className="text-right font-mono text-11">
+													{collection.count}
+												</TableCell>
+											</TableRow>
+										))}
+									</TableBody>
+								</Table>
+							)}
+						</CardContent>
+					</Card>
+
 					{data === null ? (
 						<Skeleton className="h-64 w-full" />
 					) : (

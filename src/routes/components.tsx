@@ -8,8 +8,11 @@ import {
 	GlobeIcon,
 	LayoutDashboardIcon,
 	PaletteIcon,
+	RefreshCwIcon,
 	Settings2Icon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { Badge } from "#/components/ui/badge";
@@ -18,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/com
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { Separator } from "#/components/ui/separator";
+import { Skeleton } from "#/components/ui/skeleton";
 import { Switch } from "#/components/ui/switch";
 import {
 	Table,
@@ -92,6 +96,196 @@ const primitives = [
 	{ name: "textarea", purpose: "Descriptions, promises, and raw JSON." },
 ];
 
+interface SyncedFile {
+	dir: string;
+	ext: string;
+	hasSlot?: number;
+	mtime: number;
+	name: string;
+	path: string;
+	props?: string;
+	size: number;
+	subject?: string | null;
+}
+
+interface SyncedInventory {
+	rows: Record<string, SyncedFile[]>;
+	status: { fileCount: number; lastSync: number | null; scope: string }[];
+}
+
+const SYNCED_GROUPS = [
+	{ description: "Reusable UI under src/components", scope: "components", title: "Components" },
+	{ description: "Page shells under src/layouts", scope: "layouts", title: "Layouts" },
+	{ description: "Scaffolds under src/templates", scope: "templates", title: "Templates" },
+	{
+		description: "React-email templates under src/emails, when present",
+		scope: "emails",
+		title: "Emails",
+	},
+];
+
+function lastSyncFor(status: SyncedInventory["status"], scope: string): number | null {
+	return status.find((entry) => entry.scope === scope)?.lastSync ?? null;
+}
+
+function SyncedInventorySection() {
+	const [inventory, setInventory] = useState<SyncedInventory | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [syncing, setSyncing] = useState(false);
+
+	useEffect(() => {
+		let alive = true;
+		fetch("/api/cms/inventory?scope=components,layouts,templates,emails")
+			.then(async (response) => {
+				const json = await response.json();
+				if (!response.ok) throw new Error(json.message ?? "Failed to load inventory");
+				return json as SyncedInventory;
+			})
+			.then((json) => {
+				if (alive) setInventory(json);
+			})
+			.catch((e: unknown) => {
+				if (alive) setError(String((e as Error).message ?? e));
+			});
+		return () => {
+			alive = false;
+		};
+	}, []);
+
+	async function resync() {
+		setSyncing(true);
+		try {
+			const response = await fetch("/api/cms/sync", {
+				body: JSON.stringify({}),
+				headers: { "Content-Type": "application/json" },
+				method: "POST",
+			});
+			const json = await response.json();
+			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
+			toast.success("Inventory re-synced from the Astro checkout");
+			const reload = await fetch("/api/cms/inventory?scope=components,layouts,templates,emails");
+			setInventory((await reload.json()) as SyncedInventory);
+		} catch (e: unknown) {
+			toast.error(String((e as Error).message ?? e));
+		} finally {
+			setSyncing(false);
+		}
+	}
+
+	return (
+		<section className="mt-10 scroll-mt-24" id="synced">
+			<div className="flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<p className="text-11 font-bold tracking-14 text-brand uppercase">Synced</p>
+					<h2 className="mt-2 text-title font-bold tracking-heading">From the Astro checkout</h2>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Mirrored into SQLite by the FS watcher. Files stay the source of truth.
+					</p>
+				</div>
+				<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
+					<RefreshCwIcon className="size-3.5" />
+					{syncing ? "Syncing…" : "Re-sync"}
+				</Button>
+			</div>
+
+			{error ? (
+				<Hint className="mt-4" title="Inventory unavailable" variant="warning">
+					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
+				</Hint>
+			) : null}
+
+			<div className="mt-4 grid gap-4">
+				{inventory === null && !error ? <Skeleton className="h-48 w-full" /> : null}
+				{SYNCED_GROUPS.map((group) => {
+					const files = inventory?.rows[group.scope] ?? [];
+					const synced = lastSyncFor(inventory?.status ?? [], group.scope);
+					return (
+						<Card key={group.scope}>
+							<CardHeader>
+								<div className="flex flex-wrap items-center justify-between gap-2">
+									<div>
+										<CardTitle>{group.title}</CardTitle>
+										<CardDescription className="font-mono text-11">
+											src/{group.scope} · {group.description}
+										</CardDescription>
+									</div>
+									<div className="flex items-center gap-1.5">
+										<Badge variant="secondary">{files.length} files</Badge>
+										<Badge className="font-mono" variant={synced ? "success" : "destructive"}>
+											{synced ? `synced ${new Date(synced).toLocaleDateString()}` : "never synced"}
+										</Badge>
+									</div>
+								</div>
+							</CardHeader>
+							<CardContent className="p-0">
+								{files.length === 0 ? (
+									<Hint
+										className="m-4"
+										title={`No ${group.title.toLowerCase()} found`}
+										variant="info"
+									>
+										{group.scope === "emails"
+											? "src/emails is not present in the Astro checkout (react-email is optional)."
+											: group.scope === "templates"
+												? "src/templates exists but holds no files yet."
+												: `No files under src/${group.scope} — the watcher will pick them up when added.`}
+									</Hint>
+								) : (
+									<Table>
+										<TableHeader>
+											<TableRow className="bg-muted/40 hover:bg-muted/40">
+												<TableHead className="pl-5">File</TableHead>
+												<TableHead>Details</TableHead>
+												<TableHead className="text-right">Updated</TableHead>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											{files.slice(0, 30).map((file) => (
+												<TableRow key={file.path}>
+													<TableCell className="pl-5">
+														<span className="block font-mono text-xs">{file.name}</span>
+														<span className="block truncate font-mono text-10 text-muted-foreground">
+															{file.path}
+														</span>
+													</TableCell>
+													<TableCell className="text-xs text-muted-foreground">
+														{file.props
+															? (() => {
+																	const props = JSON.parse(file.props) as string[];
+																	return (
+																		<span>
+																			{file.ext} · {props.length}{" "}
+																			{props.length === 1 ? "prop" : "props"}
+																			{file.hasSlot ? " · slot" : ""}
+																		</span>
+																	);
+																})()
+															: file.subject
+																? `subject: ${file.subject.slice(0, 60)}`
+																: file.ext}
+													</TableCell>
+													<TableCell className="text-right font-mono text-11">
+														{new Date(file.mtime).toLocaleDateString()}
+													</TableCell>
+												</TableRow>
+											))}
+										</TableBody>
+									</Table>
+								)}
+								{files.length > 30 ? (
+									<p className="px-5 py-2 font-mono text-10 text-muted-foreground">
+										Showing 30 of {files.length} — refine in the checkout or query the mirror.
+									</p>
+								) : null}
+							</CardContent>
+						</Card>
+					);
+				})}
+			</div>
+		</section>
+	);
+}
+
 function ComponentsPage() {
 	return (
 		<div className="mx-auto w-page px-5 py-8 sm:py-10">
@@ -114,6 +308,8 @@ function ComponentsPage() {
 				<Badge variant="outline">{templates.length} templates</Badge>
 				<Badge variant="secondary">shadcn base-nova</Badge>
 			</div>
+
+			<SyncedInventorySection />
 
 			<section className="mt-10 scroll-mt-24" id="components">
 				<div className="flex flex-wrap items-end justify-between gap-3">
