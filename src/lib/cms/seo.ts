@@ -239,42 +239,25 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 	};
 }
 
-// ---- BYOK AI (OpenAI-compatible, server-only, rate-limited) ----
-
-const bucket = new Map<string, { count: number; resetAt: number }>();
-// per minute per IP
-const RATE_LIMIT = 10;
-const WINDOW_MS = 60_000;
-
-function checkRateLimit(ip: string): void {
-	const now = Date.now();
-	const cur = bucket.get(ip);
-	if (!cur || now > cur.resetAt) {
-		bucket.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-		return;
-	}
-	if (cur.count >= RATE_LIMIT) {
-		throw new CmsError("IO", "AI rate limit exceeded (10/min) — try again shortly", {
-			status: 429,
-		});
-	}
-	cur.count++;
-}
+// ---- BYOK AI (OpenAI-compatible, server-only) ----
+// Rate limiting lives in the oRPC `aiRateLimitMiddleware` (transport edge),
+// so direct lib callers stay unlimited but every HTTP call is capped.
 
 export async function aiSuggest(
-	action: "titles" | "excerpt" | "keywords",
+	action: "excerpt" | "keywords" | "titles",
 	fm: Record<string, unknown>,
 	body: string,
-	ip: string,
-): Promise<{ action: string; suggestions: string[]; model: string }> {
+	ip?: string,
+): Promise<{ action: string; model: string; suggestions: string[] }> {
+	void ip;
 	const cfg = getAiConfig();
-	if (!cfg)
+	if (!cfg) {
 		throw new CmsError(
 			"AI_DISABLED",
 			"AI suggestions are disabled — set AI_BASE_URL and AI_API_KEY",
 			{ status: 400 },
 		);
-	checkRateLimit(ip);
+	}
 	const title = (fm.title as string) ?? "";
 	const prompt =
 		action === "titles"

@@ -1,12 +1,24 @@
 {
-	"name": "platipie-cms",
+	"name": "@platipie/cms",
 	"version": "0.1.0",
-	"private": true,
 	"description": "Standalone content-management server for the Astro site — TanStack Start + Bun + Nitro (bun preset).",
+	"bin": {
+		"platipie-cms": "./cli/index.ts"
+	},
+	"files": [
+		"cli/",
+		"public/",
+		"src/",
+		"tsr.config.json",
+		"vite.config.ts"
+	],
 	"type": "module",
 	"imports": {
 		"#/*": "./src/*",
 		"#cms/*": "./src/lib/cms/*"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"scripts": {
 		"build": "vite build",
@@ -15,12 +27,14 @@
 		"check:tailwind": "bunx tailwind-lint",
 		"check:types": "tsrs",
 		"clean": "bunx rimraf --glob \"**/{node_modules,.output,.dist,.local.tanstack,bun.lockb}\"",
+		"cms": "bun ./cli/index.ts",
 		"db:generate": "drizzle-kit generate",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
 		"dev": "bun --bun vite dev",
 		"gen:routes": "tsr generate",
 		"prepare": "husky",
+		"prepublishOnly": "bun run build",
 		"preview": "vite preview",
 		"start": "bun --bun vite start",
 		"sync": "bun scripts/sync.ts",
@@ -33,6 +47,9 @@
 		"@base-ui/react": "1.9.0",
 		"@fontsource-variable/geist-mono": "5.3.0",
 		"@monaco-editor/react": "4.7.0",
+		"@orpc/client": "1.16.1",
+		"@orpc/openapi": "1.16.1",
+		"@orpc/server": "1.16.1",
 		"@pierre/highlights": "0.2.0",
 		"@t3-oss/env-core": "0.13.11",
 		"@tanstack/react-devtools": "0.10.13",

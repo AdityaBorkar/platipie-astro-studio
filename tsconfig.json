@@ -26,5 +26,5 @@
 		"types": ["vite/client", "@types/bun", "node"],
 		"verbatimModuleSyntax": true
 	},
-	"include": ["src/**/*", "scripts/**/*", "vite.config.ts"]
+	"include": ["cli/**/*", "src/**/*", "scripts/**/*", "vite.config.ts"]
 }

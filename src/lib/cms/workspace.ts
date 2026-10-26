@@ -29,6 +29,7 @@ export interface SitePage {
 export interface Workspace {
 	branch: string;
 	emailCount: number;
+	isAstro: boolean;
 	pages: SitePage[];
 	project: string;
 	reachable: boolean;
@@ -85,6 +86,26 @@ function isUtilityPage(relativeFromPages: string, stem: string): boolean {
 }
 
 const EMAIL_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
+
+const ASTRO_CONFIG_NAMES = [
+	"astro.config.cjs",
+	"astro.config.js",
+	"astro.config.mjs",
+	"astro.config.mts",
+	"astro.config.ts",
+] as const;
+
+async function isAstroProject(root: string): Promise<boolean> {
+	for (const name of ASTRO_CONFIG_NAMES) {
+		try {
+			const stat = await fs.stat(path.join(root, name));
+			if (stat.isFile()) return true;
+		} catch {
+			// Try the next candidate.
+		}
+	}
+	return false;
+}
 
 /** Count react-email templates under `<root>/src/emails` (optional upstream). */
 async function countEmailFiles(dirAbs: string): Promise<number> {
@@ -179,6 +200,7 @@ export async function getWorkspace(): Promise<Workspace> {
 	return {
 		branch: reachable ? readBranch(root) : "unknown",
 		emailCount: reachable ? await countEmailFiles(path.join(root, "src/emails")) : 0,
+		isAstro: reachable ? await isAstroProject(root) : false,
 		pages: reachable ? await listSitePages() : [],
 		project: await readProjectName(root),
 		reachable,

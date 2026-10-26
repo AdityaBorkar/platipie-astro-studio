@@ -55,6 +55,7 @@ interface ShellLink {
 interface WorkspacePayload {
 	branch: string;
 	emailCount: number;
+	isAstro?: boolean;
 	pages: {
 		kind: "dynamic" | "static" | "utility";
 		path: string;
@@ -491,6 +492,7 @@ function WorkspaceMenu({
 }) {
 	const [entries, setEntries] = useState<ProjectEntry[] | null>(null);
 	const [open, setOpen] = useState(false);
+	const [autoOpened, setAutoOpened] = useState(false);
 	const [query, setQuery] = useState("");
 	const [switching, setSwitching] = useState<string | null>(null);
 	const [view, setView] = useState<"cards" | "list">("list");
@@ -525,6 +527,15 @@ function WorkspaceMenu({
 		setBrowseError(null);
 		setQuery("");
 	}, [open]);
+
+	// When the server starts outside an Astro project (e.g. `bunx @platipie/cms`
+	// from a non-Astro folder) the Project Selector opens by default.
+	useEffect(() => {
+		if (!autoOpened && workspace && workspace.isAstro === false) {
+			setAutoOpened(true);
+			setOpen(true);
+		}
+	}, [autoOpened, workspace]);
 
 	const needle = query.trim().toLowerCase();
 	const filtered = (entries ?? []).filter(
