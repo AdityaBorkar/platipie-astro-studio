@@ -174,8 +174,8 @@ App pages reuse the same language, denser:
   recent edits, and the project root. The active project's branch and drift state
   are always visible.
 - Pages: Astro page inventory plus a sticky SEO / page metadata / schema rail.
-- Content: collection cards with a browse dialog, recent edits, SEO + schema rail,
-  and the CMS tree in the left rail.
+- Content: a three-pane browser — collapsible collection tree in the left rail,
+  local rendered preview in the center, and a read-only source properties rail.
 - Assets: free and folder views over the image/media grid, drag-drop upload, a
   preview dialog with crop/rotate editing, metadata, and copy path / URL / Markdown.
 - Components: a three-pane workbench — tabbed Components/Layouts/Templates rail,

@@ -30,6 +30,10 @@
 			}
 		},
 		{
+			"files": ["src/routes/content.tsx"],
+			"rules": { "react/no-danger": "off" }
+		},
+		{
 			"files": ["src/routes/edit.$collection.$id.tsx"],
 			"rules": { "react/no-danger": "off" }
 		},

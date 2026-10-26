@@ -15,7 +15,7 @@ bun run build && bun run start
 - Fixed app rail: project + branch, nav map, and expandable Pages/Content/Components/Design groups.
 - Dashboard: `/dashboard` — project identity and sync state, page/content/asset/component counts, recent edits, drift warnings, and the project root.
 - Pages: `/pages?page=<route>` — Astro page inventory with optional SEO / metadata / schema rail.
-- Content: `/content` — collections, recent edits, SEO + schema rail.
+- Content: `/content` — three-pane browser: collection tree, local entry preview, and a source properties rail.
 - Components: `/components` — three-pane workbench: Components / Layouts / Templates list, staged preview canvas, and a live props rail.
 - Assets: `/assets` — image library with upload, copy-path, and preview proxy.
 - Unified editor: `/edit/:collection/:id?path=<repo-rel>` — Markdown ⇄ Visual, frontmatter form, local + faithful previews, SEO + schema sidebar, one save pipeline.
