@@ -478,6 +478,8 @@ const breakpoints = [
 
 const gridUtilities = [
 	"grid-cols-app-rail",
+	"grid-cols-asset-browser",
+	"grid-cols-asset-dialog",
 	"grid-cols-card-action",
 	"grid-cols-docs",
 	"grid-cols-docs-shell",
@@ -514,6 +516,7 @@ const utilityGroups = [
 			"max-h-30dvh",
 			"max-h-45dvh",
 			"max-h-58vh",
+			"max-h-asset-preview",
 			"max-h-workspace-menu",
 			"max-h-docs-rail",
 		],
@@ -537,6 +540,8 @@ const utilityGroups = [
 			"grid-cols-enterprise",
 			"grid-cols-settings",
 			"grid-cols-app-rail",
+			"grid-cols-asset-browser",
+			"grid-cols-asset-dialog",
 			"grid-cols-pages-workspace",
 			"grid-cols-page-meta",
 		],

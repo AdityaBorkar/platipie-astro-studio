@@ -284,6 +284,10 @@
 	max-height: 58vh;
 }
 
+@utility max-h-asset-preview {
+	max-height: 58vh;
+}
+
 @utility min-h-60vh {
 	min-height: 60vh;
 }
@@ -398,6 +402,14 @@
 
 @utility grid-cols-settings {
 	grid-template-columns: 200px minmax(0, 1fr);
+}
+
+@utility grid-cols-asset-browser {
+	grid-template-columns: 14rem minmax(0, 1fr);
+}
+
+@utility grid-cols-asset-dialog {
+	grid-template-columns: minmax(0, 1fr) 18rem;
 }
 
 @utility bottom-status {

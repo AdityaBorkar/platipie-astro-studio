@@ -34,6 +34,10 @@
 			"rules": { "react/no-danger": "off" }
 		},
 		{
+			"files": ["src/components/assets/asset-preview-dialog.tsx"],
+			"rules": { "jsx-a11y/media-has-caption": "off" }
+		},
+		{
 			"files": ["src/cms/**/*.ts", "scripts/**/*.ts"],
 			"rules": { "no-await-in-loop": "off" }
 		},

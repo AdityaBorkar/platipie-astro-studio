@@ -13,8 +13,12 @@ const CONTENT_TYPES: Record<string, string> = {
 	".ico": "image/x-icon",
 	".jpeg": "image/jpeg",
 	".jpg": "image/jpeg",
+	".mov": "video/quicktime",
+	".mp4": "video/mp4",
+	".ogv": "video/ogg",
 	".png": "image/png",
 	".svg": "image/svg+xml",
+	".webm": "video/webm",
 	".webp": "image/webp",
 };
 

@@ -176,7 +176,8 @@ App pages reuse the same language, denser:
 - Pages: Astro page inventory plus a sticky SEO / page metadata / schema rail.
 - Content: collection cards with a browse dialog, recent edits, SEO + schema rail,
   and the CMS tree in the left rail.
-- Assets: image grid with upload, copy-path, and a media proxy.
+- Assets: free and folder views over the image/media grid, drag-drop upload, a
+  preview dialog with crop/rotate editing, metadata, and copy path / URL / Markdown.
 - Components: surface gallery, template cards, and the primitive index.
 - Settings: sticky section rail + Cards, Appearance (theme switcher), typed form,
   danger-zone actions.
