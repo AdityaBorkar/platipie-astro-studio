@@ -15,7 +15,6 @@ function describeError(error: unknown): { title: string; message: string } {
 	};
 }
 
-/** Full-screen error state shown when a route throws. */
 export function ErrorPage({ error, reset }: { error: unknown; reset: () => void }) {
 	const { title, message } = describeError(error);
 	const stack = error instanceof Error ? error.stack : undefined;

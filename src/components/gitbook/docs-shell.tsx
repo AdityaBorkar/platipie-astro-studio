@@ -19,7 +19,6 @@ interface DocsNavGroup {
 	title: string;
 }
 
-/** GitBook docs layout: pinned tree nav, centered content, pinned TOC rail. */
 export function DocsShell({ sidebar, children, toc }: DocsShellProps) {
 	return (
 		<div className="mx-auto grid w-page gap-8 px-5 py-10 lg:grid-cols-docs-shell xl:grid-cols-docs-wide">
@@ -36,7 +35,6 @@ export function DocsShell({ sidebar, children, toc }: DocsShellProps) {
 	);
 }
 
-/** Sidebar tree group with GitBook's orange active rail. */
 export function DocsNav({ groups }: { groups: DocsNavGroup[] }) {
 	return (
 		<nav aria-label="Docs" className="grid gap-6">
@@ -69,7 +67,6 @@ export function DocsNav({ groups }: { groups: DocsNavGroup[] }) {
 	);
 }
 
-/** Right-rail table of contents with an orange active link. */
 export function DocsToc({ items }: { items: { active?: boolean; href: string; label: string }[] }) {
 	return (
 		<nav aria-label="On this page" className="border-l border-border pl-4">

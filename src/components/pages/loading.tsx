@@ -1,6 +1,5 @@
 import { BrandMark } from "#/components/gitbook/brand";
 
-/** Full-screen loading state used while route loaders are pending. */
 export function LoadingPage({ message = "Loading workspace…" }: { message?: string }) {
 	return (
 		<div className="relative grid min-h-dvh place-items-center">

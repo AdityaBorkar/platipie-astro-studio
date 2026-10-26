@@ -11,11 +11,6 @@ interface RevealProps {
 	as?: ElementType;
 }
 
-/**
- * GitBook's scroll entrance: a short rise with a touch of blur, resolved by
- * an IntersectionObserver. Transform/opacity only, one-shot, and skipped
- * entirely when the reader prefers reduced motion.
- */
 export function Reveal({ children, className, delay = 0, as }: RevealProps) {
 	const ref = useRef<HTMLElement | null>(null);
 	const Tag = (as ?? "div") as ElementType;

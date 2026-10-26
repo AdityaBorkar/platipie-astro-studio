@@ -28,10 +28,6 @@ function relativeLabel(from: number, now: number): string {
 	return `${Math.round(hours / 24)}d ago`;
 }
 
-/**
- * Footer status strip: quiet at rest, expands on hover or keyboard focus to
- * show the exact sync watermark and a manual re-sync action.
- */
 function SyncStatusBar({
 	className,
 	lastSync,

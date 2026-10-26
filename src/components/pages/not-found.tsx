@@ -5,7 +5,6 @@ import { BrandMark } from "#/components/gitbook/brand";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 
-/** Full-screen 404 state shown for unknown routes. */
 export function NotFoundPage() {
 	return (
 		<div className="relative flex min-h-dvh flex-col">

@@ -14,11 +14,6 @@ interface CustomersProps {
 
 const defaultItems = ["Acme", "bunq", "FreedomPay", "OpenHQ", "Northwind", "Contoso"];
 
-/**
- * GitBook's customer carousel: a single row of tall muted logo cards, progress
- * dashes on the left, and round arrow controls on the right. Scroll-snap does
- * the actual work; buttons just nudge the track.
- */
 export function Customers({
 	className,
 	items = defaultItems,

@@ -21,11 +21,6 @@ interface FeatureGridProps {
 	title?: string;
 }
 
-/**
- * The four-up bento from GitBook's product section: plain icon, 20px title,
- * muted body, and a soft pill label pinned to the bottom. Cards lift a few
- * pixels and darken their edge on hover.
- */
 export function FeatureGrid({
 	className,
 	eyebrow,
@@ -92,7 +87,6 @@ export function FeatureGrid({
 	);
 }
 
-/** Compact two-column feature list used inside docs surfaces. */
 export function MiniFeatures({
 	items,
 }: {

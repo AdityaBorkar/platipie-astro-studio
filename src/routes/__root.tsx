@@ -64,10 +64,7 @@ export const Route = createRootRoute({
 	shellComponent: RootDocument,
 });
 
-/**
- * React Grab — hover any element and press Cmd/Ctrl+C to copy its source
- * context for AI agents. Loaded lazily, in the browser, in development only.
- */
+// React Grab: dev-only lazy browser load for copying element source context.
 function ReactGrabDevtools() {
 	useEffect(() => {
 		if (import.meta.env.DEV) {

@@ -35,11 +35,6 @@ interface HintProps {
 	variant?: HintVariant;
 }
 
-/**
- * GitBook docs callout: a tinted panel, a single colored icon, a compact bold
- * title, and a readable body. Kept border-light so it never competes with the
- * surrounding prose.
- */
 export function Hint({ variant = "info", title, children, className }: HintProps) {
 	const style = styles[variant];
 	const Icon = style.icon;

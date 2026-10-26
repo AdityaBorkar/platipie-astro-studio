@@ -20,8 +20,6 @@ const styles: Record<string, string> = {
 	bunq: "font-semibold tracking-neg-35 lowercase",
 };
 
-/** Text wordmarks with tiny geometric marks, tuned to read as logos without
- * shipping third-party artwork. */
 export function LogoWordmark({
 	ariaHidden,
 	className,
@@ -52,10 +50,6 @@ export function LogoWordmark({
 	);
 }
 
-/**
- * GitBook's social-proof strip. The marquee uses two identical tracks and a
- * horizontal mask; hovering pauses it. Reduced motion falls back to a wrap.
- */
 export function LogoCloud({
 	className,
 	items = defaultItems,

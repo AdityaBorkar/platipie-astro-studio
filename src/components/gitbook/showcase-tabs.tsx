@@ -15,10 +15,6 @@ interface ShowcaseTabsProps {
 	items: ShowcaseTab[];
 }
 
-/**
- * GitBook product-tour tabs: a muted pill switcher, a white active pill, and
- * a crossfade panel with a soft lift.
- */
 export function ShowcaseTabs({ items, defaultId }: ShowcaseTabsProps) {
 	const [active, setActive] = useState(defaultId ?? items[0]?.id);
 	const current = items.find((tab) => tab.id === active) ?? items[0];

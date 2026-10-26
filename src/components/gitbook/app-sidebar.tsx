@@ -1151,11 +1151,6 @@ function SidebarPanel({
 	);
 }
 
-/**
- * Fixed application rail: workspace identity and the CMS map live at the top,
- * followed by the primary navigation. The same panel becomes a drawer below
- * the `lg` breakpoint.
- */
 export function AppSidebar() {
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const workspace = useWorkspace();

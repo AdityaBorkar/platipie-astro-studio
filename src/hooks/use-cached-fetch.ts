@@ -81,7 +81,6 @@ function isDeepEqual(a: unknown, b: unknown): boolean {
 	return stableStringify(a) === stableStringify(b);
 }
 
-/** Fetch JSON and throw a readable error when the response is not ok. */
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(url, init);
 	const json = (await response.json().catch(() => ({}))) as {
@@ -108,12 +107,6 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
 	return json as T;
 }
 
-/**
- * Stale-while-revalidate fetch.
- * Shows the cached value on first render, revalidates in the background,
- * only swaps state when the payload actually changed, and toasts (instead of
- * blanking the page) when a background refresh fails.
- */
 export function useCachedFetch<T>(
 	key: string,
 	fetcher: () => Promise<T>,

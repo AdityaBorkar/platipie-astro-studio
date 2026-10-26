@@ -29,7 +29,7 @@ bun run sync:once        # one full SQLite rebuild, no watcher
 
 - API is oRPC, not per-endpoint files: procedures live in `src/lib/cms/orpc/router.ts`; `/api/cms/*` is served through the OpenAPI handler (`src/routes/api/cms.$.ts`), typed RPC at `/api/rpc/*` (`src/routes/api/rpc.$.ts`). Only `src/routes/api/cms/media.ts` is a plain file route (binary streaming + multipart upload aren't JSON procedures).
 - Files under `PROJECT_PATH` (falls back to cwd) are the source of truth. SQLite (`$XDG_DATA_HOME/platipie-cms-dev/cms.db` or `CMS_DB_PATH`, schema `src/lib/cms/db/schema.ts`, DDL inline in `db/index.ts`) is only the sync read-model — never treat it as canonical. Dev server starts the watcher eagerly (`vite.config.ts`); production boots lazily on first API request.
-- Server-only: all of `src/lib/cms/` (PROJECT_PATH jail in `config.ts`, AI keys, uploader). Import it via `#cms/*` alias, app code via `#/*` (`~/*` also maps to `src/*`); never import `#cms/*` from client components. Client env only via `src/env.ts` (`VITE_` prefix, T3 `createEnv`).
+- Server-only: all of `src/lib/cms/` (PROJECT_PATH jail in `config.ts`, AI keys, uploader). Import it via `#/cms/*` alias, app code via `#/*` (`~/*` also maps to `src/*`); never import `#/cms/*` from client components. Client env only via `src/env.ts` (`VITE_` prefix, T3 `createEnv`).
 - `src/routeTree.gen.ts` is generated (`*.gen.ts` gitignored) — never edit by hand.
 
 ## Env and safety

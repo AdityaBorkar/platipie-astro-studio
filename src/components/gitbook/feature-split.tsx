@@ -13,11 +13,6 @@ interface FeatureSplitProps {
 	title: ReactNode;
 }
 
-/**
- * GitBook's alternating story rows: a large, softly tinted illustration next
- * to a tight text column. Reverse flips the visual order on desktop while
- * keeping the text first in the DOM.
- */
 export function FeatureSplit({
 	art,
 	body,

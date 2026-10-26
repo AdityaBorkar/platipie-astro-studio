@@ -105,7 +105,6 @@ function useQueryPath(): string {
 	const search = Route.useSearch() as { path?: string };
 	const params = Route.useParams() as { collection: string; id: string };
 	if (search.path) return decodeURIComponent(search.path);
-	// Fallback: reconstruct from params.
 	const coll = params.collection;
 	const id = decodeURIComponent(params.id);
 	if (coll === "projects" || coll === "blog") return `cms/${coll}/${id}.md`;
@@ -214,8 +213,7 @@ function UnifiedEditor() {
 			content: `<p>${(body ?? "").slice(0, 2000).replaceAll("<", "&lt;")}</p>`,
 			extensions: [StarterKit],
 			onUpdate: ({ editor }) => {
-				// naive HTML->markdown is lossy; we keep TipTap HTML in a side buffer
-				// and convert on save via textContent fallback. Full fidelity lives in Markdown mode.
+				// HTML->markdown is lossy; full fidelity lives in Markdown mode.
 				setBody(editor.getText());
 			},
 		},

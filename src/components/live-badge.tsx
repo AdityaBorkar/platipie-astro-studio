@@ -3,10 +3,7 @@ import { RefreshCwIcon } from "lucide-react";
 import { Badge } from "#/components/ui/badge";
 import { cn } from "#/lib/utils";
 
-/**
- * Quiet background-refresh pill. Renders nothing at rest so cached content
- * never shifts; appears only while a stale-while-revalidate fetch is in flight.
- */
+/** Renders nothing at rest to avoid layout shift; visible only during refresh. */
 export function LiveBadge({ className, refreshing }: { className?: string; refreshing: boolean }) {
 	if (!refreshing) return null;
 	return (

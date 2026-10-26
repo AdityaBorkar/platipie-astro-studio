@@ -1,21 +1,8 @@
-// Sync CLI: builds the SQLite read-model and keeps it fresh via the FS watcher.
-//
-// Usage:
-//   bun scripts/sync.ts [--once] [--scope=<scope>] [--machine-stats=<seconds>]
-//                         [--root=<path>] [--db=<sqlite-path>] [--help]
-//
-//   --once               run one full sync (or one scope) then exit
-//   --scope=<scope>      assets|content|components|layouts|templates|pages|emails|astro
-//   --machine-stats=N    print CPU / memory / disk usage every N seconds
-//   --root=<path>        override PROJECT_PATH for this run
-//   --db=<path>          override the SQLite file (CMS_DB_PATH)
-//   --help               show this help
-//
-// Thin wrapper: the implementation lives in
-// `src/lib/cms/sync/command.ts` so the `platipie-cms sync` CLI subcommand
-// shares the exact same engine and flags.
-import { runSyncCommand } from "#cms/sync/command.ts";
-import { SYNC_SCOPES } from "#cms/sync/index.ts";
+// Usage: bun scripts/sync.ts [--once] [--scope=<scope>] [--machine-stats=N] [--root=<path>] [--db=<path>]
+//   --once runs one sync then exits (default: watch); --scope needs --once.
+//   --machine-stats=N prints CPU/mem/disk every N seconds.
+import { runSyncCommand } from "#/cms/sync/command.ts";
+import { SYNC_SCOPES } from "#/cms/sync/index.ts";
 
 function usage(): void {
 	console.log(`platipie-cms sync — SQLite read-model + FS watcher

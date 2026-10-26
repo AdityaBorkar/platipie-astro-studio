@@ -2,8 +2,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* General Sans — the face GitBook uses for display and UI. Vendored locally so
-   the design system has no CDN dependency. */
 @font-face {
 	font-family: "General Sans";
 	src: url("/fonts/general-sans/general-sans-400.woff2") format("woff2");
@@ -38,9 +36,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* GitBook-inspired palette, expressed entirely through shadcn tokens.
-   Ink is warm stone, paper is off-white, and a single orange carries every
-   piece of emphasis. Primary actions stay black; orange is the brand signal. */
 :root {
 	--brand: oklch(0.675 0.2143 36.97);
 	--brand-foreground: oklch(1 0 0);
@@ -236,8 +231,7 @@
 	--color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Design-system utilities, mapping arbitrary values to named classes so the
-   Tailwind lint rules stay clean. */
+/* Named utilities so Tailwind lint stays clean (no arbitrary values). */
 @utility origin-transform {
 	transform-origin: var(--transform-origin);
 }
@@ -497,7 +491,6 @@ p {
 	background-color: color-mix(in oklch, var(--brand) 26%, transparent);
 }
 
-/* Warm, quiet wash used behind empty/error/loading states. */
 .page-glow {
 	position: absolute;
 	inset: 0 0 auto;
@@ -518,8 +511,6 @@ p {
 	mask-image: linear-gradient(to bottom, oklch(0 0 0) 0%, transparent 94%);
 }
 
-/* An orange halo inspired by the GitBook product stage. Pure CSS so it can
-   sit behind any frame without shipping a hero image. */
 .gb-halo {
 	position: absolute;
 	inset: auto 50% -30%;
@@ -561,7 +552,6 @@ p {
 	opacity: 0.5;
 }
 
-/* Hairline grid, used sparingly behind product frames. */
 .grid-fade {
 	background-image:
 		linear-gradient(to right, var(--border) 1px, transparent 1px),
@@ -571,7 +561,6 @@ p {
 	mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, oklch(0 0 0) 20%, transparent 75%);
 }
 
-/* Inline code — quiet warm chip, never applied inside pre/code blocks. */
 @layer base {
 	a {
 		color: inherit;
@@ -613,7 +602,6 @@ pre {
 	tab-size: 2;
 }
 
-/* Code surfaces — warm paper in light mode, warm near-black in dark mode. */
 @layer components {
 	.card-spacing {
 		--card-spacing: calc(var(--spacing) * 4);
@@ -719,7 +707,6 @@ pre {
 	}
 }
 
-/* Thin, unobtrusive scrollbars. */
 * {
 	scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
 	scrollbar-width: thin;
@@ -745,10 +732,6 @@ pre {
 	background: color-mix(in oklch, var(--foreground) 28%, transparent);
 	background-clip: padding-box;
 }
-
-/* ------------------------------------------------------------------ */
-/* Motion                                                              */
-/* ------------------------------------------------------------------ */
 
 @keyframes rise-in {
 	from {
@@ -871,8 +854,7 @@ pre {
 	animation: gb-glow 5s ease-in-out infinite;
 }
 
-/* Scroll reveal used by <Reveal>. Transform + opacity only; blur is a light
-   extra so content resolves rather than merely slides. */
+/* Scroll reveal: transform + opacity only for perf. */
 .gb-reveal {
 	opacity: 0;
 	transform: translateY(18px) scale(0.996);
@@ -937,10 +919,6 @@ pre {
 		background-color: var(--background);
 	}
 }
-
-/* ------------------------------------------------------------------ */
-/* GitBook-inspired component surfaces                                 */
-/* ------------------------------------------------------------------ */
 
 @layer components {
 	.gb-eyebrow {
@@ -1007,8 +985,6 @@ pre {
 		border-color: color-mix(in oklch, var(--foreground) 14%, var(--border));
 	}
 
-	/* Navigational cards: no resting shadow, a short lift, and a visible
-	   keyboard ring. Keeps dense grids calm while still feeling alive. */
 	.gb-card-link {
 		transition:
 			transform 320ms var(--ease-spring),
@@ -1040,9 +1016,6 @@ pre {
 			transform 260ms var(--ease-spring);
 	}
 
-	/* Sidebar disclosure. The track collapses to 0fr so height, opacity, and
-	   the content's own deblur resolve as one motion instead of snapping.
-	   Children stagger back in on a short cadence to keep the reveal soft. */
 	.gb-accordion {
 		display: grid;
 		grid-template-rows: 0fr;
@@ -1131,8 +1104,6 @@ pre {
 		animation: gb-glow 5s ease-in-out infinite;
 	}
 
-	/* Product stage: an orange halo and a browser frame, GitBook's signature
-	   hero composition. */
 	.gb-stage {
 		position: relative;
 		isolation: isolate;
@@ -1174,7 +1145,6 @@ pre {
 		filter: blur(18px);
 	}
 
-	/* Marquee track with a mask and a soft pause affordance. */
 	.gb-marquee-track {
 		display: flex;
 		width: max-content;
@@ -1183,7 +1153,6 @@ pre {
 		padding-right: 3.5rem;
 	}
 
-	/* Dashed connector art used in the system orbits. */
 	.gb-connector {
 		stroke: color-mix(in oklch, var(--brand) 55%, transparent);
 		stroke-width: 1;
@@ -1214,7 +1183,6 @@ pre {
 			linear-gradient(135deg, var(--brand), color-mix(in oklch, var(--brand) 68%, oklch(0 0 0)));
 	}
 
-	/* Docs prose surface. */
 	.prose-preview {
 		padding: 20px;
 		color: var(--foreground);

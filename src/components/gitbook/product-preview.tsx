@@ -46,7 +46,6 @@ const navGroups = [
 	},
 ];
 
-/** A static, CSS-only replica of a docs workspace for the hero stage. */
 export function ProductDemo({ className }: { className?: string }) {
 	return (
 		<div className={cn("relative bg-card text-left text-13 text-foreground", className)}>
@@ -217,7 +216,6 @@ export function ProductDemo({ className }: { className?: string }) {
 				</aside>
 			</div>
 
-			{/* Floating status pill, echoing GitBook's assistant chip. */}
 			<div className="pointer-events-none absolute right-5 bottom-3 hidden items-center gap-2 rounded-full bg-foreground px-3 py-1.5 text-10 font-semibold text-background shadow-lift sm:flex">
 				<CircleCheckIcon className="size-3 text-brand-mint" />
 				Content health
@@ -227,7 +225,6 @@ export function ProductDemo({ className }: { className?: string }) {
 	);
 }
 
-/** Orange halo + browser frame + workspace demo — the hero's product stage. */
 export function ProductStage({ className }: { className?: string }) {
 	return (
 		<div className={cn("gb-stage relative mx-auto mt-12 w-full max-w-6xl", className)}>

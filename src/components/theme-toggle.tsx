@@ -53,7 +53,6 @@ function ThemeOptionButton({
 	);
 }
 
-/** Small segmented theme switch, echoing the theme picker in Fly docs. */
 export function ThemeToggle() {
 	const { mode, resolved, setMode } = useTheme();
 	const isDark = resolved === "dark";

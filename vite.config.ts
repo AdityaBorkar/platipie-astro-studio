@@ -6,9 +6,8 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 
-/** Eager sync-engine lifecycle for `vite dev`: start the watcher for the open
- * project on server boot, stop it when the dev server (or process) closes.
- * Production/preview boots lazily on the first API request instead. */
+/** Dev starts watcher eagerly on boot, stops on server close;
+ * prod boots lazily on first API request. */
 function platipieSyncEngine(): Plugin {
 	return {
 		async configureServer(server) {
@@ -41,9 +40,7 @@ export default defineConfig({
 		platipieSyncEngine(),
 		devtools(),
 		tailwindcss(),
-		// Nitro with `bun` preset: TanStack Start serves via Nitro; when building
-		// for production the preset resolves to `bun` so `bun run start` runs the
-		// Nitro bun server. Options are forwarded to Nitro underneath.
+		// Nitro `bun` preset so production build runs on the bun server.
 		tanstackStart({
 			// @ts-expect-error — nitro preset passthrough (Start forwards `server` to Nitro)
 			server: { preset: "bun" },

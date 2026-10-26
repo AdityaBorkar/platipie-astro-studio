@@ -52,11 +52,6 @@ const defaultColumns: FooterColumn[] = [
 	},
 ];
 
-/**
- * GitBook's light footer: orange section eyebrows, a wide link matrix, and a
- * right-hand stack of promotional cards led by a saturated orange enterprise
- * plate.
- */
 export function Footer({ brand = "platipie", className, columns = defaultColumns }: FooterProps) {
 	return (
 		<footer className={cn("border-t border-border bg-muted", className)}>

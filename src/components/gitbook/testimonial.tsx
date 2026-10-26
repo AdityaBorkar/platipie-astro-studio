@@ -14,10 +14,6 @@ interface TestimonialProps {
 	jobTitle: string;
 }
 
-/**
- * GitBook's customer quote: a squared logo card on the left, a large quote on
- * the right, and a black pill that opens the full story.
- */
 export function Testimonial({
 	attribution,
 	className,

@@ -18,11 +18,6 @@ interface HeroProps {
 	title: ReactNode;
 }
 
-/**
- * GitBook's centered marketing hero: a small announcement pill, a tightly
- * tracked display headline with an orange emphasis span, muted sub-copy, and
- * two pill actions. The product stage slots in as children.
- */
 export function Hero({ announce, title, sub, actions, children, className }: HeroProps) {
 	return (
 		<section className={cn("relative overflow-hidden px-5 pt-14 pb-12 sm:pt-20", className)}>
@@ -78,11 +73,6 @@ interface HeroFrameProps {
 	label?: string;
 }
 
-/**
- * Browser chrome for the product stage: a soft lifted surface, hairline
- * traffic lights, and a centered address pill. The frame is deliberately
- * quiet so the orange halo does the work.
- */
 export function HeroFrame({ children, className, label = "app.platipie.local" }: HeroFrameProps) {
 	return (
 		<div

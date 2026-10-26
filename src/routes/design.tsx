@@ -184,8 +184,7 @@ const principles = [
 	},
 ];
 
-// Token tables mirror the :root, .dark, and @theme inline blocks in
-// src/styles.css. Update both in the same change.
+// Token tables mirror src/styles.css — update both.
 interface ColorToken {
 	dark: string;
 	light: string;

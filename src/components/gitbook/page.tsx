@@ -22,10 +22,6 @@ function relativeAge(timestamp: number): string {
 	return `${Math.round(hours / 24)}d ago`;
 }
 
-/**
- * The one sync badge used by every app page. Relative age stays compact on
- * mobile; the exact watermark lives in the title and the sidebar popover.
- */
 export function SyncBadge({
 	className,
 	lastSync,
@@ -46,7 +42,6 @@ export function SyncBadge({
 	);
 }
 
-/** The shared content column for every app screen. */
 export function PageShell({ children, className }: { children: ReactNode; className?: string }) {
 	return <div className={cn("mx-auto w-page px-5 py-8 sm:py-10", className)}>{children}</div>;
 }
@@ -60,10 +55,6 @@ interface PageHeaderProps {
 	title: ReactNode;
 }
 
-/**
- * App-page header. One structure for every route: eyebrow, display headline,
- * short description, page actions, then a meta row of status badges.
- */
 export function PageHeader({
 	actions,
 	className,
@@ -97,7 +88,6 @@ interface SectionHeaderProps {
 	title: ReactNode;
 }
 
-/** In-page section heading, matching the page header rhythm. */
 export function SectionHeader({
 	actions,
 	className,
@@ -120,14 +110,12 @@ export function SectionHeader({
 interface EmptyStateProps {
 	action?: ReactNode;
 	className?: string;
-	/** Drops the tinted panel for use inside a card body. */
 	compact?: boolean;
 	description?: ReactNode;
 	icon?: LucideIcon;
 	title: string;
 }
 
-/** Neutral empty state — no alert tint, one clear next step. */
 export function EmptyState({
 	action,
 	className,

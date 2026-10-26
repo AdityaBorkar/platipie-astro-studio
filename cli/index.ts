@@ -1,13 +1,6 @@
 #!/usr/bin/env bun
-// Entry point for `bunx @platipie/cms`.
-// Starts the CMS server. When invoked from inside an Astro project that
-// project is loaded by default (PROJECT_PATH = cwd). Otherwise the server
-// starts with the current folder (non-Astro) and the web UI auto-opens the
-// Project Selector dialog so the user can pick a project.
-//
-// CLI parsing is handled by commander; session framing, prompts, and status
-// output use @clack/prompts (colours via picocolors). Interactive prompts
-// only run on a TTY — CI / piped runs never block waiting for input.
+// Entry point for `bunx @platipie/cms`: loads cwd Astro project by default, else auto-opens Project Selector.
+// Interactive prompts run TTY-only so CI never blocks.
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -15,11 +8,15 @@ import * as p from "@clack/prompts";
 import { Command, InvalidArgumentError } from "commander";
 import pc from "picocolors";
 
-import { isAstroProjectSync, isDirectorySync, readPackageVersionSync } from "#cms/astro-project.ts";
-import { getHost, parsePortStrict, resolvePort } from "#cms/config.ts";
-import { runSyncCommand } from "#cms/sync/command.ts";
-import type { SyncCommandOptions } from "#cms/sync/command.ts";
-import { SYNC_SCOPES } from "#cms/sync/index.ts";
+import {
+	isAstroProjectSync,
+	isDirectorySync,
+	readPackageVersionSync,
+} from "#/cms/astro-project.ts";
+import { getHost, parsePortStrict, resolvePort } from "#/cms/config.ts";
+import { runSyncCommand } from "#/cms/sync/command.ts";
+import type { SyncCommandOptions } from "#/cms/sync/command.ts";
+import { SYNC_SCOPES } from "#/cms/sync/index.ts";
 
 interface CliActionOptions {
 	dev: boolean;
@@ -63,13 +60,8 @@ function cmsRoot(): string {
 	return path.resolve(import.meta.dir, "..");
 }
 
-/**
- * Resolve which project to load. Precedence mirrors the server
- * (`getProjectRoot`): explicit flag/arg first, then `PROJECT_PATH`, then cwd.
- * An explicitly configured root (flag/arg/env) that is missing or not an
- * Astro project throws instead of silently falling back to the selector —
- * only a clean cwd without any configuration auto-opens the selector.
- */
+/** Explicit root (flag/arg/env) throws instead of silently falling back;
+ * only clean cwd auto-opens selector. */
 function resolveProjectRoot(explicit: string | undefined, cwd: string): ProjectSelection {
 	if (explicit !== undefined) {
 		const root = path.resolve(explicit);
@@ -133,8 +125,7 @@ async function startServer(server: ServerConfig): Promise<void> {
 		throw new Error("Production output not found — run `bun run build` first or omit --prod.");
 	}
 
-	// Matches `bun --bun vite dev` / `bun run preview` in package.json: the
-	// leading `--bun` forces the bun runtime for the vite child process.
+	// Leading --bun forces bun runtime for vite child process.
 	const subcommand = server.useProd ? "preview" : "dev";
 	const args = ["--bun", "vite", subcommand, "--port", String(server.port), "--host", server.host];
 	if (server.open) args.push("--open");
@@ -159,9 +150,7 @@ async function startServer(server: ServerConfig): Promise<void> {
 	const onSignal = (signal: NodeJS.Signals) => {
 		try {
 			child.kill(signal);
-		} catch {
-			// Already exited.
-		}
+		} catch {}
 	};
 	process.on("SIGINT", onSignal);
 	process.on("SIGTERM", onSignal);

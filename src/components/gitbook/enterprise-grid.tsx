@@ -20,10 +20,6 @@ interface EnterpriseGridProps {
 	title?: string;
 }
 
-/**
- * GitBook's enterprise layout: a centered promise, then four text columns
- * arranged around an orange certification plate.
- */
 export function EnterpriseGrid({ actions, className, features, sub, title }: EnterpriseGridProps) {
 	const left = features.slice(0, 2);
 	const right = features.slice(2, 4);

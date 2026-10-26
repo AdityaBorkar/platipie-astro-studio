@@ -5,10 +5,6 @@ interface BrandMarkProps {
 	title?: string;
 }
 
-/**
- * Layered-page mark in the spirit of GitBook's stacked logo, drawn with three
- * rounded planes so it stays legible down to 16px.
- */
 export function BrandMark({ className, title = "platipie" }: BrandMarkProps) {
 	return (
 		<svg
@@ -49,7 +45,6 @@ interface WordmarkProps {
 	badge?: string;
 }
 
-/** Brand lockup used in the header, footer, and product frames. */
 export function Wordmark({ badge, className, label = "platipie", markClassName }: WordmarkProps) {
 	return (
 		<span className={cn("inline-flex items-center gap-2", className)}>

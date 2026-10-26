@@ -23,11 +23,6 @@ const defaultAgents: AgentButton[] = [
 	{ href: "/design", label: "Cursor" },
 ];
 
-/**
- * GitBook's AI setup strip: white pills inside an orange-glowed capsule.
- * The glow is a blurred duplicate beneath the real container, so it stays
- * cheap and never animates layout.
- */
 export function AgentRow({
 	className,
 	items = defaultAgents,

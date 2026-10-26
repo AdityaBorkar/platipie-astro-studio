@@ -1,7 +1,6 @@
-// oRPC typed-RPC entrypoint for the generated client (`src/lib/cms/orpc/client.ts`).
 import { createFileRoute } from "@tanstack/react-router";
 
-import { cmsRPCHandler, contextForRequest } from "#cms/orpc/handler.ts";
+import { cmsRPCHandler, contextForRequest } from "#/cms/orpc/handler.ts";
 
 export const Route = createFileRoute("/api/rpc/$")({
 	server: {

@@ -14,8 +14,7 @@
 	],
 	"type": "module",
 	"imports": {
-		"#/*": "./src/*",
-		"#cms/*": "./src/lib/cms/*"
+		"#/*": "./src/*"
 	},
 	"publishConfig": {
 		"access": "public"
@@ -24,7 +23,6 @@
 		"build": "vite build",
 		"check:format": "oxfmt",
 		"check:lint": "oxlint",
-		"check:tailwind": "bunx tailwind-lint",
 		"check:types": "tsrs",
 		"clean": "bunx rimraf --glob \"**/{node_modules,.output,.dist,.local.tanstack,bun.lockb}\"",
 		"cms": "bun ./cli/index.ts",
@@ -34,11 +32,8 @@
 		"dev": "bun --bun vite dev",
 		"gen:routes": "tsr generate",
 		"prepare": "husky",
-		"prepublishOnly": "bun run build",
 		"preview": "vite preview",
 		"start": "bun --bun vite start",
-		"sync": "bun scripts/sync.ts",
-		"sync:once": "bun scripts/sync.ts --once",
 		"test": "bun test",
 		"verify": "bun check:format && bun check:lint && bun check:types && bun run build"
 	},

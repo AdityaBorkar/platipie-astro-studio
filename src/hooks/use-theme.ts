@@ -73,7 +73,6 @@ function getServerSnapshot() {
 	return INITIAL_STATE;
 }
 
-/** Set light / dark / system and persist it for the pre-paint script. */
 export function setThemeMode(next: ThemeMode) {
 	state = { mode: next, resolved: applyTheme(next) };
 	if (typeof window !== "undefined") {
@@ -86,7 +85,6 @@ export function setThemeMode(next: ThemeMode) {
 	emit();
 }
 
-/** Shared light / dark / system theme state, persisted in localStorage. */
 export function useTheme() {
 	const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 	return { mode: snapshot.mode, resolved: snapshot.resolved, setMode: setThemeMode };

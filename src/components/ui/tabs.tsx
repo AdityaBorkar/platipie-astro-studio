@@ -6,9 +6,7 @@ function Tabs({ className, orientation = "horizontal", ...props }: TabsPrimitive
 	return (
 		<TabsPrimitive.Root
 			className={cn("group/tabs flex gap-2 data-horizontal:flex-col", className)}
-			// Base UI only sets `data-orientation`; the Tailwind variants below
-			// (`data-horizontal:`, `group-data-horizontal/tabs:`) match bare
-			// attributes, so mirror the orientation as boolean data attributes.
+			// Base UI only sets data-orientation; mirror as boolean attrs for Tailwind variants.
 			data-horizontal={orientation === "horizontal" ? "" : undefined}
 			data-orientation={orientation}
 			data-slot="tabs"

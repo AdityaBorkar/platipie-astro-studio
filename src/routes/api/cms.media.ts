@@ -3,9 +3,9 @@ import path from "node:path";
 
 import { createFileRoute } from "@tanstack/react-router";
 
-import { fail, ok, queryParam } from "#cms/api-helpers.ts";
-import { resolveRepoPath } from "#cms/config.ts";
-import { listMedia, saveUpload } from "#cms/media.ts";
+import { fail, ok, queryParam } from "#/cms/api-helpers.ts";
+import { resolveRepoPath } from "#/cms/config.ts";
+import { listMedia, saveUpload } from "#/cms/media.ts";
 
 const CONTENT_TYPES: Record<string, string> = {
 	".avif": "image/avif",

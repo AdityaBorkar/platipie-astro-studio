@@ -13,11 +13,6 @@ interface FinalCtaProps {
 const defaultPrimary = { href: "/dashboard", label: "Start for free" };
 const defaultSecondary = { href: "/settings", label: "Talk to us" };
 
-/**
- * GitBook's closing plate: a giant, nearly invisible logo watermark behind a
- * centered promise and two pill actions. The muted section separates it from
- * the footer without introducing a new color.
- */
 export function FinalCta({
 	primary = defaultPrimary,
 	secondary = defaultSecondary,

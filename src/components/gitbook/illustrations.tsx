@@ -19,7 +19,6 @@ import type { ReactNode } from "react";
 import { cn } from "#/lib/utils";
 import { BrandMark } from "./brand";
 
-/** Shared illustration stage: warm paper, a faint grid, and an orange horizon. */
 export function ArtPanel({ children, className }: { children: ReactNode; className?: string }) {
 	return (
 		<div
@@ -51,7 +50,6 @@ function TrafficLights() {
 	);
 }
 
-/** A doc page with a stale section being inspected. */
 export function StaleContentArt() {
 	return (
 		<ArtPanel>
@@ -112,7 +110,6 @@ const agentNodes: Array<{
 	{ className: "right-0 bottom-0", icon: CircleCheckIcon, label: "Validator" },
 ];
 
-/** A docs page wired to people and agents, each connection verified. */
 export function AgentNetworkArt() {
 	return (
 		<ArtPanel>
@@ -167,7 +164,6 @@ export function AgentNetworkArt() {
 	);
 }
 
-/** A compact diff + review queue composition. */
 export function ReviewArt() {
 	return (
 		<ArtPanel>
@@ -226,7 +222,6 @@ const orbitNodes: Array<{ className: string; icon: LucideIcon }> = [
 	{ className: "top-1/2 left-0 -translate-y-1/2", icon: Link2Icon },
 ];
 
-/** Elliptical connector diagram that precedes the bento grid. */
 export function SystemOrbit() {
 	return (
 		<div className="relative mx-auto h-56 w-full max-w-3xl sm:h-64">
@@ -260,7 +255,6 @@ export function SystemOrbit() {
 	);
 }
 
-/** Orange enterprise plate with certification glass tiles. */
 export function EnterpriseArt() {
 	return (
 		<div className="gb-enterprise-art relative flex min-h-96 items-center justify-center overflow-hidden rounded-2xl p-6">
@@ -300,7 +294,6 @@ export function EnterpriseArt() {
 	);
 }
 
-/** Tiny icon tile used by feature grids and enterprise columns. */
 export function IconTile({ icon: Icon }: { icon: LucideIcon }) {
 	return (
 		<span className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-xs">

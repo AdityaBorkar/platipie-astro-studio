@@ -16,10 +16,6 @@ interface LinkCardsProps {
 	items: LinkCardItem[];
 }
 
-/**
- * GitBook docs link table: two-up bordered cards with a quiet icon tile and a
- * circular arrow that fills on hover.
- */
 export function LinkCards({ items, className }: LinkCardsProps) {
 	return (
 		<div className={cn("grid gap-3 sm:grid-cols-2", className)}>
