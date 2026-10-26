@@ -8,6 +8,7 @@ import { createTwoFilesPatch } from "diff";
 import { getProjectRoot, getTrashTtlDays, resolveRepoPath, LARGE_FILE_BYTES } from "./config.ts";
 import { CmsError } from "./errors.ts";
 import { normalizeText, parseFileContent, stringifyFileContent } from "./frontmatter.ts";
+import { isStaleWrite } from "./mtime.ts";
 import {
 	hardErrorsForFrontmatter,
 	warningsForFrontmatter,
@@ -139,9 +140,12 @@ export function unifiedDiff(oldText: string, newText: string, filePath: string):
 	return createTwoFilesPatch(filePath, filePath, normalizeText(oldText), normalizeText(newText));
 }
 
-function mtimeMismatch(stored: number, provided: number): boolean {
-	// 1s tolerance for FS granularity, but strict enough to catch stale writes.
-	return Math.abs(stored - provided) > 1000 && stored !== provided;
+function omit(obj: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const k of Object.keys(obj)) {
+		if (!keys.includes(k)) out[k] = obj[k];
+	}
+	return out;
 }
 
 function stableStringify(v: unknown): string {
@@ -185,7 +189,7 @@ export async function saveEntry(
 		oldText = await fs.readFile(abs, "utf8");
 		const st = await fs.stat(abs);
 		oldMtime = st.mtimeMs;
-		if (!opts?.force && mtimeMismatch(oldMtime, payload.mtime)) {
+		if (!opts?.force && isStaleWrite(oldMtime, payload.mtime)) {
 			const attempted = stringifyFileContent(payload.frontmatter, payload.body, true);
 			throw new CmsError("CONFLICT", "Stale write: file changed since you loaded it", {
 				diff: unifiedDiff(oldText, attempted, ref.path),
@@ -198,56 +202,79 @@ export async function saveEntry(
 		throw new CmsError("NOT_FOUND", `Not found: ${ref.path}`, { status: 404 });
 	}
 
-	const collection = collectionForPath(ref.path);
 	// JSON collections: body is raw JSON text; validate parses + row schemas.
 	if (ref.path.endsWith(".json")) {
-		let arr: unknown;
-		try {
-			arr = JSON.parse(payload.body);
-		} catch {
-			throw new CmsError("VALIDATION", "Invalid JSON", {
-				fields: { body: "Invalid JSON" },
-				status: 400,
-			});
-		}
-		if (!Array.isArray(arr))
-			throw new CmsError("VALIDATION", "JSON must be an array", { status: 400 });
-		// Row-level Zod (passthrough) — hard errors block.
-		const schema =
-			collection === "clients"
-				? clientsSchema
-				: collection === "mockups"
-					? mockupsSchema
-					: testimonialsSchema;
-		const fields: Record<string, string> = {};
-		(arr as unknown[]).forEach((row, i) => {
-			const r = schema.safeParse(row);
-			if (!r.success) {
-				for (const issue of r.error.issues)
-					fields[`[${i}].${issue.path.join(".")}`] = issue.message;
-			}
-		});
-		if (Object.keys(fields).length > 0)
-			throw new CmsError("VALIDATION", "Validation failed", { fields, status: 400 });
-		if (!opts?.force && Buffer.byteLength(oldText, "utf8") > LARGE_FILE_BYTES) {
-			throw new CmsError("VALIDATION", "File >1 MB — refusing write without force", {
-				status: 400,
-			});
-		}
-		if (normalizeText(oldText) === normalizeText(payload.body)) {
-			return { diff: "", mtime: oldMtime, ok: true, path: ref.path, warnings: [] };
-		}
-		await backupFile(abs);
-		await atomicWrite(abs, payload.body.endsWith("\n") ? payload.body : payload.body + "\n");
-		const st2 = await fs.stat(abs);
-		return {
-			diff: unifiedDiff(oldText, payload.body, ref.path),
-			mtime: st2.mtimeMs,
-			ok: true,
-			path: ref.path,
-			warnings: [],
-		};
+		return saveJsonEntry(ref, payload, opts, abs, oldText, oldMtime);
 	}
+	return saveMdEntry(ref, payload, opts, abs, oldText, oldMtime, oldParsed);
+}
+
+async function saveJsonEntry(
+	ref: EntryRef,
+	payload: EntryPayload,
+	opts: { force?: boolean } | undefined,
+	abs: string,
+	oldText: string,
+	oldMtime: number,
+): Promise<SaveResult> {
+	const collection = collectionForPath(ref.path);
+	let arr: unknown;
+	try {
+		arr = JSON.parse(payload.body);
+	} catch {
+		throw new CmsError("VALIDATION", "Invalid JSON", {
+			fields: { body: "Invalid JSON" },
+			status: 400,
+		});
+	}
+	if (!Array.isArray(arr))
+		throw new CmsError("VALIDATION", "JSON must be an array", { status: 400 });
+	// Row-level Zod (passthrough) — hard errors block.
+	const schema =
+		collection === "clients"
+			? clientsSchema
+			: collection === "mockups"
+				? mockupsSchema
+				: testimonialsSchema;
+	const fields: Record<string, string> = {};
+	(arr as unknown[]).forEach((row, i) => {
+		const r = schema.safeParse(row);
+		if (!r.success) {
+			for (const issue of r.error.issues) fields[`[${i}].${issue.path.join(".")}`] = issue.message;
+		}
+	});
+	if (Object.keys(fields).length > 0)
+		throw new CmsError("VALIDATION", "Validation failed", { fields, status: 400 });
+	if (!opts?.force && Buffer.byteLength(oldText, "utf8") > LARGE_FILE_BYTES) {
+		throw new CmsError("VALIDATION", "File >1 MB — refusing write without force", {
+			status: 400,
+		});
+	}
+	if (normalizeText(oldText) === normalizeText(payload.body)) {
+		return { diff: "", mtime: oldMtime, ok: true, path: ref.path, warnings: [] };
+	}
+	await backupFile(abs);
+	await atomicWrite(abs, payload.body.endsWith("\n") ? payload.body : payload.body + "\n");
+	const st2 = await fs.stat(abs);
+	return {
+		diff: unifiedDiff(oldText, payload.body, ref.path),
+		mtime: st2.mtimeMs,
+		ok: true,
+		path: ref.path,
+		warnings: [],
+	};
+}
+
+async function saveMdEntry(
+	ref: EntryRef,
+	payload: EntryPayload,
+	opts: { force?: boolean } | undefined,
+	abs: string,
+	oldText: string,
+	oldMtime: number,
+	oldParsed: ReturnType<typeof parseFileContent> | null,
+): Promise<SaveResult> {
+	const collection = collectionForPath(ref.path);
 	// Validate md frontmatter (projects/blog). Legal/settings skip Zod here.
 	let warnings: string[] = [];
 	if (collection === "projects" || collection === "blog") {
@@ -265,23 +292,8 @@ export async function saveEntry(
 	// Untouched save (toggle without edits) is a byte-for-byte no-op, no mtime bump.
 	let fmToWrite = payload.frontmatter;
 	if (collection === "projects" || collection === "blog") {
-		const {
-			slug: _ps,
-			modifiedDate: _pmd,
-			...payloadCore
-		} = payload.frontmatter as Record<string, unknown> & { slug?: unknown; modifiedDate?: unknown };
-		const {
-			slug: _os,
-			modifiedDate: _omd,
-			...oldCore
-		} = (oldParsed?.frontmatter ?? {}) as Record<string, unknown> & {
-			slug?: unknown;
-			modifiedDate?: unknown;
-		};
-		void _ps;
-		void _pmd;
-		void _os;
-		void _omd;
+		const payloadCore = omit(payload.frontmatter, ["modifiedDate", "slug"]);
+		const oldCore = omit(oldParsed?.frontmatter ?? {}, ["modifiedDate", "slug"]);
 		const coreEqual = stableEqual(oldCore, payloadCore);
 		const bodyEqual = normalizeText(oldParsed?.body ?? "") === normalizeText(payload.body);
 		if (coreEqual && bodyEqual) {
@@ -294,11 +306,9 @@ export async function saveEntry(
 			};
 		}
 		fmToWrite = touchModifiedDate(oldParsed?.frontmatter ?? {}, payload.frontmatter);
-		const { slug: _s, ...rest } = fmToWrite as Record<string, unknown> & { slug?: unknown };
 		// Recompute warnings with touched date (scheduled check).
 		warnings = warningsForFrontmatter(collection, fmToWrite, payload.body);
-		fmToWrite = rest;
-		void _s;
+		fmToWrite = omit(fmToWrite, ["slug"]);
 	}
 
 	// Byte-for-byte no-op: untouched → no write, no mtime change (legal imports safe).
@@ -404,8 +414,7 @@ export async function createEntry(
 			throw new CmsError("VALIDATION", "Validation failed", { fields: errs, status: 400 });
 	}
 	const withTouched = { ...frontmatter, modifiedDate: new Date().toISOString() };
-	const { slug: _s, ...toWrite } = withTouched as Record<string, unknown> & { slug?: unknown };
-	void _s;
+	const toWrite = omit(withTouched, ["slug"]);
 	const text = stringifyFileContent(toWrite, body, true);
 	await atomicWrite(abs, text);
 	const st = await fs.stat(abs);
@@ -494,8 +503,6 @@ export async function softDelete(
 	repoRel: string,
 	rowId?: string,
 ): Promise<{ ok: true; trashPath: string }> {
-	const ttlNote = getTrashTtlDays();
-	void ttlNote;
 	const ts = new Date().toISOString().replaceAll(/[:.]/gu, "-");
 	if (rowId && repoRel.endsWith(".json")) {
 		// Row-level delete with trash envelope.

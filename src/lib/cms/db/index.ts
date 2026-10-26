@@ -15,13 +15,12 @@ import { getDbPath as resolveDbPath, migrateLegacyFileSync } from "../paths.ts";
 export type SyncDb = BunSQLiteDatabase;
 
 let db: SyncDb | null = null;
-let dbPath: string | null = null;
 
 export function getDbPath(): string {
-	if (dbPath) return dbPath;
-	dbPath = resolveDbPath();
-	return dbPath;
+	return resolveDbPath();
 }
+
+// DDL mirrors db/schema.ts — update both together.
 
 const DDL = [
 	`CREATE TABLE IF NOT EXISTS assets (

@@ -65,12 +65,19 @@ import {
 	syncRunSchema,
 } from "./schemas.ts";
 
+/** Case-insensitive substring filter over string fields of each item. */
+function filterByQuery<T>(items: T[], q: string, fields: ((item: T) => string)[]): T[] {
+	const needle = q.toLowerCase();
+	if (!needle) return items;
+	return items.filter((item) => fields.some((pick) => pick(item).toLowerCase().includes(needle)));
+}
+
 const collectionsList = base.route({ method: "GET", path: "/collections" }).handler(async () => {
 	const [counts, drift, recent, env] = await Promise.all([
 		collectionCounts(),
 		driftWarnings(),
 		recentEdits(20),
-		Promise.resolve(envStatus()),
+		envStatus(),
 	]);
 	const collections = await Promise.all(
 		COLLECTIONS.map((c) =>
@@ -87,18 +94,15 @@ const entriesList = base
 	.route({ method: "GET", path: "/entries" })
 	.input(entriesListSchema)
 	.handler(async ({ input }) => {
-		let entries = await listEntries(input.collection);
-		const q = input.q ?? "";
-		if (q) {
-			const needle = q.toLowerCase();
-			entries = entries.filter(
-				(e) =>
-					e.id.toLowerCase().includes(needle) ||
-					(e.title ?? "").toLowerCase().includes(needle) ||
-					e.path.toLowerCase().includes(needle),
-			);
-		}
-		return { collection: input.collection, entries };
+		const entries = await listEntries(input.collection);
+		return {
+			collection: input.collection,
+			entries: filterByQuery(entries, input.q ?? "", [
+				(e) => e.id,
+				(e) => e.title ?? "",
+				(e) => e.path,
+			]),
+		};
 	});
 
 const entriesCreate = base
@@ -143,8 +147,11 @@ const pageSave = base
 		const patch: PageSeoPatch = { ...input.seo };
 		if (input.schema !== undefined) patch.schema = input.schema;
 		const res = await writePageSeo(input.path, patch, input.mtime, { force: input.force });
-		// The source is already written; a mirror failure must not mask it.
-		await syncScope("pages").catch(() => {});
+		// The source is already written; a mirror failure must not mask it,
+		// but it must stay visible (silent catch would hide sync regressions).
+		await syncScope("pages").catch((e: unknown) => {
+			console.error("[pageSave] mirror sync failed:", e);
+		});
 		return res;
 	});
 
@@ -152,17 +159,14 @@ const projectsList = base
 	.route({ method: "GET", path: "/projects" })
 	.input(projectsListSchema)
 	.handler(async ({ input }) => {
-		const q = (input.q ?? "").toLowerCase();
-		let projects = await listProjects();
-		if (q) {
-			projects = projects.filter(
-				(project) =>
-					project.name.toLowerCase().includes(q) ||
-					project.displayPath.toLowerCase().includes(q) ||
-					project.branch.toLowerCase().includes(q),
-			);
-		}
-		return { projects };
+		const projects = await listProjects();
+		return {
+			projects: filterByQuery(projects, input.q ?? "", [
+				(project) => project.name,
+				(project) => project.displayPath,
+				(project) => project.branch,
+			]),
+		};
 	});
 
 const projectsSelect = base
@@ -176,10 +180,7 @@ const projectsBrowse = base
 	.handler(({ input }) => browseDirectory(input.path ?? undefined));
 
 const settingsGet = base.route({ method: "GET", path: "/settings" }).handler(async () => {
-	const [{ mtime, raw }, env] = await Promise.all([
-		readSettingsRaw(),
-		Promise.resolve(envStatus()),
-	]);
+	const [{ mtime, raw }, env] = await Promise.all([readSettingsRaw(), envStatus()]);
 	return { env, mtime, raw, values: parseSettingsValues(raw) };
 });
 
@@ -194,7 +195,7 @@ const settingsSave = base
 		if (input.values !== undefined) {
 			return patchSettingsValues(input.values, input.mtime, { force: input.force });
 		}
-		throw new ORPCError("VALIDATION", { message: "raw or values required", status: 400 });
+		throw new CmsError("VALIDATION", "raw or values required", { status: 400 });
 	});
 
 const syncStatus = base.route({ method: "GET", path: "/sync" }).handler(async () => {
@@ -205,12 +206,7 @@ const syncRun = base
 	.route({ method: "POST", path: "/sync" })
 	.input(syncRunSchema)
 	.handler(async ({ input }) => {
-		if (input.scope && !(SYNC_SCOPES as readonly string[]).includes(input.scope)) {
-			throw new ORPCError("VALIDATION", {
-				message: `Unknown scope: ${input.scope}`,
-				status: 400,
-			});
-		}
+		// `syncScopeSchema` already rejects unknown scopes; no manual check.
 		if (input.scope) {
 			const fileCount = await syncScope(input.scope as SyncScope);
 			return { fileCount, scope: input.scope, status: await getSyncStatus() };

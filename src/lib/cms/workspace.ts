@@ -1,10 +1,11 @@
 // Workspace identity + Astro page inventory for the app shell. Server-only.
 import { promises as fs } from "node:fs";
-import type { Dirent } from "node:fs";
 import path from "node:path";
 
 import { isAstroProject, readGitBranch, readProjectName } from "./astro-project.ts";
 import { getProjectRoot } from "./config.ts";
+import { walkDir } from "./fs-walk.ts";
+import { routeFor, titleFor as baseTitleFor } from "./route-utils.ts";
 
 const PAGE_EXTENSIONS = new Map([
 	[".astro", "astro"],
@@ -35,25 +36,6 @@ export interface Workspace {
 	reachable: boolean;
 }
 
-function humanize(value: string): string {
-	return value.replaceAll(/[-_]+/gu, " ").replaceAll(/\b\w/gu, (char) => char.toUpperCase());
-}
-
-function routeSegmentsFor(relativePath: string): string[] {
-	const withoutExt = relativePath.replace(/\.(astro|js|md|mdx|ts)$/u, "");
-	const segments = withoutExt.split("/").filter(Boolean);
-	if (segments.at(-1) === "index") segments.pop();
-	return segments.map((segment) => {
-		const catchAll = /^\[\.\.\.([^\]]+)\]$/u.exec(segment);
-		if (catchAll) return `*${catchAll[1]}`;
-		const optionalCatchAll = /^\[\[\.\.\.([^\]]+)\]\]$/u.exec(segment);
-		if (optionalCatchAll) return `*${optionalCatchAll[1]}`;
-		const dynamic = /^\[([^\]]+)\]$/u.exec(segment);
-		if (dynamic) return `:${dynamic[1]}`;
-		return segment;
-	});
-}
-
 /** 404/500 and endpoint files (API routes, robots.txt, sitemap.xml, …). */
 function isUtilityPage(relativeFromPages: string, stem: string): boolean {
 	if (stem === "404" || stem === "500") return true;
@@ -65,75 +47,40 @@ const EMAIL_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 
 /** Count react-email templates under `<root>/src/emails` (optional upstream). */
 async function countEmailFiles(dirAbs: string): Promise<number> {
-	let entries: Dirent[];
-	try {
-		entries = await fs.readdir(dirAbs, { withFileTypes: true });
-	} catch {
-		return 0;
-	}
-	let count = 0;
-	for (const entry of entries) {
-		if (entry.name.startsWith(".")) continue;
-		const abs = path.join(dirAbs, entry.name);
-		if (entry.isDirectory()) {
-			count += await countEmailFiles(abs);
-			continue;
-		}
-		if (entry.isFile() && EMAIL_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-			count += 1;
-		}
-	}
-	return count;
+	const entries = await walkDir(dirAbs, "");
+	return entries.filter((entry) => EMAIL_EXTENSIONS.has(path.extname(entry.abs).toLowerCase()))
+		.length;
 }
 
 function titleFor(segments: string[], dynamic: boolean): string {
 	const last = segments.at(-1);
-	if (!last) return "Home";
 	if (last === "404") return "404 Not Found";
 	if (last === "500") return "500 Server Error";
-	if (dynamic) {
-		const parent = segments
-			.toReversed()
-			.find((segment) => !segment.startsWith(":") && !segment.startsWith("*"));
-		return parent ? `${humanize(parent)} detail` : "Detail";
-	}
-	return humanize(last);
+	return baseTitleFor(segments, dynamic);
 }
 
 async function walkPages(root: string, dirAbs: string, out: SitePage[]): Promise<void> {
-	let entries: Dirent[];
-	try {
-		entries = await fs.readdir(dirAbs, { withFileTypes: true });
-	} catch {
-		return;
-	}
-	for (const entry of entries.toSorted((a, b) => a.name.localeCompare(b.name))) {
-		if (entry.name.startsWith("_") || entry.name.startsWith(".")) continue;
-		const abs = path.join(dirAbs, entry.name);
-		if (entry.isDirectory()) {
-			await walkPages(root, abs, out);
-			continue;
-		}
-		if (!entry.isFile()) continue;
-		const ext = path.extname(entry.name).toLowerCase() as ".astro" | ".js" | ".md" | ".mdx" | ".ts";
+	const baseRel = path.relative(root, dirAbs).replaceAll("\\", "/");
+	const entries = await walkDir(dirAbs, baseRel);
+	for (const entry of entries.toSorted((a, b) => a.rel.localeCompare(b.rel))) {
+		if (entry.rel.split("/").some((segment) => segment.startsWith("_"))) continue;
+		const ext = path.extname(entry.rel).toLowerCase() as ".astro" | ".js" | ".md" | ".mdx" | ".ts";
 		const type = PAGE_EXTENSIONS.get(ext);
 		if (!type) continue;
-		const stem = path.basename(entry.name, ext);
+		const stem = path.basename(entry.rel, ext);
 		const relativeFromPages = path
-			.relative(path.join(root, "src/pages"), abs)
+			.relative(path.join(root, "src/pages"), entry.abs)
 			.replaceAll("\\", "/");
 		const utility = isUtilityPage(relativeFromPages, stem);
 		// `.ts`/`.js` files are endpoints, so only keep the utility ones.
 		if ((type === "ts" || type === "js") && !utility) continue;
-		const segments = routeSegmentsFor(relativeFromPages);
-		const dynamic = segments.some((segment) => segment.startsWith(":") || segment.startsWith("*"));
-		const stat = await fs.stat(abs).catch(() => null);
-		if (!stat) continue;
+		const { dynamic, route } = routeFor(relativeFromPages);
+		const segments = route === "/" ? [] : route.slice(1).split("/");
 		out.push({
 			kind: utility ? "utility" : dynamic ? "dynamic" : "static",
-			mtime: stat.mtimeMs,
+			mtime: entry.mtime,
 			path: `src/pages/${relativeFromPages}`,
-			route: `/${segments.join("/")}`.replace(/\/$/u, "") || "/",
+			route,
 			title: titleFor(segments, dynamic),
 			type,
 		});

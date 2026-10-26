@@ -6,6 +6,13 @@
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 
+import { balancedSlice, findBlockEnd, topLevelKeys, topLevelListItems } from "../balanced.ts";
+import { IMAGE_EXTS } from "../config.ts";
+import { walkDir } from "../fs-walk.ts";
+import { routeFor, titleFor } from "../route-utils.ts";
+
+export { routeFor };
+
 export interface AssetScan {
 	dir: string;
 	ext: string;
@@ -76,51 +83,14 @@ export interface AstroSettingsScan {
 	site: string | null;
 }
 
-interface WalkEntry {
-	abs: string;
-	rel: string;
-	size: number;
-	mtime: number;
-}
-
-async function walkDir(absDir: string, repoRel: string, out: WalkEntry[]): Promise<void> {
-	let names: string[];
-	try {
-		names = await fs.readdir(absDir);
-	} catch {
-		return;
-	}
-	for (const name of names.toSorted()) {
-		if (name.startsWith(".")) continue;
-		const abs = path.join(absDir, name);
-		const rel = repoRel ? `${repoRel}/${name}` : name;
-		const st = await fs.stat(abs).catch(() => null);
-		if (!st) continue;
-		if (st.isDirectory()) {
-			await walkDir(abs, rel, out);
-		} else if (st.isFile()) {
-			out.push({ abs, mtime: st.mtimeMs, rel, size: st.size });
-		}
-	}
-}
-
-const IMAGE_EXT = new Set([
-	".png",
-	".jpg",
-	".jpeg",
-	".webp",
-	".gif",
-	".avif",
-	".bmp",
-	".tiff",
-	".ico",
-]);
+// Scanner image kinds reuse the canonical base set plus inventory-only extras.
+const SCANNER_IMAGE_EXT = new Set([...IMAGE_EXTS, ".bmp", ".tiff"]);
 const FONT_EXT = new Set([".woff", ".woff2", ".ttf", ".otf", ".eot"]);
 const VIDEO_EXT = new Set([".mp4", ".webm", ".mov", ".ogv"]);
 
 function kindForExt(ext: string): string {
 	if (ext === ".svg") return "svg";
-	if (IMAGE_EXT.has(ext)) return "image";
+	if (SCANNER_IMAGE_EXT.has(ext)) return "image";
 	if (VIDEO_EXT.has(ext)) return "video";
 	if (FONT_EXT.has(ext)) return "font";
 	return "other";
@@ -128,8 +98,7 @@ function kindForExt(ext: string): string {
 
 /** Every file under `<root>/assets` (all kinds — the Assets Viewer scope). */
 export async function scanAssets(projectRoot: string): Promise<AssetScan[]> {
-	const entries: WalkEntry[] = [];
-	await walkDir(path.join(projectRoot, "assets"), "assets", entries);
+	const entries = await walkDir(path.join(projectRoot, "assets"), "assets");
 	return entries.map((entry) => {
 		const ext = path.extname(entry.rel).toLowerCase();
 		return {
@@ -142,64 +111,6 @@ export async function scanAssets(projectRoot: string): Promise<AssetScan[]> {
 			size: entry.size,
 		};
 	});
-}
-
-function findBlockEnd(src: string, from: number, open: string, close: string): number {
-	let depth = 0;
-	let instr: string | null = null;
-	let escaped = false;
-	for (let i = from; i < src.length; i++) {
-		const ch = src[i];
-		if (instr) {
-			if (escaped) escaped = false;
-			else if (ch === "\\") escaped = true;
-			else if (ch === instr) instr = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'" || ch === "`") {
-			instr = ch;
-			continue;
-		}
-		if (ch === open) depth++;
-		else if (ch === close) {
-			depth--;
-			if (depth === 0) return i;
-		}
-	}
-	return -1;
-}
-
-function topLevelKeys(body: string): string[] {
-	const keys: string[] = [];
-	let depth = 0;
-	let instr: string | null = null;
-	let escaped = false;
-	let segment = "";
-	const flush = () => {
-		const match = /^\s*([A-Za-z_$][\w$]*)\s*:/u.exec(segment);
-		if (match?.[1] && !keys.includes(match[1])) keys.push(match[1]);
-		segment = "";
-	};
-	for (const ch of body) {
-		if (instr) {
-			segment += ch;
-			if (escaped) escaped = false;
-			else if (ch === "\\") escaped = true;
-			else if (ch === instr) instr = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'") {
-			instr = ch;
-			segment += ch;
-			continue;
-		}
-		if (ch === "{") depth++;
-		if (ch === "}") depth--;
-		if (ch === "," && depth === 0) flush();
-		else segment += ch;
-	}
-	flush();
-	return keys;
 }
 
 /** Locate `src/content.config.ts` (fallback: `<root>/content.config.ts`). */
@@ -227,8 +138,7 @@ async function countGlobEntries(
 	pattern: string,
 ): Promise<number> {
 	const cleanBase = base.replace(/^\.\//u, "");
-	const entries: WalkEntry[] = [];
-	await walkDir(path.join(projectRoot, cleanBase), cleanBase, entries);
+	const entries = await walkDir(path.join(projectRoot, cleanBase), cleanBase);
 	const exts = extensionsForPattern(pattern);
 	if (exts.length === 0) return entries.length;
 	return entries.filter((entry) => exts.includes(path.extname(entry.rel).toLowerCase())).length;
@@ -323,8 +233,7 @@ function parsePropsFields(text: string): string[] {
 
 /** Files under `<root>/src/<dir>` (components, layouts, templates). */
 export async function scanComponentDir(projectRoot: string, dir: string): Promise<ComponentScan[]> {
-	const entries: WalkEntry[] = [];
-	await walkDir(path.join(projectRoot, "src", dir), `src/${dir}`, entries);
+	const entries = await walkDir(path.join(projectRoot, "src", dir), `src/${dir}`);
 	const out: ComponentScan[] = [];
 	for (const entry of entries) {
 		const ext = path.extname(entry.rel).toLowerCase();
@@ -354,8 +263,7 @@ export async function scanComponentDir(projectRoot: string, dir: string): Promis
 
 /** React-email files under `<root>/src/emails` (optional upstream). */
 export async function scanEmails(projectRoot: string): Promise<EmailScan[]> {
-	const entries: WalkEntry[] = [];
-	await walkDir(path.join(projectRoot, "src", "emails"), "src/emails", entries);
+	const entries = await walkDir(path.join(projectRoot, "src", "emails"), "src/emails");
 	const out: EmailScan[] = [];
 	for (const entry of entries) {
 		const ext = path.extname(entry.rel).toLowerCase();
@@ -389,39 +297,6 @@ export async function scanEmails(projectRoot: string): Promise<EmailScan[]> {
 		});
 	}
 	return out.toSorted((a, b) => a.path.localeCompare(b.path));
-}
-
-export function routeFor(relativePath: string): { dynamic: boolean; route: string } {
-	const withoutExt = relativePath.replace(/\.(astro|md|mdx|ts)$/u, "");
-	const segments = withoutExt.split("/").filter(Boolean);
-	if (segments.at(-1) === "index") segments.pop();
-	const mapped = segments.map((segment) => {
-		const catchAll = /^\[\.\.\.([^\]]+)\]$/u.exec(segment);
-		if (catchAll) return `*${catchAll[1]}`;
-		const dynamic = /^\[([^\]]+)\]$/u.exec(segment);
-		if (dynamic) return `:${dynamic[1]}`;
-		return segment;
-	});
-	const dynamic = mapped.some((s) => s.startsWith(":") || s.startsWith("*"));
-	return { dynamic, route: `/${mapped.join("/")}`.replace(/\/$/u, "") || "/" };
-}
-
-function humanize(value: string): string {
-	return value.replaceAll(/[-_]+/gu, " ").replaceAll(/\b\w/gu, (char) => char.toUpperCase());
-}
-
-function titleFor(segments: string[], dynamic: boolean): string {
-	const last = segments.findLast(Boolean);
-	if (!last) return "Home";
-	if (dynamic) {
-		const parent = segments
-			.toReversed()
-			.find(
-				(segment) => !segment.startsWith(":") && !segment.startsWith("*") && segment !== "index",
-			);
-		return parent ? `${humanize(parent)} detail` : "Detail";
-	}
-	return humanize(last);
 }
 
 function quotedValue(text: string, key: string): string | null {
@@ -464,8 +339,7 @@ function schemaTypesValue(text: string): string[] {
  * and flagged so the Pages route can show the full picture.
  */
 export async function scanPages(projectRoot: string): Promise<PageScan[]> {
-	const entries: WalkEntry[] = [];
-	await walkDir(path.join(projectRoot, "src", "pages"), "src/pages", entries);
+	const entries = await walkDir(path.join(projectRoot, "src", "pages"), "src/pages");
 	const out: PageScan[] = [];
 	for (const entry of entries) {
 		const ext = path.extname(entry.rel).toLowerCase();
@@ -509,44 +383,6 @@ export async function scanPages(projectRoot: string): Promise<PageScan[]> {
 		});
 	}
 	return out.toSorted((a, b) => a.route.localeCompare(b.route));
-}
-
-function balancedSlice(text: string, openAt: number, open: string, close: string): string | null {
-	const end = findBlockEnd(text, openAt, open, close);
-	return end === -1 ? null : text.slice(openAt + 1, end);
-}
-
-function topLevelListItems(body: string): string[] {
-	const items: string[] = [];
-	let depth = 0;
-	let instr: string | null = null;
-	let escaped = false;
-	let current = "";
-	const flush = () => {
-		const trimmed = current.trim().replace(/,$/u, "");
-		if (trimmed) items.push(trimmed);
-		current = "";
-	};
-	for (const ch of body) {
-		if (instr) {
-			current += ch;
-			if (escaped) escaped = false;
-			else if (ch === "\\") escaped = true;
-			else if (ch === instr) instr = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'" || ch === "`") {
-			instr = ch;
-			current += ch;
-			continue;
-		}
-		if (ch === "(" || ch === "[" || ch === "{") depth++;
-		if (ch === ")" || ch === "]" || ch === "}") depth--;
-		if (ch === "," && depth === 0) flush();
-		else current += ch;
-	}
-	flush();
-	return items;
 }
 
 /** Read + parse `astro.config.mjs` (shown in Settings as “Astro Settings”). */

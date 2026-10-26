@@ -35,7 +35,7 @@ function fleschReadingEase(text: string): number {
 function countSyllables(word: string): number {
 	const w = word.toLowerCase().replaceAll(/[^a-z]/gu, "");
 	if (w.length <= 3) return 1;
-	const m = w.replace(/(?:[^laeiouy]e|ed|es)$/u, "").match(/[aeiouy]{1,2}/gu);
+	const m = w.replace(/(?:[^aeiouy]e|ed|es)$/u, "").match(/[aeiouy]{1,2}/gu);
 	return m ? m.length : 1;
 }
 
@@ -53,15 +53,13 @@ function imageResolves(ref: string): boolean {
 	// remote allowed as plain string (§10)
 	if (/^https?:\/\//u.test(ref)) return true;
 	const root = getProjectRoot();
-	const cleaned = ref.replace(/^\/+/u, "").replace(/^assets\//u, "assets/");
+	const cleaned = ref.replace(/^\/+/u, "");
+	const base = path.basename(cleaned);
 	const candidates = [
 		path.join(root, cleaned),
-		path.join(root, "assets", cleaned.replace(/^images\//u, "images/")),
-		path.join(root, "assets/images", path.basename(cleaned)),
-		path.join(root, "public", path.basename(cleaned)),
+		path.join(root, "assets", base),
+		path.join(root, "public", base),
 	];
-	// Also try as-given under root.
-	if (ref.startsWith("images/")) candidates.push(path.join(root, "assets", ref));
 	return candidates.some((c) => existsSync(c));
 }
 
@@ -113,11 +111,6 @@ export function buildJsonLdPreview(
 		...(fm.modifiedDate ? { dateModified: fm.modifiedDate } : {}),
 		...(fm.keywords ? { keywords: fm.keywords } : {}),
 	};
-	if (type === "BlogPosting") {
-		base["@type"] = "BlogPosting";
-	} else if (type === "HowTo") {
-		base["@type"] = "HowTo";
-	}
 	if (fm.schemaFields && typeof fm.schemaFields === "object") {
 		Object.assign(base, fm.schemaFields as Record<string, unknown>);
 	}
@@ -205,7 +198,7 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 		push("schemaType", "schemaType selected", "warn", "Missing schemaType");
 	}
 
-	// score: 100 - 12*warn - 20*fail, clamped.
+	// score: 100 - warns*8 - fails*20, clamped.
 	const warns = checks.filter((c) => c.status === "warn").length;
 	const fails = checks.filter((c) => c.status === "fail").length;
 	const score = Math.max(0, Math.min(100, 100 - warns * 8 - fails * 20));
@@ -247,9 +240,8 @@ export async function aiSuggest(
 	action: "excerpt" | "keywords" | "titles",
 	fm: Record<string, unknown>,
 	body: string,
-	ip?: string,
+	_ip?: string,
 ): Promise<{ action: string; model: string; suggestions: string[] }> {
-	void ip;
 	const cfg = getAiConfig();
 	if (!cfg) {
 		throw new CmsError(

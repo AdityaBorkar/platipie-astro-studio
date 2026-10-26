@@ -4,7 +4,7 @@
 // at the transport edge).
 import { ORPCError, os } from "@orpc/server";
 
-import { toErrorPayload } from "#cms/errors.ts";
+import { sanitizeErrorMessage, toErrorPayload } from "#cms/errors.ts";
 
 export interface CmsContext {
 	ip: string;
@@ -12,10 +12,6 @@ export interface CmsContext {
 }
 
 const cmsBase = os.$context<CmsContext>();
-
-function sanitize(message: string): string {
-	return message.replaceAll(/sk-[A-Za-z0-9-_]+/gu, "[redacted]");
-}
 
 /** Map any thrown value (CmsError, ENOENT, unknown) to a typed ORPCError. */
 export function toORPCError(e: unknown): ORPCError<string, unknown> {
@@ -26,7 +22,7 @@ export function toORPCError(e: unknown): ORPCError<string, unknown> {
 	if (payload.fields !== undefined) data.fields = payload.fields;
 	return new ORPCError(payload.code, {
 		data,
-		message: sanitize(payload.message),
+		message: sanitizeErrorMessage(payload.message),
 		status: payload.status,
 	});
 }
@@ -57,6 +53,13 @@ const AI_WINDOW_MS = 60_000;
 /** 10 req/min per IP for BYOK AI procedures (429 when exhausted). */
 export const aiRateLimitMiddleware = cmsBase.middleware(({ context, next }) => {
 	const now = Date.now();
+	// Sweep expired entries when the bucket grows unboundedly (long-lived
+	// server would otherwise leak one entry per distinct IP forever).
+	if (aiBucket.size > 500) {
+		for (const [ip, entry] of aiBucket) {
+			if (now > entry.resetAt) aiBucket.delete(ip);
+		}
+	}
 	const current = aiBucket.get(context.ip);
 	if (!current || now > current.resetAt) {
 		aiBucket.set(context.ip, { count: 1, resetAt: now + AI_WINDOW_MS });

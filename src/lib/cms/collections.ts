@@ -39,37 +39,40 @@ function isTemplateName(name: string): boolean {
 
 async function listMdDir(dirRel: string, collection: CollectionId): Promise<EntrySummary[]> {
 	const dir = resolveRepoPath(dirRel);
-	let names: string[] = [];
+	let names: string[];
 	try {
 		names = await fs.readdir(dir);
 	} catch {
 		return [];
 	}
-	const out: EntrySummary[] = [];
-	for (const name of names.toSorted()) {
-		if (isTemplateName(name)) continue;
-		if (!(name.endsWith(".md") || name.endsWith(".mdx"))) continue;
-		const abs = path.join(dir, name);
-		let st: { mtimeMs: number; isFile(): boolean };
-		try {
-			st = await fs.stat(abs);
-			if (!st.isFile()) continue;
-		} catch {
-			continue;
-		}
-		const id = name.replace(/\.(md|mdx)$/u, "");
-		let title: string | undefined;
-		try {
-			const text = await fs.readFile(abs, "utf8");
-			const parsed = parseFileContent(text);
-			if (typeof parsed.frontmatter.title === "string") title = parsed.frontmatter.title;
-			else title = id;
-		} catch {
-			title = id;
-		}
-		out.push({ collection, id, mtime: st.mtimeMs, path: `${dirRel}/${name}`, title });
-	}
-	return out;
+	const candidates = names
+		.toSorted()
+		.filter((name) => !isTemplateName(name) && (name.endsWith(".md") || name.endsWith(".mdx")));
+	// Collections are small, so stat+read every candidate concurrently.
+	// Promise.all preserves input order, keeping the sorted-by-name order.
+	const rows = await Promise.all(
+		candidates.map(async (name): Promise<EntrySummary | null> => {
+			const abs = path.join(dir, name);
+			let st: { mtimeMs: number; isFile(): boolean };
+			try {
+				st = await fs.stat(abs);
+				if (!st.isFile()) return null;
+			} catch {
+				return null;
+			}
+			const id = name.replace(/\.(md|mdx)$/u, "");
+			let title: string | undefined;
+			try {
+				const text = await fs.readFile(abs, "utf8");
+				const parsed = parseFileContent(text);
+				title = typeof parsed.frontmatter.title === "string" ? parsed.frontmatter.title : id;
+			} catch {
+				title = id;
+			}
+			return { collection, id, mtime: st.mtimeMs, path: `${dirRel}/${name}`, title };
+		}),
+	);
+	return rows.filter((row): row is EntrySummary => row !== null);
 }
 
 async function listJsonRows(fileRel: string, collection: CollectionId): Promise<EntrySummary[]> {
@@ -118,57 +121,46 @@ async function listLegal(): Promise<EntrySummary[]> {
 	return out;
 }
 
-export async function listEntries(collection: CollectionId): Promise<EntrySummary[]> {
-	switch (collection) {
-		case "projects":
-			return listMdDir("cms/projects", collection);
-		case "blog":
-			return listMdDir("cms/blog", collection);
-		case "clients":
-			return listJsonRows("cms/clients.json", collection);
-		case "mockups":
-			return listJsonRows("cms/mockups.json", collection);
-		case "testimonials":
-			return listJsonRows("cms/testimonials.json", collection);
-		case "legal":
+async function listSettings(): Promise<EntrySummary[]> {
+	try {
+		const st = await fs.stat(resolveRepoPath("cms/constants.ts"));
+		return [
+			{
+				collection: "settings",
+				id: "constants",
+				mtime: st.mtimeMs,
+				path: "cms/constants.ts",
+				title: "Site constants",
+			},
+		];
+	} catch {
+		return [];
+	}
+}
+
+export function listEntries(collection: CollectionId): Promise<EntrySummary[]> {
+	const meta = COLLECTIONS.find((entry) => entry.id === collection);
+	if (!meta) return Promise.resolve([]);
+	switch (meta.kind) {
+		case "json":
+			return listJsonRows(meta.source, collection);
+		case "md":
+			return listMdDir(meta.source, collection);
+		case "mdx":
+			// Only `legal` uses mdx today, and it skips frontmatter parsing.
 			return listLegal();
-		case "settings":
-			try {
-				const st = await fs.stat(resolveRepoPath("cms/constants.ts"));
-				return [
-					{
-						collection: "settings",
-						id: "constants",
-						mtime: st.mtimeMs,
-						path: "cms/constants.ts",
-						title: "Site constants",
-					},
-				];
-			} catch {
-				return [];
-			}
+		case "ts":
+			// Only `settings` uses ts today (single constants file, not a dir).
+			return listSettings();
 	}
 }
 
 export async function collectionCounts(): Promise<Record<CollectionId, number>> {
-	const entries = await Promise.all([
-		listEntries("projects"),
-		listEntries("blog"),
-		listEntries("clients"),
-		listEntries("mockups"),
-		listEntries("testimonials"),
-		listEntries("legal"),
-		listEntries("settings"),
-	]);
-	return {
-		blog: entries[1].length,
-		clients: entries[2].length,
-		legal: entries[5].length,
-		mockups: entries[3].length,
-		projects: entries[0].length,
-		settings: entries[6].length,
-		testimonials: entries[4].length,
-	};
+	const ids = COLLECTIONS.map((meta) => meta.id);
+	const counts = await Promise.all(
+		ids.map(async (id) => [id, (await listEntries(id)).length] as const),
+	);
+	return Object.fromEntries(counts) as Record<CollectionId, number>;
 }
 
 export interface DriftWarning {
@@ -230,9 +222,11 @@ export async function driftWarnings(): Promise<DriftWarning[]> {
 }
 
 export async function recentEdits(limit = 20): Promise<EntrySummary[]> {
-	const all: EntrySummary[] = [];
-	for (const c of ["projects", "blog", "legal"] as CollectionId[]) {
-		all.push(...(await listEntries(c)));
-	}
-	return all.toSorted((a, b) => b.mtime - a.mtime).slice(0, limit);
+	const lists = await Promise.all(
+		(["projects", "blog", "legal"] as CollectionId[]).map((id) => listEntries(id)),
+	);
+	return lists
+		.flat()
+		.toSorted((a, b) => b.mtime - a.mtime)
+		.slice(0, limit);
 }

@@ -20,12 +20,17 @@ const SCOPE_PATTERNS: { patterns: string[]; scope: SyncScope }[] = [
 	{ patterns: ["astro.config.mjs"], scope: "astro" },
 ];
 
+/** Strip a trailing globstar suffix so a glob yields its watched subtree. */
+function patternBase(pattern: string): string {
+	return pattern.replace(/\/\*\*\/\*$/u, "").replace(/\/\*\*$/u, "");
+}
+
 function scopeForPath(root: string, absPath: string): SyncScope[] {
 	const rel = path.relative(root, absPath).replaceAll("\\", "/");
 	const scopes = new Set<SyncScope>();
 	for (const { patterns, scope } of SCOPE_PATTERNS) {
 		for (const pattern of patterns) {
-			const base = pattern.replace(/\/\*\*\/\*$/u, "").replace(/\/\*\*$/u, "");
+			const base = patternBase(pattern);
 			if (pattern === rel || rel.startsWith(`${base}/`) || rel === base) {
 				scopes.add(scope);
 			}
@@ -39,18 +44,13 @@ export interface WatcherHandle {
 	root: string;
 }
 
-/** Subtrees + files that back the eight sync scopes. */
+/**
+ * Subtrees + files that back the eight sync scopes, derived from
+ * SCOPE_PATTERNS so the chokidar watch list and the scope matcher share a
+ * single source of truth and can't drift apart.
+ */
 const WATCHED_REL = [
-	"assets",
-	"astro.config.mjs",
-	"cms",
-	"content.config.ts",
-	"src/components",
-	"src/content.config.ts",
-	"src/emails",
-	"src/layouts",
-	"src/pages",
-	"src/templates",
+	...new Set(SCOPE_PATTERNS.flatMap(({ patterns }) => patterns.map((p) => patternBase(p)))),
 ];
 
 /** Bootstrap a full sync, then watch the checkout and re-sync on change. */

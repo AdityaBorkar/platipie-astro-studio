@@ -5,10 +5,12 @@
 // file — the Astro checkout stays the source of truth.
 import { promises as fs } from "node:fs";
 
+import { arrayBody, findStatementEnd, parseStringLiteral, stripComments } from "./balanced.ts";
 import { resolveRepoPath } from "./config.ts";
 import { CmsError } from "./errors.ts";
+import { isStaleWrite } from "./mtime.ts";
+import { routeFor } from "./route-utils.ts";
 import { atomicWrite, backupFile, unifiedDiff } from "./save.ts";
-import { routeFor } from "./sync/scanners.ts";
 
 const SEO_KEYS = ["title", "description", "keywords", "schema_markup"] as const;
 type SeoKey = (typeof SEO_KEYS)[number];
@@ -89,36 +91,6 @@ function frontmatterBounds(text: string): FrontmatterBounds | null {
 	return { end: start + closeOffset, start };
 }
 
-/** Index of the `;` that terminates a const value, respecting nesting + strings. */
-function findValueEnd(text: string, from: number, end: number): number {
-	let braces = 0;
-	let brackets = 0;
-	let parens = 0;
-	let inStr: string | null = null;
-	let escaped = false;
-	for (let i = from; i < end; i++) {
-		const ch = text[i];
-		if (inStr) {
-			if (escaped) escaped = false;
-			else if (ch === "\\") escaped = true;
-			else if (ch === inStr) inStr = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'" || ch === "`") {
-			inStr = ch;
-			continue;
-		}
-		if (ch === "{") braces++;
-		else if (ch === "}") braces--;
-		else if (ch === "[") brackets++;
-		else if (ch === "]") brackets--;
-		else if (ch === "(") parens++;
-		else if (ch === ")") parens--;
-		else if (ch === ";" && braces === 0 && brackets === 0 && parens === 0) return i;
-	}
-	return -1;
-}
-
 /** Top-level `const <seo key> = …` declarations inside the frontmatter only. */
 function findConstBlocks(text: string, bounds: FrontmatterBounds): Map<SeoKey, ConstBlock> {
 	const blocks = new Map<SeoKey, ConstBlock>();
@@ -152,7 +124,7 @@ function findConstBlocks(text: string, bounds: FrontmatterBounds): Map<SeoKey, C
 		if (!found) continue;
 		const key = found[1] as SeoKey;
 		const valueStart = i + found[0].length;
-		const valueEnd = findValueEnd(text, valueStart, bounds.end);
+		const valueEnd = findStatementEnd(text, valueStart, bounds.end);
 		if (valueEnd === -1) continue;
 		if (!blocks.has(key)) blocks.set(key, { end: valueEnd, key, start: i, valueStart });
 		i = valueEnd;
@@ -160,55 +132,9 @@ function findConstBlocks(text: string, bounds: FrontmatterBounds): Map<SeoKey, C
 	return blocks;
 }
 
-function parseStringLiteral(raw: string): string | null {
-	const trimmed = raw.trim();
-	const quote = trimmed[0];
-	if (quote !== '"' && quote !== "'" && quote !== "`") return null;
-	if (trimmed.length < 2 || trimmed.at(-1) !== quote) return null;
-	const inner = trimmed.slice(1, -1);
-	if (quote === "`" && inner.includes("${")) return null;
-	let out = "";
-	for (let i = 0; i < inner.length; i++) {
-		const ch = inner[i];
-		if (ch !== "\\") {
-			out += ch;
-			continue;
-		}
-		const next = inner[++i];
-		if (next === undefined) return null;
-		if (next === "n") out += "\n";
-		else if (next === "t") out += "\t";
-		else if (next === "r") out += "\r";
-		else if (next === "u") {
-			const hex = inner.slice(i + 1, i + 5);
-			if (!/^[0-9a-f]{4}$/iu.test(hex)) return null;
-			out += String.fromCodePoint(Number.parseInt(hex, 16));
-			i += 4;
-		} else out += next;
-	}
-	return out;
-}
-
 const STRING_LITERAL = /("([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`)/gu;
 const SCHEMA_GET =
 	/SchemaMarkup\s*\.\s*get\s*\(\s*("([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`)\s*\)/gu;
-
-function stripTypeSuffix(raw: string): string {
-	return raw
-		.trim()
-		.replace(/\s+as\s+const\s*$/u, "")
-		.replace(/\s+as\s+never\[\]\s*$/u, "");
-}
-
-function arrayBody(raw: string): string | null {
-	const trimmed = stripTypeSuffix(raw);
-	if (trimmed[0] !== "[" || trimmed.at(-1) !== "]") return null;
-	return trimmed.slice(1, -1);
-}
-
-function stripComments(body: string): string {
-	return body.replaceAll(/\/\*[\s\S]*?\*\//gu, "").replaceAll(/\/\/[^\n]*/gu, "");
-}
 
 /** Plain `["a", "b"]` literals only — anything computed is not editable. */
 function parseStringArray(raw: string): string[] | null {
@@ -377,7 +303,7 @@ export async function writePageSeo(
 		throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
 	});
 	const st = await fs.stat(abs);
-	if (!opts?.force && Math.abs(st.mtimeMs - mtime) > 1000 && st.mtimeMs !== mtime) {
+	if (!opts?.force && isStaleWrite(st.mtimeMs, mtime)) {
 		throw new CmsError("CONFLICT", "Stale write: page changed since you loaded it", {
 			status: 409,
 		});

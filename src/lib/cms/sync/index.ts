@@ -1,7 +1,8 @@
 // Sync engine: scan slices of the Astro checkout and mirror them into
 // SQLite (drizzle-orm). Files on disk stay the source of truth; the DB is a
 // read-model the UI pages render from.
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import type { AnySQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import { getProjectRoot } from "../config.ts";
 import { getDb } from "../db/index.ts";
@@ -64,191 +65,112 @@ async function stampScope(scope: SyncScope, fileCount: number): Promise<void> {
 		});
 }
 
-async function syncAssets(root: string): Promise<number> {
+/**
+ * Generic path-keyed mirror: upsert every scanned row (conflict target = the
+ * key column, `set` = the freshly scanned values, i.e. identical to
+ * `excluded.*`) and delete rows whose key vanished from disk. Every inventory
+ * table below funnels through here so the per-scope syncs stay thin
+ * scan+map wrappers with no duplicated upsert/delete-stale logic.
+ */
+async function syncTableRows<TTable extends SQLiteTable, TScan>(
+	table: TTable,
+	keyColumn: AnySQLiteColumn,
+	scanned: TScan[],
+	mapRow: (item: TScan, stamp: number) => TTable["$inferInsert"] & Record<string, unknown>,
+): Promise<number> {
 	const db = getDb();
 	const stamp = now();
-	const scanned = await scanAssets(root);
-	const live = new Set(scanned.map((row) => row.path));
-	for (const row of scanned) {
-		await db
-			.insert(assets)
-			.values({ ...row, updatedAt: stamp })
-			.onConflictDoUpdate({
-				set: {
-					dir: sql`excluded.dir`,
-					ext: sql`excluded.ext`,
-					kind: sql`excluded.kind`,
-					mtime: sql`excluded.mtime`,
-					name: sql`excluded.name`,
-					size: sql`excluded.size`,
-					updatedAt: stamp,
-				},
-				target: assets.path,
-			});
+	const live = new Set<string>();
+	for (const item of scanned) {
+		const values = mapRow(item, stamp);
+		live.add(String(values[keyColumn.name]));
+		await db.insert(table).values(values).onConflictDoUpdate({ set: values, target: keyColumn });
 	}
-	for (const row of await db.select({ path: assets.path }).from(assets)) {
-		if (!live.has(row.path)) await db.delete(assets).where(eq(assets.path, row.path));
+	for (const row of await db.select({ key: keyColumn }).from(table)) {
+		const key = String(row.key);
+		if (!live.has(key)) await db.delete(table).where(eq(keyColumn, row.key));
 	}
 	return scanned.length;
 }
 
+/** Inventory tables sharing the file-inventory columns, all keyed by `path`. */
+type PathInventoryTable = typeof components | typeof layouts | typeof templates;
+
+async function syncAssets(root: string): Promise<number> {
+	const scanned = await scanAssets(root);
+	return syncTableRows(assets, assets.path, scanned, (row, stamp) => ({
+		...row,
+		updatedAt: stamp,
+	}));
+}
+
 async function syncContent(root: string): Promise<number> {
-	const db = getDb();
-	const stamp = now();
 	const scanned = await scanContentCollections(root);
-	await db.delete(contentCollections);
-	if (scanned.length > 0) {
-		await db.insert(contentCollections).values(
-			scanned.map((row) => ({
-				base: row.base,
-				count: row.count,
-				filePath: row.filePath,
-				loader: row.loader,
-				mtime: Math.round(row.mtime),
-				name: row.name,
-				pattern: row.pattern,
-				schemaKeys: JSON.stringify(row.schemaKeys),
-				updatedAt: stamp,
-			})),
-		);
-	}
-	return scanned.length;
+	return syncTableRows(contentCollections, contentCollections.name, scanned, (row, stamp) => ({
+		base: row.base,
+		count: row.count,
+		filePath: row.filePath,
+		loader: row.loader,
+		mtime: Math.round(row.mtime),
+		name: row.name,
+		pattern: row.pattern,
+		schemaKeys: JSON.stringify(row.schemaKeys),
+		updatedAt: stamp,
+	}));
 }
 
 async function syncComponentDir(
 	root: string,
-	table: typeof components | typeof layouts | typeof templates,
-	pathColumn: typeof components.path | typeof layouts.path | typeof templates.path,
+	table: PathInventoryTable,
 	dir: string,
 ): Promise<number> {
-	const db = getDb();
-	const stamp = now();
-	// The three inventory tables share identical columns; normalize the type
-	// so drizzle's query builder stays fully inferred.
-	const tableAs = table as typeof components;
-	const pathAs = pathColumn as typeof components.path;
 	const scanned = await scanComponentDir(root, dir);
-	const live = new Set(scanned.map((row) => row.path));
-	for (const row of scanned) {
-		await db
-			.insert(tableAs)
-			.values({
-				dir: row.dir,
-				ext: row.ext,
-				hasSlot: row.hasSlot ? 1 : 0,
-				mtime: Math.round(row.mtime),
-				name: row.name,
-				path: row.path,
-				props: JSON.stringify(row.props),
-				size: row.size,
-				updatedAt: stamp,
-			})
-			.onConflictDoUpdate({
-				set: {
-					dir: sql`excluded.dir`,
-					ext: sql`excluded.ext`,
-					hasSlot: sql`excluded.has_slot`,
-					mtime: sql`excluded.mtime`,
-					name: sql`excluded.name`,
-					props: sql`excluded.props`,
-					size: sql`excluded.size`,
-					updatedAt: stamp,
-				},
-				target: pathAs,
-			});
-	}
-	for (const existing of await db.select({ path: pathAs }).from(tableAs)) {
-		if (!live.has(existing.path)) await db.delete(tableAs).where(eq(pathAs, existing.path));
-	}
-	return scanned.length;
+	return syncTableRows(table, table.path, scanned, (row, stamp) => ({
+		dir: row.dir,
+		ext: row.ext,
+		hasSlot: row.hasSlot ? 1 : 0,
+		mtime: Math.round(row.mtime),
+		name: row.name,
+		path: row.path,
+		props: JSON.stringify(row.props),
+		size: row.size,
+		updatedAt: stamp,
+	}));
 }
 
 async function syncEmails(root: string): Promise<number> {
-	const db = getDb();
-	const stamp = now();
 	const scanned = await scanEmails(root);
-	const live = new Set(scanned.map((row) => row.path));
-	for (const row of scanned) {
-		await db
-			.insert(emails)
-			.values({
-				dir: row.dir,
-				ext: row.ext,
-				mtime: Math.round(row.mtime),
-				name: row.name,
-				path: row.path,
-				size: row.size,
-				subject: row.subject,
-				updatedAt: stamp,
-			})
-			.onConflictDoUpdate({
-				set: {
-					dir: sql`excluded.dir`,
-					ext: sql`excluded.ext`,
-					mtime: sql`excluded.mtime`,
-					name: sql`excluded.name`,
-					size: sql`excluded.size`,
-					subject: sql`excluded.subject`,
-					updatedAt: stamp,
-				},
-				target: emails.path,
-			});
-	}
-	for (const row of await db.select({ path: emails.path }).from(emails)) {
-		if (!live.has(row.path)) await db.delete(emails).where(eq(emails.path, row.path));
-	}
-	return scanned.length;
+	return syncTableRows(emails, emails.path, scanned, (row, stamp) => ({
+		dir: row.dir,
+		ext: row.ext,
+		mtime: Math.round(row.mtime),
+		name: row.name,
+		path: row.path,
+		size: row.size,
+		subject: row.subject,
+		updatedAt: stamp,
+	}));
 }
 
 async function syncPages(root: string): Promise<number> {
-	const db = getDb();
-	const stamp = now();
 	const scanned = await scanPages(root);
-	const live = new Set(scanned.map((row) => row.path));
-	for (const row of scanned) {
-		await db
-			.insert(pages)
-			.values({
-				dynamic: row.dynamic ? 1 : 0,
-				hasSeo: row.hasSeo ? 1 : 0,
-				mtime: Math.round(row.mtime),
-				path: row.path,
-				prerender: row.prerender,
-				private: row.private ? 1 : 0,
-				route: row.route,
-				schemaTypes: JSON.stringify(row.schemaTypes),
-				seoDescription: row.seoDescription,
-				seoKeywords: JSON.stringify(row.seoKeywords),
-				seoTitle: row.seoTitle,
-				size: row.size,
-				title: row.title,
-				type: row.type,
-				updatedAt: stamp,
-			})
-			.onConflictDoUpdate({
-				set: {
-					dynamic: sql`excluded.dynamic`,
-					hasSeo: sql`excluded.has_seo`,
-					mtime: sql`excluded.mtime`,
-					prerender: sql`excluded.prerender`,
-					private: sql`excluded.private`,
-					route: sql`excluded.route`,
-					schemaTypes: sql`excluded.schema_types`,
-					seoDescription: sql`excluded.seo_description`,
-					seoKeywords: sql`excluded.seo_keywords`,
-					seoTitle: sql`excluded.seo_title`,
-					size: sql`excluded.size`,
-					title: sql`excluded.title`,
-					type: sql`excluded.type`,
-					updatedAt: stamp,
-				},
-				target: pages.path,
-			});
-	}
-	for (const row of await db.select({ path: pages.path }).from(pages)) {
-		if (!live.has(row.path)) await db.delete(pages).where(eq(pages.path, row.path));
-	}
-	return scanned.length;
+	return syncTableRows(pages, pages.path, scanned, (row, stamp) => ({
+		dynamic: row.dynamic ? 1 : 0,
+		hasSeo: row.hasSeo ? 1 : 0,
+		mtime: Math.round(row.mtime),
+		path: row.path,
+		prerender: row.prerender,
+		private: row.private ? 1 : 0,
+		route: row.route,
+		schemaTypes: JSON.stringify(row.schemaTypes),
+		seoDescription: row.seoDescription,
+		seoKeywords: JSON.stringify(row.seoKeywords),
+		seoTitle: row.seoTitle,
+		size: row.size,
+		title: row.title,
+		type: row.type,
+		updatedAt: stamp,
+	}));
 }
 
 async function syncAstro(root: string): Promise<number> {
@@ -302,7 +224,7 @@ export async function syncScope(scope: SyncScope, root = getProjectRoot()): Prom
 			count = await syncAstro(root);
 			break;
 		case "components":
-			count = await syncComponentDir(root, components, components.path, "components");
+			count = await syncComponentDir(root, components, "components");
 			break;
 		case "content":
 			count = await syncContent(root);
@@ -311,13 +233,13 @@ export async function syncScope(scope: SyncScope, root = getProjectRoot()): Prom
 			count = await syncEmails(root);
 			break;
 		case "layouts":
-			count = await syncComponentDir(root, layouts, layouts.path, "layouts");
+			count = await syncComponentDir(root, layouts, "layouts");
 			break;
 		case "pages":
 			count = await syncPages(root);
 			break;
 		case "templates":
-			count = await syncComponentDir(root, templates, templates.path, "templates");
+			count = await syncComponentDir(root, templates, "templates");
 			break;
 	}
 	await stampScope(scope, count);
@@ -327,6 +249,9 @@ export async function syncScope(scope: SyncScope, root = getProjectRoot()): Prom
 /** Sync every scope. Used by the CLI `--once` path and the watcher bootstrap. */
 export async function fullSync(root = getProjectRoot()): Promise<SyncResult> {
 	const scopes: ScopeStatus[] = [];
+	// Sequential on purpose: bun:sqlite funnels every write through a single
+	// connection, so parallel scope syncs would just serialize (or hit
+	// SQLITE_BUSY) with zero speedup. Do NOT Promise.all this loop.
 	for (const scope of SYNC_SCOPES) {
 		const fileCount = await syncScope(scope, root);
 		scopes.push({ fileCount, lastSync: now(), scope });
@@ -349,44 +274,27 @@ export async function getSyncStatus(): Promise<ScopeStatus[]> {
 	});
 }
 
+/**
+ * Single source of truth mapping each scope to its mirror table + sort key.
+ * Each reader is a thunk so the concrete table type flows into drizzle's
+ * query builder with full inference (no casts, no generic-table gymnastics).
+ */
+const INVENTORY_SOURCES: Record<SyncScope, { key: string; read: () => Promise<unknown[]> }> = {
+	assets: { key: "path", read: () => getDb().select().from(assets) },
+	astro: { key: "id", read: () => getDb().select().from(astroSettings) },
+	components: { key: "path", read: () => getDb().select().from(components) },
+	content: { key: "name", read: () => getDb().select().from(contentCollections) },
+	emails: { key: "path", read: () => getDb().select().from(emails) },
+	layouts: { key: "path", read: () => getDb().select().from(layouts) },
+	pages: { key: "path", read: () => getDb().select().from(pages) },
+	templates: { key: "path", read: () => getDb().select().from(templates) },
+};
+
 /** Read mirrored rows for one scope (UI pages render from this, not the FS). */
 export async function getInventory(scope: SyncScope): Promise<Record<string, unknown>[]> {
-	const db = getDb();
-	let key: string;
-	let rows: Record<string, unknown>[];
-	switch (scope) {
-		case "assets":
-			rows = (await db.select().from(assets)) as unknown as Record<string, unknown>[];
-			key = "path";
-			break;
-		case "astro":
-			rows = (await db.select().from(astroSettings)) as unknown as Record<string, unknown>[];
-			key = "id";
-			break;
-		case "components":
-			rows = (await db.select().from(components)) as unknown as Record<string, unknown>[];
-			key = "path";
-			break;
-		case "content":
-			rows = (await db.select().from(contentCollections)) as unknown as Record<string, unknown>[];
-			key = "name";
-			break;
-		case "emails":
-			rows = (await db.select().from(emails)) as unknown as Record<string, unknown>[];
-			key = "path";
-			break;
-		case "layouts":
-			rows = (await db.select().from(layouts)) as unknown as Record<string, unknown>[];
-			key = "path";
-			break;
-		case "pages":
-			rows = (await db.select().from(pages)) as unknown as Record<string, unknown>[];
-			key = "path";
-			break;
-		case "templates":
-			rows = (await db.select().from(templates)) as unknown as Record<string, unknown>[];
-			key = "path";
-			break;
-	}
-	return rows.toSorted((a, b) => String(a[key] ?? "").localeCompare(String(b[key] ?? "")));
+	const source = INVENTORY_SOURCES[scope];
+	const rows = (await source.read()) as Record<string, unknown>[];
+	return rows.toSorted((a, b) =>
+		String(a[source.key] ?? "").localeCompare(String(b[source.key] ?? "")),
+	);
 }

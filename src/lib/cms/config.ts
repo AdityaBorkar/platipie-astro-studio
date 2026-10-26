@@ -20,12 +20,20 @@ export const ALLOWED_IMAGE_MIME = new Set([
 	"image/avif",
 ]);
 
-function defaultProjectRoot(): string {
-	return process.cwd();
-}
+/** Canonical image extensions shared by media listing + sync scanners. */
+export const IMAGE_EXTS = new Set([
+	".png",
+	".jpg",
+	".jpeg",
+	".webp",
+	".gif",
+	".svg",
+	".avif",
+	".ico",
+]);
 
 export function getProjectRoot(): string {
-	const raw = process.env.PROJECT_PATH?.trim() || defaultProjectRoot();
+	const raw = process.env.PROJECT_PATH?.trim() || process.cwd();
 	return path.resolve(raw);
 }
 
@@ -54,6 +62,11 @@ export function resolvePort(cliPort?: number): number {
 	return parsePortStrict(raw);
 }
 
+/**
+ * Safe port for status UI: falls back to DEFAULT_PORT instead of throwing.
+ * Dual policy — `resolvePort` throws for CLI startup (fail loudly on
+ * misconfiguration), while this wrapper stays total for `envStatus`.
+ */
 export function getPort(): number {
 	try {
 		return resolvePort();

@@ -44,7 +44,13 @@ export function isSyncDisabled(): boolean {
 	return raw === "0" || raw === "false" || raw === "no" || raw === "off";
 }
 
-/** Canonical key for a project root (resolves `.`/`..` against cwd). */
+/**
+ * Canonical key for a project root (resolves `.`/`..` against cwd).
+ * Deliberately trivial (`path.resolve`): every engine-map lookup must use the
+ * exact same key, so all callers funnel through this one-liner instead of
+ * inlining their own normalization. Kept exported for compat — CLI/tests use
+ * the same canonicalization.
+ */
 export function normalizeSyncRoot(root: string = getProjectRoot()): string {
 	return path.resolve(root);
 }
@@ -91,12 +97,16 @@ export async function startSyncEngine(root: string = getProjectRoot()): Promise<
 	if (inflight) return inflight;
 	const started = (async (): Promise<WatcherHandle> => {
 		state.current = key;
+		const stale: WatcherHandle[] = [];
 		for (const other of Array.from(state.handles.keys())) {
 			if (other === key) continue;
 			const handle = state.handles.get(other);
 			state.handles.delete(other);
-			if (handle) await handle.close();
+			if (handle) stale.push(handle);
 		}
+		// Parallel close is safe: each handle owns an independent chokidar
+		// watcher, and entries are already removed from the map above.
+		await Promise.all(stale.map((handle) => handle.close()));
 		const handle = await startWatcher(key);
 		if (state.current !== key) {
 			// Superseded while the initial sync was running — never publish.

@@ -2,10 +2,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { ALLOWED_IMAGE_MIME, MAX_UPLOAD_BYTES, getProjectRoot, resolveRepoPath } from "./config.ts";
+import {
+	ALLOWED_IMAGE_MIME,
+	IMAGE_EXTS,
+	MAX_UPLOAD_BYTES,
+	getProjectRoot,
+	resolveRepoPath,
+} from "./config.ts";
 import { CmsError } from "./errors.ts";
-
-const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif", ".ico"]);
+import { walkDir } from "./fs-walk.ts";
 
 export interface MediaItem {
 	path: string;
@@ -15,37 +20,25 @@ export interface MediaItem {
 }
 
 async function walkImages(absDir: string, repoPrefix: string, out: MediaItem[]): Promise<void> {
-	let names: string[];
-	try {
-		names = await fs.readdir(absDir);
-	} catch {
-		return;
-	}
-	for (const name of names) {
-		const abs = path.join(absDir, name);
-		const st = await fs.stat(abs).catch(() => null);
-		if (!st) continue;
-		if (st.isDirectory()) {
-			await walkImages(abs, `${repoPrefix}/${name}`, out);
-		} else if (IMAGE_EXT.has(path.extname(name).toLowerCase())) {
-			out.push({
-				mtime: st.mtimeMs,
-				path: `${repoPrefix}/${name}`,
-				size: st.size,
-				url: `/${repoPrefix}/${name}`.replace(/^\/(assets|public)\//u, "/"),
-			});
-		}
+	const entries = await walkDir(absDir, repoPrefix);
+	for (const entry of entries) {
+		if (!IMAGE_EXTS.has(path.extname(entry.rel).toLowerCase())) continue;
+		out.push({
+			mtime: entry.mtime,
+			path: entry.rel,
+			size: entry.size,
+			url: `/${entry.rel}`.replace(/^\/(assets|public)\//u, "/"),
+		});
 	}
 }
 
 export async function listMedia(): Promise<MediaItem[]> {
 	const root = getProjectRoot();
 	const out: MediaItem[] = [];
-	await walkImages(path.join(root, "assets/images"), "assets/images", out);
-	await walkImages(path.join(root, "assets"), "assets", out).catch(() => {});
+	await walkImages(path.join(root, "assets"), "assets", out);
 	await walkImages(path.join(root, "public"), "public", out);
-	// `assets/` overlaps `assets/images/`, and callers may list public twice; one
-	// path must map to one item so React keys and pickers stay stable.
+	// Dedupe defensively (overlapping callers/symlinks): one path, one item
+	// so React keys and pickers stay stable.
 	const unique = new Map(out.map((item) => [item.path, item]));
 	return [...unique.values()].toSorted((a, b) => a.path.localeCompare(b.path));
 }
@@ -64,7 +57,7 @@ export function sanitizeFilename(name: string): string {
 
 export function extForMime(mime: string, filename: string): string {
 	const fromName = path.extname(filename).toLowerCase();
-	if (IMAGE_EXT.has(fromName)) return fromName;
+	if (IMAGE_EXTS.has(fromName)) return fromName;
 	const map: Record<string, string> = {
 		"image/avif": ".avif",
 		"image/gif": ".gif",

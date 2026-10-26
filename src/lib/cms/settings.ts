@@ -3,8 +3,11 @@
 // Bun.Transpiler parse before save (tsc-style check without full typecheck).
 import { promises as fs } from "node:fs";
 
+import { findStatementEnd, stripTypeSuffix } from "./balanced.ts";
 import { resolveRepoPath } from "./config.ts";
 import { CmsError } from "./errors.ts";
+import { isStaleWrite } from "./mtime.ts";
+import { atomicWrite, backupFile } from "./save.ts";
 
 const SETTINGS_PATH = "cms/constants.ts";
 
@@ -60,34 +63,10 @@ function replaceExportBlock(src: string, key: string, replacement: string): stri
 	// Scan from `=` to terminating `;` at depth 0.
 	const eq = src.indexOf("=", idx);
 	if (eq === -1) throw new CmsError("SCHEMA_MERGE", `Cannot locate ${key} value`, { status: 500 });
-	let depthBrace = 0,
-		depthBracket = 0,
-		depthParen = 0;
-	let inStr: string | null = null;
-	let escaped = false;
-	for (let i = eq + 1; i < src.length; i++) {
-		const ch = src[i];
-		if (inStr) {
-			if (escaped) escaped = false;
-			else if (ch === "\\") escaped = true;
-			else if (ch === inStr) inStr = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'" || ch === "`") {
-			inStr = ch;
-			continue;
-		}
-		if (ch === "{") depthBrace++;
-		else if (ch === "}") depthBrace--;
-		else if (ch === "[") depthBracket++;
-		else if (ch === "]") depthBracket--;
-		else if (ch === "(") depthParen++;
-		else if (ch === ")") depthParen--;
-		else if (ch === ";" && depthBrace === 0 && depthBracket === 0 && depthParen === 0) {
-			return src.slice(0, idx) + replacement + src.slice(i + 1);
-		}
-	}
-	throw new CmsError("SCHEMA_MERGE", `Cannot terminate ${key} block`, { status: 500 });
+	const end = findStatementEnd(src, eq + 1);
+	if (end === -1)
+		throw new CmsError("SCHEMA_MERGE", `Cannot terminate ${key} block`, { status: 500 });
+	return src.slice(0, idx) + replacement + src.slice(end + 1);
 }
 
 function serializeValue(v: unknown): string {
@@ -104,14 +83,12 @@ export async function writeSettingsRaw(
 	const st = await fs.stat(abs).catch(() => {
 		throw new CmsError("NOT_FOUND", `Not found: ${SETTINGS_PATH}`, { status: 404 });
 	});
-	if (!opts?.force && Math.abs(st.mtimeMs - mtime) > 1000 && st.mtimeMs !== mtime) {
+	if (!opts?.force && isStaleWrite(st.mtimeMs, mtime)) {
 		throw new CmsError("CONFLICT", "Stale write: constants.ts changed", { status: 409 });
 	}
-	// Backup + atomic.
-	await fs.copyFile(abs, `${abs}.bak`).catch(() => {});
-	const tmp = `${abs}.tmp-${Date.now()}`;
-	await fs.writeFile(tmp, raw, "utf8");
-	await fs.rename(tmp, abs);
+	// Backup + atomic (shared helpers keep .bak rotation consistent).
+	await backupFile(abs);
+	await atomicWrite(abs, raw);
 	const st2 = await fs.stat(abs);
 	return { mtime: st2.mtimeMs };
 }
@@ -122,8 +99,6 @@ function patchSiteUrlValue(next: string, key: string, val: string): string {
 		return replaceExportBlock(next, key, `export const ${key} = ${JSON.stringify(val)};`);
 	}
 	// Replace the two quoted URLs: production first, dev second.
-	const urls = [...next.matchAll(/https?:\/\/[^"']+/gu)];
-	void urls;
 	// Targeted: replace production URL (adityab.tech) and leave dev as-is
 	// unless val looks like localhost.
 	if (val.includes("localhost") || val.includes("127.0.0.1")) {
@@ -178,16 +153,22 @@ export function parseSettingsValues(raw: string): Record<string, unknown> {
 			const idx = raw.indexOf(marker);
 			if (idx === -1) continue;
 			const eq = raw.indexOf("=", idx);
-			const semi = findBlockEnd(raw, eq + 1);
-			let expr = raw.slice(eq + 1, semi).trim();
+			const semi = findStatementEnd(raw, eq + 1);
+			const end = semi === -1 ? raw.length : semi;
+			let expr = raw.slice(eq + 1, end).trim();
 			if (key === "SITE_URL") {
 				const m = expr.match(/"(https:\/\/[^"]+)"/u);
 				if (m) out[key] = m[1];
 				continue;
 			}
 			// Remove `as const` / satisfies.
-			expr = expr.replace(/\s+as\s+const\s*$/u, "").replace(/\s+satisfies\s+.*$/u, "");
+			expr = stripTypeSuffix(expr);
 			// Only evaluate object/array/primitive literals.
+			// Safety: `new Function` can execute arbitrary code, so the regex
+			// gate above restricts evaluation to JSON-like literals (objects,
+			// arrays, quoted strings, true/false/null/numbers). Anything else
+			// is skipped and the key stays missing (raw-only fallback). The
+			// per-key try/catch below keeps one bad block from failing parse.
 			if (
 				/^[{[].*[}\]]$/su.test(expr) ||
 				/^["']/u.test(expr) ||
@@ -201,33 +182,4 @@ export function parseSettingsValues(raw: string): Record<string, unknown> {
 		}
 	}
 	return out;
-}
-
-function findBlockEnd(src: string, from: number): number {
-	let d0 = 0,
-		d1 = 0,
-		d2 = 0,
-		esc = false,
-		instr: string | null = null;
-	for (let i = from; i < src.length; i++) {
-		const ch = src[i];
-		if (instr) {
-			if (esc) esc = false;
-			else if (ch === "\\") esc = true;
-			else if (ch === instr) instr = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'" || ch === "`") {
-			instr = ch;
-			continue;
-		}
-		if (ch === "{") d0++;
-		else if (ch === "}") d0--;
-		else if (ch === "[") d1++;
-		else if (ch === "]") d1--;
-		else if (ch === "(") d2++;
-		else if (ch === ")") d2--;
-		else if (ch === ";" && d0 === 0 && d1 === 0 && d2 === 0) return i;
-	}
-	return src.length;
 }

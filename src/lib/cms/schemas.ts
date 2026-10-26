@@ -37,8 +37,6 @@ export const wpAdditions = {
 	twitterCard: z.string().optional(),
 };
 
-const wpWithoutTags = wpAdditions;
-
 export const projectsSchema = z
 	.object({
 		benefits: z.array(z.object({ label: z.string(), metric: z.coerce.string() })),
@@ -56,34 +54,16 @@ export const projectsSchema = z
 		timeline: z.string(),
 		title: z.string(),
 		year: z.number(),
-		...wpWithoutTags,
+		...wpAdditions,
 		categories: z.array(z.string()).optional(),
 	})
 	.passthrough();
 
 export const blogSchema = z
 	.object({
-		author: z.string().optional(),
-		canonicalUrl: z.string().optional(),
-		categories: z.array(z.string()).optional(),
-		date: z.string().optional(),
-		excerpt: z.string().optional(),
-		featuredImage: z.string().optional(),
-		keywords: z.array(z.string()).optional(),
-		metaDescription: z.string().optional(),
-		metaTitle: z.string().optional(),
-		modifiedDate: z.string().optional(),
-		nofollow: z.boolean().optional(),
-		noindex: z.boolean().optional(),
-		ogImage: z.string().optional(),
-		ogType: z.string().optional(),
-		publishDate: z.string().optional(),
-		schemaFields: z.record(z.string(), z.unknown()).optional(),
-		schemaType: z.string().optional(),
-		status: z.enum(["draft", "published", "scheduled"]).optional(),
 		tags: z.array(z.string()).optional(),
 		title: z.string(),
-		twitterCard: z.string().optional(),
+		...wpAdditions,
 	})
 	.passthrough();
 
