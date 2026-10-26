@@ -1,7 +1,3 @@
-// Canonical route + title helpers. Server-only.
-//
-// Single source of truth for the Astro page→route mapping previously
-// duplicated in workspace.ts and sync/scanners.ts.
 export function humanize(value: string): string {
 	return value.replaceAll(/[-_]+/gu, " ").replaceAll(/\b\w/gu, (char) => char.toUpperCase());
 }

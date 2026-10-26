@@ -1,4 +1,3 @@
-// Filesystem project discovery for the workspace switcher. Server-only.
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -59,7 +58,6 @@ const FAVICON_CANDIDATES = [
 const MAX_FAVICON_BYTES = 256 * 1024;
 const MAX_BROWSE_ENTRIES = 300;
 
-/** XDG data dir (`CMS_DATA_DIR`/`XDG_DATA_HOME`); `projects.json` sits beside `cms.db`. */
 function projectsFilePath(): string {
 	return getProjectsFilePath();
 }
@@ -75,7 +73,7 @@ async function readRememberedRoots(): Promise<string[]> {
 				.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
 				.map((entry) => path.resolve(entry));
 		} catch {
-			// Try the next candidate.
+			/* ignore */
 		}
 	}
 	return [];
@@ -109,7 +107,7 @@ async function readFavicon(root: string): Promise<string | null> {
 			const bytes = await fs.readFile(abs);
 			return `data:${candidate.mime};base64,${bytes.toString("base64")}`;
 		} catch {
-			// Try the next candidate.
+			/* ignore */
 		}
 	}
 	return null;
@@ -160,7 +158,6 @@ export async function listProjects(): Promise<ProjectInfo[]> {
 		.toSorted((a, b) => Number(b.current) - Number(a.current) || a.name.localeCompare(b.name));
 }
 
-/** Folder-picker view: directories under `input` plus quick places. */
 export async function browseDirectory(input?: string): Promise<BrowseView> {
 	const home = os.homedir();
 	const target = path.resolve(input?.trim() || home);
@@ -217,8 +214,7 @@ export async function selectProject(root: string): Promise<Workspace> {
 	// Single-user local server: point the PROJECT_PATH jail at the new workspace.
 	process.env.PROJECT_PATH = resolved;
 	await rememberRoot(resolved);
-	// Opening a project starts its sync engine (stopping the previous one).
-	// A sync failure must never fail the switch itself — the UI shows staleness.
+	// Sync failure must never fail the switch; the UI shows staleness.
 	if (isSyncDisabled()) {
 		await stopAllSyncEngines();
 	} else {
@@ -234,7 +230,6 @@ export async function selectProject(root: string): Promise<Workspace> {
 	return getWorkspace();
 }
 
-/** Stop the sync engine for `root` (project closed). Server-only. */
 export function closeProjectSync(root: string = getProjectRoot()): Promise<boolean> {
 	return stopSyncEngine(root);
 }

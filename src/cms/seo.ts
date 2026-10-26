@@ -49,7 +49,6 @@ function fleschGrade(score: number): string {
 }
 
 function imageResolves(ref: string): boolean {
-	// remote allowed as plain string (§10)
 	if (/^https?:\/\//u.test(ref)) return true;
 	const root = getProjectRoot();
 	const cleaned = ref.replace(/^\/+/u, "");
@@ -125,25 +124,21 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 	const desc = (fm.metaDescription as string) ?? (fm.excerpt as string) ?? "";
 	const words = body.split(/\s+/u).filter(Boolean);
 
-	// metaTitle
 	if (!title) push("metaTitle", "metaTitle present", "fail", "Missing title");
 	else if (title.length > 60)
 		push("metaTitle", "metaTitle ≤ 60 chars", "warn", `${title.length} chars`);
 	else push("metaTitle", "metaTitle ≤ 60 chars", "pass", `${title.length} chars`);
 
-	// metaDescription 120–160
 	if (!desc) push("metaDescription", "metaDescription 120–160", "warn", "Missing description");
 	else if (desc.length < 120 || desc.length > 160)
 		push("metaDescription", "metaDescription 120–160", "warn", `${desc.length} chars`);
 	else push("metaDescription", "metaDescription 120–160", "pass", `${desc.length} chars`);
 
-	// slug readability
 	if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(slug))
 		push("slug", "Slug readable", "fail", "Slug violates slug pattern");
 	else if (slug.length > 60) push("slug", "Slug readable", "warn", "Long slug");
 	else push("slug", "Slug readable", "pass", slug);
 
-	// canonical
 	const canon = fm.canonicalUrl as string | undefined;
 	if (canon) {
 		try {
@@ -161,14 +156,12 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 		push("canonical", "Canonical valid", "pass", "No canonical (uses default URL)");
 	}
 
-	// images
 	const feat = (fm.featuredImage as string) ?? (fm.hero_image as string) ?? (fm.ogImage as string);
 	if (!feat)
 		push("featuredImage", "Featured/OG image", "warn", "Missing featuredImage/hero_image/ogImage");
 	else if (imageResolves(feat)) push("featuredImage", "Featured/OG image", "pass", feat);
 	else push("featuredImage", "Featured/OG image", "fail", `Missing file: ${feat}`);
 
-	// keywords ≈ tags
 	const tags = (fm.tags as string[]) ?? [];
 	const keywords = (fm.keywords as string[]) ?? [];
 	if (keywords.length === 0)
@@ -182,12 +175,10 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 		else push("keywords", "Keywords ≈ tags", "pass", `${overlap}/${keywords.length} overlap`);
 	}
 
-	// noindex vs sitemap
 	if (fm.noindex === true)
 		push("noindex", "noindex vs sitemap", "warn", "noindex set — conflicts with sitemap inclusion");
 	else push("noindex", "noindex vs sitemap", "pass", "Indexable");
 
-	// excerpt/schema
 	if (!fm.excerpt && !(fm as Record<string, unknown>).description)
 		push("excerpt", "Excerpt present", "warn", "Missing excerpt");
 	else push("excerpt", "Excerpt present", "pass");
@@ -197,7 +188,6 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 		push("schemaType", "schemaType selected", "warn", "Missing schemaType");
 	}
 
-	// score: 100 - warns*8 - fails*20, clamped.
 	const warns = checks.filter((c) => c.status === "warn").length;
 	const fails = checks.filter((c) => c.status === "fail").length;
 	const score = Math.max(0, Math.min(100, 100 - warns * 8 - fails * 20));
@@ -231,9 +221,7 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 	};
 }
 
-// ---- BYOK AI (OpenAI-compatible, server-only) ----
-// Rate limiting lives in the oRPC `aiRateLimitMiddleware` (transport edge),
-// so direct lib callers stay unlimited but every HTTP call is capped.
+// Rate limiting lives in the oRPC `aiRateLimitMiddleware`, not here.
 
 export async function aiSuggest(
 	action: "excerpt" | "keywords" | "titles",

@@ -34,7 +34,7 @@
 			"rules": { "react/no-danger": "off" }
 		},
 		{
-			"files": ["src/lib/cms/**/*.ts", "scripts/**/*.ts"],
+			"files": ["src/cms/**/*.ts", "scripts/**/*.ts"],
 			"rules": { "no-await-in-loop": "off" }
 		},
 		{

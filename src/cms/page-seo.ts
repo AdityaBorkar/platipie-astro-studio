@@ -1,8 +1,4 @@
-// Page-level SEO + schema editing for Astro route files.
-//
-// Reads the top-level `const title / description / keywords / schema_markup`
-// declarations out of a route's frontmatter and writes edits back to the same
-// file — the Astro checkout stays the source of truth.
+// Astro checkout stays the source of truth.
 import { promises as fs } from "node:fs";
 
 import { arrayBody, findStatementEnd, parseStringLiteral, stripComments } from "./balanced.ts";
@@ -91,7 +87,6 @@ function frontmatterBounds(text: string): FrontmatterBounds | null {
 	return { end: start + closeOffset, start };
 }
 
-/** Top-level `const <seo key> = …` declarations inside the frontmatter only. */
 function findConstBlocks(text: string, bounds: FrontmatterBounds): Map<SeoKey, ConstBlock> {
 	const blocks = new Map<SeoKey, ConstBlock>();
 	let depth = 0;

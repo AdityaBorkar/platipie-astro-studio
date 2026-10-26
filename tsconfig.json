@@ -15,7 +15,7 @@
 		"noUnusedParameters": true,
 		"paths": {
 			"#/*": ["./src/*"],
-			"#/cms/*": ["./src/lib/cms/*"],
+			"#/cms/*": ["./src/cms/*"],
 			"~/*": ["./src/*"]
 		},
 		"resolveJsonModule": true,

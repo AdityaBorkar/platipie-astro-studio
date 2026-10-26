@@ -1,4 +1,3 @@
-// Generic recursive directory walker. Server-only.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -9,7 +8,6 @@ export interface WalkEntry {
 	size: number;
 }
 
-/** All files under `absDir`, sorted by name; skips dotfiles. Never throws. */
 export async function walkDir(absDir: string, repoRel: string): Promise<WalkEntry[]> {
 	const out: WalkEntry[] = [];
 	async function walk(dir: string, rel: string): Promise<void> {
