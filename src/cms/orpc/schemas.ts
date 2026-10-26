@@ -140,6 +140,10 @@ export const seoGetSchema = z.object({
 	path: repoPathSchema,
 });
 
+export const schemaGetSchema = z.object({
+	type: z.string().min(1).max(200),
+});
+
 export const aiSuggestSchema = z.object({
 	action: z.enum(["excerpt", "keywords", "titles"]),
 	body: z.string().max(50_000).optional(),

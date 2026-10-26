@@ -1,25 +1,20 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Code2Icon,
-	FileTextIcon,
-	GlobeIcon,
-	RefreshCwIcon,
-	RotateCcwIcon,
-	SaveIcon,
-	SearchIcon,
-	XIcon,
-} from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
+import { Code2Icon, FileTextIcon, GlobeIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
-import { EmptyState, SyncBadge } from "#/components/gitbook/page";
-import { LiveBadge } from "#/components/live-badge";
+import { EmptyState } from "#/components/gitbook/page";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "#/components/ui/input-group";
 import {
 	Select,
 	SelectContent,
@@ -30,7 +25,6 @@ import {
 import { Skeleton } from "#/components/ui/skeleton";
 import { Textarea } from "#/components/ui/textarea";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
-import { cn } from "#/lib/utils";
 
 interface DbPage {
 	dynamic: number;
@@ -51,17 +45,6 @@ interface DbPage {
 
 interface InventoryResponse {
 	rows: DbPage[];
-	status: { fileCount: number; lastSync: number | null; scope: string }[];
-}
-
-interface WorkspaceResponse {
-	branch: string;
-	project: string;
-	reachable: boolean;
-}
-
-interface SettingsResponse {
-	values?: { SITE_URL?: string };
 }
 
 interface PageDetail {
@@ -80,7 +63,7 @@ interface PageDetail {
 
 interface Draft {
 	description: string;
-	keywords: string;
+	keywords: string[];
 	schema: string[];
 	title: string;
 }
@@ -91,6 +74,19 @@ interface SaveResponse {
 	message?: string;
 	mtime: number;
 	path: string;
+}
+
+interface SchemaDetail {
+	context: string | null;
+	encoded: string | null;
+	id: string | null;
+	identifier: string | null;
+	keys: string[];
+	kind: "dynamic" | "static" | "unknown";
+	schemaType: string | null;
+	snippet: string;
+	sourceFile: string | null;
+	type: string;
 }
 
 export const Route = createFileRoute("/pages")({
@@ -116,7 +112,7 @@ function toDraft(detail: PageDetail | null): Draft | null {
 	if (!detail) return null;
 	return {
 		description: detail.description ?? "",
-		keywords: detail.keywords.join(", "),
+		keywords: [...detail.keywords],
 		schema: detail.schemaMode === "list" ? detail.schemaTypes : [],
 		title: detail.title ?? "",
 	};
@@ -126,7 +122,7 @@ function isDirty(detail: PageDetail | null, draft: Draft | null): boolean {
 	if (!detail || !draft) return false;
 	if (detail.editable.title && draft.title !== (detail.title ?? "")) return true;
 	if (detail.editable.description && draft.description !== (detail.description ?? "")) return true;
-	if (detail.editable.keywords && !sameList(splitKeywords(draft.keywords), detail.keywords)) {
+	if (detail.editable.keywords && !sameList(draft.keywords, detail.keywords)) {
 		return true;
 	}
 	return detail.schemaMode === "list" && !sameList(draft.schema, detail.schemaTypes);
@@ -138,9 +134,7 @@ function prerenderVariant(prerender: string): "secondary" | "success" {
 
 function PagesPage() {
 	const search = Route.useSearch();
-	const [query, setQuery] = useState("");
 	const [selected, setSelected] = useState<string | null>(search.page ?? null);
-	const [syncing, setSyncing] = useState(false);
 
 	const [draft, setDraft] = useState<Draft | null>(null);
 	const [detailError, setDetailError] = useState<string | null>(null);
@@ -148,46 +142,23 @@ function PagesPage() {
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [conflict, setConflict] = useState(false);
 	const [detailPath, setDetailPath] = useState<string | null>(null);
+	const [keywordInput, setKeywordInput] = useState("");
+	const [activeSchema, setActiveSchema] = useState<string | null>(null);
 
 	const fetchInventory = useCallback(
 		() => fetchJson<InventoryResponse>("/api/cms/inventory?scope=pages"),
 		[],
 	);
-	const fetchWorkspace = useCallback(() => fetchJson<WorkspaceResponse>("/api/cms/workspace"), []);
-	const fetchSettings = useCallback(() => fetchJson<SettingsResponse>("/api/cms/settings"), []);
 	const inventoryQuery = useCachedFetch("/api/cms/inventory?scope=pages", fetchInventory, {
 		errorMessage: "Could not refresh pages",
 	});
-	const workspaceQuery = useCachedFetch("/api/cms/workspace", fetchWorkspace, {
-		errorMessage: "Could not refresh workspace",
-		toastOnBackgroundError: false,
-	});
-	const settingsQuery = useCachedFetch("/api/cms/settings", fetchSettings, {
-		errorMessage: "Could not refresh settings",
-		toastOnBackgroundError: false,
-	});
 	const inventory = inventoryQuery.data?.rows ?? null;
-	const lastSync =
-		inventoryQuery.data?.status.find((entry) => entry.scope === "pages")?.lastSync ?? null;
-	const workspace = workspaceQuery.data;
-	const settings = settingsQuery.data;
-	const error = inventory === null ? inventoryQuery.error : null;
 
 	useEffect(() => {
 		if (search.page) setSelected(search.page);
 	}, [search.page]);
 
 	const pages = useMemo(() => inventory ?? [], [inventory]);
-	const filtered = useMemo(() => {
-		const needle = query.trim().toLowerCase();
-		if (!needle) return pages;
-		return pages.filter(
-			(page) =>
-				page.route.toLowerCase().includes(needle) ||
-				page.path.toLowerCase().includes(needle) ||
-				page.title.toLowerCase().includes(needle),
-		);
-	}, [pages, query]);
 
 	const selectedPage =
 		pages.find((page) => page.route === selected) ??
@@ -195,8 +166,6 @@ function PagesPage() {
 		pages[0] ??
 		null;
 	const selectedPath = selectedPage?.path ?? null;
-	const siteUrl = settings?.values?.SITE_URL?.replace(/\/$/u, "") ?? "";
-	const previewUrl = selectedPage ? `${siteUrl}${selectedPage.route}` : siteUrl;
 
 	const detailKey = selectedPath ? `/api/cms/page?path=${encodeURIComponent(selectedPath)}` : null;
 	const fetchDetail = useCallback(() => {
@@ -209,7 +178,6 @@ function PagesPage() {
 	});
 	const detail = detailQuery.data;
 	const detailLoading = selectedPath !== null && detail === null && detailQuery.isLoading;
-	const detailRefreshing = detail !== null && detailQuery.isRefreshing;
 
 	useEffect(() => {
 		if (detailQuery.error && detail === null) {
@@ -224,6 +192,7 @@ function PagesPage() {
 			setDraft(null);
 			setDetailError(null);
 			setDetailPath(null);
+			setKeywordInput("");
 			return;
 		}
 		if (detailPath !== selectedPath) {
@@ -232,6 +201,7 @@ function PagesPage() {
 			setConflict(false);
 			setDetailPath(selectedPath);
 			setDraft(toDraft(detail));
+			setKeywordInput("");
 			return;
 		}
 		if (detail && draft === null) {
@@ -241,57 +211,53 @@ function PagesPage() {
 
 	const dirty = isDirty(detail, draft);
 
-	async function resync() {
-		setSyncing(true);
-		try {
-			const json = await fetchJson<{ fileCount: number }>("/api/cms/sync", {
-				body: JSON.stringify({ scope: "pages" }),
-				headers: { "Content-Type": "application/json" },
-				method: "POST",
-			});
-			toast.success(`Re-synced ${json.fileCount} pages`);
-			inventoryQuery.refresh();
-			detailQuery.refresh();
-		} catch (e: unknown) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		} finally {
-			setSyncing(false);
-		}
-	}
+	const refreshDetail = detailQuery.refresh;
+	const refreshInventory = inventoryQuery.refresh;
 
-	async function save(force = false) {
-		if (!detail || !draft) return;
-		setSaving(true);
-		setSaveError(null);
-		setConflict(false);
-		const seo: Record<string, unknown> = {};
-		if (detail.editable.title) seo.title = draft.title;
-		if (detail.editable.description) seo.description = draft.description;
-		if (detail.editable.keywords) seo.keywords = splitKeywords(draft.keywords);
-		try {
-			const json = await fetchJson<SaveResponse>("/api/cms/page", {
-				body: JSON.stringify({
-					force,
-					mtime: detail.mtime,
-					path: detail.path,
-					schema: detail.editable.schema ? draft.schema : undefined,
-					seo,
-				}),
-				headers: { "Content-Type": "application/json" },
-				method: "PUT",
-			});
-			toast.success(`Saved ${json.path}`);
-			detailQuery.refresh();
-			inventoryQuery.refresh();
-		} catch (e: unknown) {
-			const code = (e as { code?: unknown }).code;
-			if (code === "CONFLICT") setConflict(true);
-			const message = e instanceof Error ? e.message : String(e);
-			setSaveError(message);
-		} finally {
-			setSaving(false);
-		}
-	}
+	const save = useCallback(
+		async (force = false) => {
+			if (!detail || !draft) return;
+			setSaving(true);
+			setSaveError(null);
+			setConflict(false);
+			const seo: Record<string, unknown> = {};
+			if (detail.editable.title) seo.title = draft.title;
+			if (detail.editable.description) seo.description = draft.description;
+			if (detail.editable.keywords) seo.keywords = draft.keywords;
+			try {
+				await fetchJson<SaveResponse>("/api/cms/page", {
+					body: JSON.stringify({
+						force,
+						mtime: detail.mtime,
+						path: detail.path,
+						schema: detail.editable.schema ? draft.schema : undefined,
+						seo,
+					}),
+					headers: { "Content-Type": "application/json" },
+					method: "PUT",
+				});
+				refreshDetail();
+				refreshInventory();
+			} catch (e: unknown) {
+				const code = (e as { code?: unknown }).code;
+				if (code === "CONFLICT") setConflict(true);
+				const message = e instanceof Error ? e.message : String(e);
+				setSaveError(message);
+			} finally {
+				setSaving(false);
+			}
+		},
+		[detail, draft, refreshDetail, refreshInventory],
+	);
+
+	useEffect(() => {
+		if (!detail || !draft || !dirty || conflict || saving) return;
+		if (detailQuery.isRefreshing) return;
+		const timer = setTimeout(() => {
+			void save(false);
+		}, 2000);
+		return () => clearTimeout(timer);
+	}, [conflict, detail, detailQuery.isRefreshing, dirty, draft, save, saving]);
 
 	function addSchema(type: string) {
 		const value = type.trim();
@@ -299,6 +265,30 @@ function PagesPage() {
 		setDraft((current) =>
 			current && !current.schema.includes(value)
 				? { ...current, schema: [...current.schema, value] }
+				: current,
+		);
+	}
+
+	function addKeywords(raw: string) {
+		const values = splitKeywords(raw);
+		if (values.length === 0) return;
+		setDraft((current) => {
+			if (!current) return current;
+			const next = [...current.keywords];
+			for (const value of values) {
+				if (!next.some((entry) => entry.toLowerCase() === value.toLowerCase())) {
+					next.push(value);
+				}
+			}
+			return next.length === current.keywords.length ? current : { ...current, keywords: next };
+		});
+		setKeywordInput("");
+	}
+
+	function removeKeyword(keyword: string) {
+		setDraft((current) =>
+			current
+				? { ...current, keywords: current.keywords.filter((entry) => entry !== keyword) }
 				: current,
 		);
 	}
@@ -315,125 +305,8 @@ function PagesPage() {
 	);
 
 	return (
-		<div className="grid min-h-dvh grid-cols-1 lg:h-dvh lg:grid-cols-pages-workspace lg:overflow-hidden">
-			<aside className="flex min-h-0 flex-col border-border/70 bg-sidebar/50 lg:border-r">
-				<div className="border-b border-border/70 p-4">
-					<div className="flex items-start justify-between gap-2">
-						<div className="min-w-0">
-							<p className="text-11 font-bold tracking-14 text-brand uppercase">Pages</p>
-							<h1 className="mt-1 text-title font-bold tracking-heading">Routes</h1>
-						</div>
-						<Button
-							aria-label="Re-sync pages"
-							disabled={syncing}
-							onClick={() => void resync()}
-							size="sm"
-							variant="outline"
-						>
-							<RefreshCwIcon className={cn("size-3.5", syncing && "animate-spin")} />
-							{syncing ? "Syncing…" : "Re-sync"}
-						</Button>
-					</div>
-					<div className="mt-3 flex flex-wrap items-center gap-1.5">
-						<Badge className="font-mono" variant={workspace?.reachable ? "success" : "destructive"}>
-							{workspace?.reachable ? "reachable" : workspace ? "missing" : "…"}
-						</Badge>
-						<Badge variant="secondary">{pages.length} pages</Badge>
-						<SyncBadge lastSync={lastSync} />
-						<LiveBadge refreshing={inventoryQuery.isRefreshing} />
-					</div>
-					<InputGroup className="mt-3 w-full">
-						<InputGroupAddon>
-							<SearchIcon />
-						</InputGroupAddon>
-						<InputGroupInput
-							aria-label="Filter pages"
-							onChange={(event) => setQuery(event.target.value)}
-							placeholder="Filter routes…"
-							value={query}
-						/>
-					</InputGroup>
-				</div>
-
-				<div className="max-h-45dvh min-h-0 overflow-y-auto lg:max-h-none lg:flex-1">
-					{error ? (
-						<div className="p-4">
-							<Hint title="Failed to load pages" variant="danger">
-								{error}
-							</Hint>
-						</div>
-					) : inventory === null ? (
-						<div className="grid gap-2 p-4">
-							<Skeleton className="h-12 w-full" />
-							<Skeleton className="h-12 w-full" />
-							<Skeleton className="h-12 w-full" />
-						</div>
-					) : filtered.length === 0 ? (
-						<EmptyState
-							className="m-3"
-							compact
-							description="Try a different route or clear the filter."
-							icon={SearchIcon}
-							title="No pages match"
-						/>
-					) : (
-						<ul className="divide-y divide-border/70">
-							{filtered.map((page) => (
-								<li key={page.path}>
-									<Link
-										className={cn(
-											"flex items-center gap-2.5 px-4 py-3 transition-colors outline-none hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset",
-											selectedPage?.path === page.path && "bg-muted/70",
-										)}
-										search={{ page: page.route }}
-										to="/pages"
-									>
-										<span className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-											<GlobeIcon className="size-3.5" />
-										</span>
-										<span className="min-w-0 flex-1">
-											<span className="flex items-center gap-1.5">
-												<span className="truncate text-sm font-semibold">{page.title}</span>
-												{page.dynamic ? <Badge variant="brand">dynamic</Badge> : null}
-											</span>
-											<span className="mt-0.5 block truncate font-mono text-11 text-muted-foreground">
-												{page.route}
-											</span>
-										</span>
-										<Badge
-											className="font-mono"
-											variant={page.prerender === "true" ? "success" : "outline"}
-										>
-											{page.prerender === "true" ? "pre" : "ssr"}
-										</Badge>
-									</Link>
-								</li>
-							))}
-						</ul>
-					)}
-				</div>
-
-				<div className="hidden border-t border-border/70 px-4 py-3 lg:block">
-					<p className="truncate font-mono text-11 text-muted-foreground">
-						{workspace?.project ?? "…"} · {workspace?.branch ?? "…"}
-					</p>
-				</div>
-			</aside>
-
+		<div className="grid min-h-dvh grid-cols-1 lg:h-dvh lg:grid-cols-app-rail lg:overflow-hidden">
 			<section className="hidden min-h-0 flex-col lg:flex">
-				<div className="flex items-center gap-3 border-b border-border/70 px-5 py-3">
-					<div className="flex items-center gap-1.5 text-muted-foreground">
-						<span className="size-2.5 rounded-full bg-border" />
-						<span className="size-2.5 rounded-full bg-border" />
-						<span className="size-2.5 rounded-full bg-border" />
-					</div>
-					<div className="min-w-0 flex-1 rounded-full border border-border/70 bg-card px-3 py-1.5">
-						<p className="truncate font-mono text-11 text-muted-foreground">
-							{siteUrl ? previewUrl : (selectedPage?.route ?? "Select a page")}
-						</p>
-					</div>
-					<Badge variant="outline">preview reserved</Badge>
-				</div>
 				<div className="min-h-0 flex-1 overflow-y-auto p-5">
 					<div className="grid h-full min-h-80 place-items-center rounded-2xl border border-dashed border-border/80 bg-muted/25 p-8 text-center">
 						<div className="max-w-sm">
@@ -455,37 +328,6 @@ function PagesPage() {
 			</section>
 
 			<aside className="min-h-0 border-border/70 lg:h-dvh lg:overflow-y-auto lg:border-l lg:bg-sidebar/50">
-				<div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border/70 bg-background/90 px-4 py-3 backdrop-blur">
-					<div className="min-w-0">
-						<p className="text-11 font-bold tracking-14 text-brand uppercase">Page settings</p>
-						<p className="truncate text-sm font-semibold">
-							{selectedPage?.title ?? "No page selected"}
-						</p>
-						<LiveBadge refreshing={detailRefreshing} />
-					</div>
-					<div className="flex shrink-0 items-center gap-1">
-						{dirty ? (
-							<Button
-								aria-label="Reset changes"
-								disabled={saving}
-								onClick={() => setDraft(toDraft(detail))}
-								size="icon-sm"
-								variant="ghost"
-							>
-								<RotateCcwIcon className="size-3.5" />
-							</Button>
-						) : null}
-						<Button
-							disabled={!dirty || saving || !detail}
-							onClick={() => void save(false)}
-							size="sm"
-						>
-							<SaveIcon className="size-3.5" />
-							{saving ? "Saving…" : "Save"}
-						</Button>
-					</div>
-				</div>
-
 				{detailLoading ? (
 					<div className="grid gap-2 p-4">
 						<Skeleton className="h-9 w-full" />
@@ -579,21 +421,73 @@ function PagesPage() {
 								</Field>
 
 								<Field data-invalid={!detail.editable.keywords}>
-									<FieldLabel htmlFor="page-seo-keywords">Keywords</FieldLabel>
-									<Input
-										disabled={!detail.editable.keywords}
-										id="page-seo-keywords"
-										onChange={(event) =>
-											setDraft((current) =>
-												current ? { ...current, keywords: event.target.value } : current,
-											)
-										}
-										placeholder="Comma-separated keywords"
-										value={draft?.keywords ?? ""}
-									/>
-									<p className="text-11 text-muted-foreground">
-										Comma-separated. Writes back into the <code>keywords</code> array.
-									</p>
+									<div className="flex items-center justify-between gap-2">
+										<FieldLabel htmlFor="page-seo-keywords">Keywords</FieldLabel>
+										<span className="font-mono text-10 text-muted-foreground">
+											{draft?.keywords.length ?? 0} keywords
+										</span>
+									</div>
+									{(draft?.keywords.length ?? 0) > 0 ? (
+										<div className="flex flex-wrap gap-1.5">
+											{draft?.keywords.map((keyword) => (
+												<Badge className="gap-1 pr-1 font-mono" key={keyword} variant="outline">
+													{keyword}
+													{detail.editable.keywords ? (
+														<button
+															aria-label={`Remove ${keyword}`}
+															className="rounded-full p-0.5 transition-colors hover:bg-muted hover:text-destructive"
+															onClick={() => removeKeyword(keyword)}
+															type="button"
+														>
+															<XIcon className="size-3" />
+														</button>
+													) : null}
+												</Badge>
+											))}
+										</div>
+									) : (
+										<p className="text-11 text-muted-foreground">No keywords yet.</p>
+									)}
+									<div className="flex gap-2">
+										<Input
+											disabled={!detail.editable.keywords}
+											id="page-seo-keywords"
+											onBlur={() => {
+												if (keywordInput.trim()) addKeywords(keywordInput);
+											}}
+											onChange={(event) => setKeywordInput(event.target.value)}
+											onKeyDown={(event) => {
+												if (event.key === "Enter" || event.key === ",") {
+													event.preventDefault();
+													addKeywords(keywordInput);
+												} else if (
+													event.key === "Backspace" &&
+													keywordInput === "" &&
+													(draft?.keywords.length ?? 0) > 0
+												) {
+													removeKeyword(draft?.keywords.at(-1) ?? "");
+												}
+											}}
+											onPaste={(event) => {
+												const text = event.clipboardData.getData("text");
+												if (text.includes(",")) {
+													event.preventDefault();
+													addKeywords(text);
+												}
+											}}
+											placeholder="Add keyword and press Enter"
+											value={keywordInput}
+										/>
+										<Button
+											disabled={!detail.editable.keywords || !keywordInput.trim()}
+											onClick={() => addKeywords(keywordInput)}
+											size="default"
+											type="button"
+											variant="outline"
+										>
+											Add
+										</Button>
+									</div>
 								</Field>
 							</FieldGroup>
 							{!detail.editable.title &&
@@ -617,15 +511,33 @@ function PagesPage() {
 								</p>
 							) : (
 								<>
-									<div className="mt-3 flex flex-wrap gap-1.5">
-										{draft?.schema.map((type) => (
-											<Badge className="gap-1 pr-1 font-mono" key={type} variant="outline">
-												{type}
+									<div className="mt-3 grid justify-items-start gap-1.5">
+										{(detail.schemaMode === "list"
+											? (draft?.schema ?? [])
+											: detail.schemaTypes
+										).map((type) => (
+											<Badge
+												className="max-w-full gap-1 pr-1 font-mono"
+												key={type}
+												variant="outline"
+											>
+												<button
+													className="min-w-0 flex-1 cursor-pointer truncate text-left hover:underline"
+													onClick={() => setActiveSchema(type)}
+													title={`View ${type} schema`}
+													type="button"
+												>
+													{type}
+												</button>
 												{detail.editable.schema ? (
 													<button
 														aria-label={`Remove ${type}`}
-														className="rounded-full p-0.5 transition-colors hover:bg-muted hover:text-destructive"
-														onClick={() => removeSchema(type)}
+														className="shrink-0 rounded-full p-0.5 transition-colors hover:bg-muted hover:text-destructive"
+														onClick={(event) => {
+															event.stopPropagation();
+															removeSchema(type);
+														}}
+														onKeyDown={(event) => event.stopPropagation()}
 														type="button"
 													>
 														<XIcon className="size-3" />
@@ -633,7 +545,7 @@ function PagesPage() {
 												) : null}
 											</Badge>
 										))}
-										{detail.schemaMode === "list" && detail.schemaTypes.length === 0 ? (
+										{detail.schemaMode === "list" && (draft?.schema.length ?? 0) === 0 ? (
 											<p className="text-xs text-muted-foreground">No schema types selected.</p>
 										) : null}
 									</div>
@@ -656,9 +568,6 @@ function PagesPage() {
 											the page source.
 										</Hint>
 									)}
-									<p className="mt-2 text-11 text-muted-foreground">
-										Saved as <code>SchemaMarkup.get(&quot;…&quot;)</code> in the route file.
-									</p>
 								</>
 							)}
 						</section>
@@ -702,6 +611,86 @@ function PagesPage() {
 					</div>
 				)}
 			</aside>
+			{activeSchema ? (
+				<SchemaDialog onClose={() => setActiveSchema(null)} type={activeSchema} />
+			) : null}
 		</div>
+	);
+}
+
+function SchemaDialog({ onClose, type }: { onClose: () => void; type: string }) {
+	const [schemaDetail, setSchemaDetail] = useState<SchemaDetail | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		let alive = true;
+		setLoading(true);
+		setError(null);
+		setSchemaDetail(null);
+		fetchJson<SchemaDetail>(`/api/cms/schema?type=${encodeURIComponent(type)}`)
+			.then((json) => {
+				if (alive) setSchemaDetail(json);
+			})
+			.catch((e: unknown) => {
+				if (alive) setError(e instanceof Error ? e.message : String(e));
+			})
+			.finally(() => {
+				if (alive) setLoading(false);
+			});
+		return () => {
+			alive = false;
+		};
+	}, [type]);
+
+	return (
+		<Dialog onOpenChange={(open) => !open && onClose()} open>
+			<DialogContent className="gap-3 sm:max-w-lg">
+				<DialogHeader>
+					<DialogTitle className="font-mono">{type}</DialogTitle>
+					<DialogDescription>
+						{schemaDetail?.sourceFile ?? "Schema markup encoded for this page"}
+					</DialogDescription>
+				</DialogHeader>
+				{loading ? (
+					<div className="grid gap-2">
+						<Skeleton className="h-6 w-full" />
+						<Skeleton className="h-40 w-full" />
+					</div>
+				) : error ? (
+					<Hint title="Could not load schema" variant="danger">
+						{error}
+					</Hint>
+				) : schemaDetail ? (
+					<div className="grid gap-3">
+						<div className="flex flex-wrap items-center gap-1.5">
+							<Badge className="font-mono" variant="outline">
+								{schemaDetail.kind}
+							</Badge>
+							{schemaDetail.schemaType ? (
+								<Badge className="font-mono" variant="secondary">
+									{schemaDetail.schemaType}
+								</Badge>
+							) : null}
+						</div>
+						{schemaDetail.id ? (
+							<p className="truncate font-mono text-11 text-muted-foreground">{schemaDetail.id}</p>
+						) : null}
+						<p className="font-mono text-11 break-all">
+							<code>{schemaDetail.snippet}</code>
+						</p>
+						{schemaDetail.encoded ? (
+							<pre className="max-h-58vh overflow-auto rounded-xl border border-border/70 bg-muted/30 p-3 font-mono text-11 break-all whitespace-pre-wrap">
+								{schemaDetail.encoded}
+							</pre>
+						) : (
+							<p className="text-xs text-muted-foreground">
+								No encoded JSON-LD found for this type yet.
+							</p>
+						)}
+					</div>
+				) : null}
+			</DialogContent>
+		</Dialog>
 	);
 }

@@ -28,6 +28,7 @@ import {
 	softDelete,
 	unifiedDiff,
 } from "#/cms/save.ts";
+import { readSchemaDetail } from "#/cms/schema-detail.ts";
 import { aiSuggest, scoreEntry } from "#/cms/seo.ts";
 import {
 	parseSettingsValues,
@@ -56,6 +57,7 @@ import {
 	projectsSelectSchema,
 	renameSchema,
 	restoreRunSchema,
+	schemaGetSchema,
 	seoGetSchema,
 	settingsSaveSchema,
 	syncRunSchema,
@@ -286,6 +288,11 @@ const seoScore = base
 		return scoreEntry(entry.frontmatter, entry.body, slug);
 	});
 
+const schemaGet = base
+	.route({ method: "GET", path: "/schema" })
+	.input(schemaGetSchema)
+	.handler(({ input }) => readSchemaDetail(input.type));
+
 const aiSuggestRun = aiBase
 	.route({ method: "POST", path: "/seo/ai" })
 	.input(aiSuggestSchema)
@@ -332,6 +339,9 @@ export const cmsRouter = {
 	restore: {
 		list: restoreList,
 		run: restoreRun,
+	},
+	schema: {
+		get: schemaGet,
 	},
 	seo: {
 		score: seoScore,

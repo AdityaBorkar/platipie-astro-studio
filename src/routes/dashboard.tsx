@@ -1,22 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	ArrowRightIcon,
-	DatabaseIcon,
-	FileStackIcon,
-	FolderGit2Icon,
-	GitBranchIcon,
-	ImageIcon,
-	RefreshCwIcon,
-	ShapesIcon,
-	TriangleAlertIcon,
-} from "lucide-react";
+import { DatabaseIcon, FileStackIcon, ImageIcon, RefreshCwIcon, ShapesIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import { toast } from "sonner";
 
-import { BrandMark } from "#/components/gitbook/brand";
 import { Hint } from "#/components/gitbook/hint";
-import { EmptyState, PageHeader, PageShell, SyncBadge } from "#/components/gitbook/page";
-import { LiveBadge } from "#/components/live-badge";
+import { EmptyState, PageHeader, PageShell } from "#/components/gitbook/page";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
@@ -76,12 +63,6 @@ export const Route = createFileRoute("/dashboard")({
 	head: () => ({ meta: [{ title: "Dashboard · platipie-cms" }] }),
 });
 
-function lastSyncOf(status: InventoryResponse["status"]): number | null {
-	const stamps = status.map((entry) => entry.lastSync);
-	if (stamps.length === 0 || stamps.some((stamp) => stamp === null)) return null;
-	return Math.min(...(stamps as number[]));
-}
-
 function Dashboard() {
 	const fetchProjects = useCallback(
 		() => fetchJson<{ projects: ProjectEntry[] }>("/api/cms/projects"),
@@ -118,8 +99,6 @@ function Dashboard() {
 			project: entries.find((entry) => entry.current) ?? null,
 		};
 	}, [collectionsQuery.data, inventoryQuery.data, projectsQuery.data]);
-	const refreshing =
-		collectionsQuery.isRefreshing || inventoryQuery.isRefreshing || projectsQuery.isRefreshing;
 	const loading =
 		data === null &&
 		(projectsQuery.isLoading || collectionsQuery.isLoading || inventoryQuery.isLoading);
@@ -164,7 +143,7 @@ function Dashboard() {
 		);
 	}
 
-	const { collections, project } = data;
+	const { collections } = data;
 	const pages = data.inventory.rows.pages?.length ?? 0;
 	const assets = data.inventory.rows.assets?.length ?? 0;
 	const components = data.inventory.rows.components?.length ?? 0;
@@ -172,8 +151,6 @@ function Dashboard() {
 		(sum, collection) => sum + collection.count,
 		0,
 	);
-	const lastSync = lastSyncOf(data.inventory.status);
-	const reachable = project !== null && collections.env.projectReachable;
 
 	const stats = [
 		{
@@ -206,52 +183,11 @@ function Dashboard() {
 		},
 	];
 
-	async function resync() {
-		try {
-			const response = await fetch("/api/cms/sync", {
-				body: JSON.stringify({}),
-				headers: { "Content-Type": "application/json" },
-				method: "POST",
-			});
-			const json = await response.json();
-			if (!response.ok) throw new Error(json.message ?? "Re-sync failed");
-			toast.success("Workspace re-synced");
-			refreshAll();
-		} catch (e: unknown) {
-			toast.error(e instanceof Error ? e.message : "Re-sync failed");
-		}
-	}
-
 	return (
 		<PageShell>
 			<PageHeader
-				actions={
-					<>
-						<Button nativeButton={false} render={<Link to="/content" />} size="sm">
-							Open content
-							<ArrowRightIcon className="size-3.5" />
-						</Button>
-						<Button onClick={() => void resync()} size="sm" variant="outline">
-							<RefreshCwIcon className="size-3.5" />
-							Re-sync
-						</Button>
-					</>
-				}
 				description="Files are the source of truth. This workspace mirrors the Astro checkout into a read-model for fast, safe editing."
 				eyebrow="Dashboard"
-				meta={
-					<>
-						<Badge className="font-mono" variant={reachable ? "success" : "destructive"}>
-							Project {reachable ? "reachable" : "missing"}
-						</Badge>
-						<Badge className="font-mono" variant="outline">
-							<GitBranchIcon className="size-3" />
-							{project?.branch ?? "no branch"}
-						</Badge>
-						<SyncBadge lastSync={lastSync} />
-						<LiveBadge refreshing={refreshing} />
-					</>
-				}
 				title={
 					<>
 						Workspace, <span className="text-brand">at a glance.</span>
@@ -328,59 +264,6 @@ function Dashboard() {
 								))}
 							</ul>
 						)}
-					</CardContent>
-				</Card>
-
-				<Card>
-					<CardHeader>
-						<CardTitle className="flex items-center gap-2">
-							<FolderGit2Icon className="size-4 text-brand" />
-							Project
-						</CardTitle>
-						<CardDescription>Where this workspace writes.</CardDescription>
-					</CardHeader>
-					<CardContent className="grid gap-3">
-						<div className="flex items-center gap-3">
-							{project?.favicon ? (
-								<img
-									alt=""
-									className="size-9 rounded-lg border border-border object-contain"
-									src={project.favicon}
-								/>
-							) : (
-								<span className="inline-flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-									<BrandMark className="size-4" />
-								</span>
-							)}
-							<div className="min-w-0">
-								<p className="truncate text-sm font-semibold">{project?.name ?? "No project"}</p>
-								<p className="truncate font-mono text-10 text-muted-foreground">
-									{project?.displayPath ?? "Select a project from the sidebar"}
-								</p>
-							</div>
-						</div>
-						{collections.drift.length > 0 ? (
-							<div className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/8 px-3 py-2 text-xs text-foreground/80">
-								<TriangleAlertIcon className="mt-px size-3.5 shrink-0 text-warning" />
-								<span>
-									{collections.drift.length} drift{" "}
-									{collections.drift.length === 1 ? "signal" : "signals"} need review in Content.
-								</span>
-							</div>
-						) : (
-							<p className="text-xs text-muted-foreground">
-								No drift signals. The read-model matches the checkout.
-							</p>
-						)}
-						<Button
-							className="w-full"
-							nativeButton={false}
-							render={<Link to="/settings" />}
-							size="sm"
-							variant="outline"
-						>
-							Open settings
-						</Button>
 					</CardContent>
 				</Card>
 			</div>
