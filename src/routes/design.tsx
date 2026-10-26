@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
 	AccessibilityIcon,
 	ArrowRightIcon,
@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
 	BrandMark,
@@ -137,13 +137,11 @@ const sections = [
 	},
 ];
 
-const sectionIds = sections.map((section) => section.href.slice(1));
-
 const stats = [
 	{ detail: "Light + dark semantic roles", label: "Color tokens", value: "46" },
 	{ detail: "display → 9px micro labels", label: "Type steps", value: "11" },
 	{ detail: "shadcn base-nova primitives", label: "UI surfaces", value: "25" },
-	{ detail: "Named @utility, no arbitrary values", label: "Utilities", value: "54" },
+	{ detail: "Named @utility, no arbitrary values", label: "Utilities", value: "58" },
 ];
 
 const sources = [
@@ -460,6 +458,12 @@ const rails = [
 	{ bar: "17%", label: "Docs TOC", token: "grid-cols-docs-wide", value: "208px" },
 	{ bar: "47%", label: "Editor side rails", token: "grid-cols-editor", value: "272 + 288px" },
 	{
+		bar: "46%",
+		label: "Workbench rails",
+		token: "grid-cols-workbench",
+		value: "256 + 1fr + 304px",
+	},
+	{
 		bar: "33%",
 		label: "Product stage",
 		token: "grid-cols-product-wide",
@@ -496,6 +500,7 @@ const gridUtilities = [
 	"grid-cols-product-wide",
 	"grid-cols-quote",
 	"grid-cols-settings",
+	"grid-cols-workbench",
 ];
 
 const utilityGroups = [
@@ -544,6 +549,7 @@ const utilityGroups = [
 			"grid-cols-asset-dialog",
 			"grid-cols-pages-workspace",
 			"grid-cols-page-meta",
+			"grid-cols-workbench",
 		],
 		label: "Grids & geometry",
 		note: "Every repeated column recipe",
@@ -748,45 +754,7 @@ const docsToc = [
 	{ href: "#components", label: "Components" },
 ];
 
-function currentSectionHref() {
-	let current = sectionIds[0] ?? "overview";
-	for (const id of sectionIds) {
-		const element = document.querySelector(`#${id}`);
-		if (element && element.getBoundingClientRect().top <= 200) current = id;
-	}
-	return `#${current}`;
-}
-
-function useActiveSection() {
-	const [active, setActive] = useState(sectionIds[0] ? `#${sectionIds[0]}` : "#overview");
-
-	useEffect(() => {
-		if (typeof IntersectionObserver === "undefined") return;
-		const observer = new IntersectionObserver(
-			(entries) => {
-				for (const entry of entries) {
-					if (entry.isIntersecting) setActive(`#${entry.target.id}`);
-				}
-			},
-			{ rootMargin: "-18% 0px -70% 0px", threshold: 0 },
-		);
-		for (const id of sectionIds) {
-			const element = document.querySelector(`#${id}`);
-			if (element) observer.observe(element);
-		}
-		const frame = requestAnimationFrame(() => setActive(currentSectionHref()));
-		return () => {
-			cancelAnimationFrame(frame);
-			observer.disconnect();
-		};
-	}, []);
-
-	return active;
-}
-
 function DesignSystemPage() {
-	const active = useActiveSection();
-
 	return (
 		<div>
 			<PageShell className="pb-16">
@@ -920,34 +888,6 @@ function DesignSystemPage() {
 					</div>
 				</div>
 
-				<div className="sticky top-12 z-20 -mx-5 mt-8 border-y border-border bg-background/90 px-5 py-2 backdrop-blur-xl lg:top-0">
-					<nav
-						aria-label="Design system sections"
-						className="gb-scroll-clean flex items-center gap-0.5 overflow-x-auto"
-					>
-						{sections.map((section) => {
-							const Icon = section.icon;
-							const selected = active === section.href;
-							return (
-								<a
-									aria-current={selected ? "location" : undefined}
-									className={cn(
-										"inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-11 font-semibold transition-gb",
-										selected
-											? "bg-brand-soft text-brand"
-											: "text-muted-foreground hover:bg-muted hover:text-foreground",
-									)}
-									href={section.href}
-									key={section.href}
-								>
-									<Icon className="size-3.5" />
-									{section.label}
-								</a>
-							);
-						})}
-					</nav>
-				</div>
-
 				<TokensSection />
 				<BrandSection />
 				<StyleSection />
@@ -957,40 +897,6 @@ function DesignSystemPage() {
 				<ViewportsSection />
 				<PatternsSection />
 			</PageShell>
-
-			<footer className="border-t border-border bg-muted/40">
-				<div className="mx-auto w-page px-5 py-10">
-					<div className="flex flex-wrap items-start justify-between gap-6">
-						<div>
-							<Wordmark badge="design" />
-							<p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-								A GitBook-inspired system built on shadcn tokens. Warm paper, one orange, black
-								actions, pill geometry, hairline borders, and motion that resolves content.
-							</p>
-						</div>
-						<nav aria-label="Design resources" className="grid gap-2 text-sm">
-							<a className="text-muted-foreground hover:text-foreground" href="#overview">
-								Back to overview
-							</a>
-							<Link className="text-muted-foreground hover:text-foreground" to="/components">
-								Synced component inventory
-							</Link>
-							<Link className="text-muted-foreground hover:text-foreground" to="/settings">
-								Appearance settings
-							</Link>
-						</nav>
-					</div>
-					<div className="mt-8 flex flex-wrap items-center gap-1.5 border-t border-border pt-5">
-						<Badge variant="outline">src/styles.css</Badge>
-						<Badge variant="outline">src/components/ui</Badge>
-						<Badge variant="outline">src/components/gitbook</Badge>
-						<Badge variant="outline">DESIGN.md</Badge>
-						<span className="ml-auto text-xs text-muted-foreground">
-							Keep this page current with every token or component change.
-						</span>
-					</div>
-				</div>
-			</footer>
 		</div>
 	);
 }

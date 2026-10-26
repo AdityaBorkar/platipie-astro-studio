@@ -136,9 +136,9 @@ The CMS is a fixed left rail plus a scrolling content pane, not a top nav.
   `$XDG_DATA_HOME/platipie-cms-dev/projects.json`, and reloads.
 - **Primary nav** — the same top-level items, with expandable children. Pages
   lists Astro routes with a kind icon (static, dynamic, utility), including
-  `404`/`500` and endpoint routes; Content lists CMS collections with counts.
-  Emails links to the synced email inventory when `src/emails` has templates.
-  Each expandable group keeps its open/closed state for the session.
+  `404`/`500` and endpoint routes; Content lists CMS collections with counts;
+  Components opens the workbench with Components/Layouts/Templates tabs. Each
+  expandable group keeps its open/closed state for the session.
 - **Rails** — a 264px (`w-sidebar`) fixed rail on `lg`; below that a 48px top bar
   and a slide-in drawer. Content is offset with `lg:pl-sidebar`.
 - **Theme** — the switcher lives in Settings → Appearance. The pre-paint script
@@ -178,7 +178,8 @@ App pages reuse the same language, denser:
   and the CMS tree in the left rail.
 - Assets: free and folder views over the image/media grid, drag-drop upload, a
   preview dialog with crop/rotate editing, metadata, and copy path / URL / Markdown.
-- Components: surface gallery, template cards, and the primitive index.
+- Components: a three-pane workbench — tabbed Components/Layouts/Templates rail,
+  staged preview canvas, and an editable props rail that builds the JSX as you type.
 - Settings: sticky section rail + Cards, Appearance (theme switcher), typed form,
   danger-zone actions.
 - Editor: page header, action toolbar, three-column frontmatter/source/SEO,

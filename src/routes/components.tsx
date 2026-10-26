@@ -1,109 +1,53 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import type { LinkProps } from "@tanstack/react-router";
+import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import {
-	ArrowRightIcon,
-	BlocksIcon,
-	DatabaseIcon,
-	FileStackIcon,
-	FileTextIcon,
-	LayoutDashboardIcon,
-	PaletteIcon,
-	RefreshCwIcon,
-	Settings2Icon,
+	ComponentIcon,
+	FileCode2Icon,
+	FolderIcon,
+	LayoutTemplateIcon,
+	RotateCcwIcon,
+	SearchIcon,
+	SlidersHorizontalIcon,
+	SquareDashedIcon,
+	XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import type { LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { FileTypeIcon } from "#/components/file-type-icon";
 import { Hint } from "#/components/gitbook/hint";
-import {
-	EmptyState,
-	PageHeader,
-	PageShell,
-	SectionHeader,
-	SyncBadge,
-} from "#/components/gitbook/page";
-import { LiveBadge } from "#/components/live-badge";
+import { EmptyState } from "#/components/gitbook/page";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
-import { Checkbox } from "#/components/ui/checkbox";
+import { Field, FieldGroup, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Separator } from "#/components/ui/separator";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
 import { Skeleton } from "#/components/ui/skeleton";
 import { Switch } from "#/components/ui/switch";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
-import { Textarea } from "#/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
+import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/components")({
 	component: ComponentsPage,
 	head: () => ({ meta: [{ title: "Components · platipie-cms" }] }),
 });
 
-const templates = [
-	{
-		description: "Workspace overview with counts, drift, and recent edits.",
-		href: "/dashboard",
-		icon: LayoutDashboardIcon,
-		label: "Dashboard",
-	},
-	{
-		description: "Astro routes with optional metadata and schema rail.",
-		href: "/pages",
-		icon: FileStackIcon,
-		label: "Pages",
-	},
-	{
-		description: "Collections, entries, and optional SEO rail.",
-		href: "/content",
-		icon: DatabaseIcon,
-		label: "Content",
-	},
-	{
-		description: "Markdown ⇄ Visual editor with frontmatter and previews.",
-		href: "/edit/projects/platipie",
-		icon: FileTextIcon,
-		label: "Editor",
-	},
-	{
-		description: "Typed constants, raw TypeScript, appearance, trash.",
-		href: "/settings",
-		icon: Settings2Icon,
-		label: "Settings",
-	},
-	{
-		description: "Tokens, brand, style, components, motion, viewports.",
-		href: "/design",
-		icon: PaletteIcon,
-		label: "Design system",
-	},
-];
+type ParamKind = "boolean" | "number" | "select" | "text";
+type ParamValue = boolean | number | string;
+type WorkbenchTab = "components" | "layouts" | "templates";
 
-const primitives = [
-	{ name: "alert", purpose: "Inline error and status block with a title." },
-	{ name: "alert-dialog", purpose: "Danger-zone confirmation before a write." },
-	{ name: "badge", purpose: "24px pill for counts, states, and drift." },
-	{ name: "button", purpose: "Pill action with six variants and press feedback." },
-	{ name: "card", purpose: "16px hairline surface for a single decision." },
-	{ name: "checkbox", purpose: "Multi-select rows and field groups." },
-	{ name: "dialog", purpose: "Focused task without leaving the page." },
-	{ name: "empty", purpose: "Quiet empty state with one next step." },
-	{ name: "field", purpose: "Label + control + error, stacked or inline." },
-	{ name: "input-group", purpose: "Input with leading icon or trailing action." },
-	{ name: "select", purpose: "Schema type, status, and collection choices." },
-	{ name: "separator", purpose: "Hairline between toolbar groups." },
-	{ name: "switch", purpose: "Immediate on/off preference." },
-	{ name: "table", purpose: "Dense scanning for entries and trash." },
-	{ name: "tabs", purpose: "Markdown ⇄ Visual and section panels." },
-	{ name: "textarea", purpose: "Descriptions, promises, and raw JSON." },
-];
+interface ParamField {
+	defaultValue: ParamValue;
+	kind: ParamKind;
+	name: string;
+	options?: string[];
+}
 
 interface SyncedFile {
 	dir: string;
@@ -122,351 +66,662 @@ interface SyncedInventory {
 	status: { fileCount: number; lastSync: number | null; scope: string }[];
 }
 
-const SYNCED_GROUPS = [
-	{ description: "Reusable UI under src/components", scope: "components", title: "Components" },
-	{ description: "Page shells under src/layouts", scope: "layouts", title: "Layouts" },
-	{ description: "Scaffolds under src/templates", scope: "templates", title: "Templates" },
-	{
-		description: "React-email templates under src/emails, when present",
-		scope: "emails",
-		title: "Emails",
-	},
-];
-
-function lastSyncFor(status: SyncedInventory["status"], scope: string): number | null {
-	return status.find((entry) => entry.scope === scope)?.lastSync ?? null;
+interface FileGroup {
+	dir: string;
+	files: SyncedFile[];
 }
 
-function SyncedInventorySection() {
-	const [syncing, setSyncing] = useState(false);
+const INVENTORY_KEY = "/api/cms/inventory?scope=components,layouts,templates";
 
-	const fetchInventory = useCallback(
-		() =>
-			fetchJson<SyncedInventory>("/api/cms/inventory?scope=components,layouts,templates,emails"),
-		[],
-	);
-	const inventoryQuery = useCachedFetch(
-		"/api/cms/inventory?scope=components,layouts,templates,emails",
-		fetchInventory,
-		{ errorMessage: "Could not refresh synced files" },
-	);
-	const inventory = inventoryQuery.data;
-	const error = inventory === null ? inventoryQuery.error : null;
+const TABS: { icon: LucideIcon; label: string; tab: WorkbenchTab }[] = [
+	{ icon: ComponentIcon, label: "Components", tab: "components" },
+	{ icon: LayoutTemplateIcon, label: "Layouts", tab: "layouts" },
+	{ icon: FileCode2Icon, label: "Templates", tab: "templates" },
+];
 
-	useEffect(() => {
-		if (inventory === null) return;
-		const target = window.location.hash.slice(1);
-		if (target) document.querySelector(`#${target}`)?.scrollIntoView({ block: "start" });
-	}, [inventory]);
+const EMPTY_COPY: Record<WorkbenchTab, { description: string; title: string }> = {
+	components: {
+		description: "Add a component under src/components in the Astro checkout, then re-sync.",
+		title: "No components found",
+	},
+	layouts: {
+		description: "Page shells live under src/layouts. Add one and the watcher will pick it up.",
+		title: "No layouts found",
+	},
+	templates: {
+		description:
+			"src/templates is optional and currently empty. Scaffolds added there appear after a re-sync.",
+		title: "No templates yet",
+	},
+};
 
-	async function resync() {
-		setSyncing(true);
-		try {
-			await fetchJson<{ fileCount: number }>("/api/cms/sync", {
-				body: JSON.stringify({}),
-				headers: { "Content-Type": "application/json" },
-				method: "POST",
-			});
-			toast.success("Inventory re-synced from the Astro checkout");
-			inventoryQuery.refresh();
-		} catch (e: unknown) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		} finally {
-			setSyncing(false);
-		}
+const PARAM_OPTIONS: Record<string, string[]> = {
+	align: ["start", "center", "end"],
+	as: ["div", "span", "button", "a"],
+	direction: ["row", "column"],
+	justify: ["start", "center", "end", "between"],
+	orientation: ["horizontal", "vertical"],
+	position: ["top", "right", "bottom", "left"],
+	size: ["xs", "sm", "default", "lg", "xl", "icon"],
+	target: ["_self", "_blank"],
+	theme: ["light", "dark", "system"],
+	type: ["button", "submit", "reset"],
+	variant: ["default", "secondary", "outline", "ghost", "destructive", "brand", "link"],
+};
+
+const TEXT_DEFAULTS: Record<string, string> = {
+	alt: "Preview image",
+	description: "A short description",
+	heading: "A short heading",
+	href: "#",
+	label: "Label",
+	name: "sample",
+	placeholder: "Placeholder",
+	text: "Text",
+	title: "A short title",
+};
+
+const BOOLEAN_PARAMS = new Set([
+	"active",
+	"allow",
+	"autoplay",
+	"can",
+	"checked",
+	"closable",
+	"compact",
+	"disabled",
+	"dismissible",
+	"expandable",
+	"external",
+	"fluid",
+	"full",
+	"has",
+	"hidden",
+	"hide",
+	"horizontal",
+	"hover",
+	"invalid",
+	"inverse",
+	"is",
+	"loading",
+	"loop",
+	"muted",
+	"no",
+	"open",
+	"outlined",
+	"pause",
+	"readonly",
+	"required",
+	"reverse",
+	"rounded",
+	"should",
+	"show",
+	"vertical",
+	"without",
+]);
+
+const NUMBER_PARAMS = new Set([
+	"cols",
+	"columns",
+	"count",
+	"delay",
+	"depth",
+	"gap",
+	"height",
+	"index",
+	"length",
+	"level",
+	"limit",
+	"max",
+	"min",
+	"offset",
+	"opacity",
+	"page",
+	"ratio",
+	"repeat",
+	"rows",
+	"size",
+	"spacing",
+	"speed",
+	"step",
+	"total",
+	"width",
+]);
+
+function isWorkbenchTab(value: string): value is WorkbenchTab {
+	return value === "components" || value === "layouts" || value === "templates";
+}
+
+function parseProps(raw?: string): string[] {
+	if (!raw) return [];
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		const names = parsed.filter((entry): entry is string => typeof entry === "string");
+		return [...new Set(names)];
+	} catch {
+		return [];
+	}
+}
+
+function nameTokens(name: string): string[] {
+	return name
+		.replaceAll(/([a-z\d])([A-Z])/gu, "$1 $2")
+		.toLowerCase()
+		.split(/[^a-z\d]+/u)
+		.filter(Boolean);
+}
+
+function paramKind(name: string): ParamKind {
+	const key = name.toLowerCase();
+	if (PARAM_OPTIONS[key]) return "select";
+	const tokens = nameTokens(name);
+	if (BOOLEAN_PARAMS.has(key) || tokens.some((token) => BOOLEAN_PARAMS.has(token))) {
+		return "boolean";
+	}
+	if (NUMBER_PARAMS.has(key) || tokens.some((token) => NUMBER_PARAMS.has(token))) {
+		return "number";
+	}
+	return "text";
+}
+
+function paramDefault(name: string, kind: ParamKind): ParamValue {
+	if (kind === "boolean") return false;
+	if (kind === "number") return 0;
+	if (kind === "select") return PARAM_OPTIONS[name.toLowerCase()]?.[0] ?? "";
+	return TEXT_DEFAULTS[name.toLowerCase()] ?? "";
+}
+
+function buildFields(props: string[]): ParamField[] {
+	return props.map((name) => {
+		const kind = paramKind(name);
+		return {
+			defaultValue: paramDefault(name, kind),
+			kind,
+			name,
+			options: kind === "select" ? PARAM_OPTIONS[name.toLowerCase()] : undefined,
+		};
+	});
+}
+
+function groupFiles(files: SyncedFile[]): FileGroup[] {
+	const groups = new Map<string, SyncedFile[]>();
+	for (const file of files) {
+		const dir = file.dir || "src";
+		const existing = groups.get(dir);
+		if (existing) existing.push(file);
+		else groups.set(dir, [file]);
+	}
+	return [...groups.entries()]
+		.map(([dir, entries]) => ({ dir, files: entries }))
+		.toSorted((a, b) => a.dir.localeCompare(b.dir));
+}
+
+function ParamControl({
+	field,
+	onChange,
+	value,
+}: {
+	field: ParamField;
+	onChange: (value: ParamValue) => void;
+	value: ParamValue;
+}) {
+	const id = `param-${field.name}`;
+
+	if (field.kind === "boolean") {
+		const checked = Boolean(value);
+		return (
+			<div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card px-3 py-2">
+				<span className="font-mono text-11 text-muted-foreground">{String(checked)}</span>
+				<Switch checked={checked} id={id} onCheckedChange={(next) => onChange(next)} />
+			</div>
+		);
+	}
+
+	if (field.kind === "number") {
+		return (
+			<Input
+				id={id}
+				onChange={(event) => {
+					const next = event.target.valueAsNumber;
+					onChange(Number.isNaN(next) ? 0 : next);
+				}}
+				type="number"
+				value={typeof value === "number" ? value : 0}
+			/>
+		);
+	}
+
+	if (field.kind === "select") {
+		return (
+			<Select onValueChange={(next) => onChange(next ?? "")} value={String(value)}>
+				<SelectTrigger className="w-full" id={id} size="sm">
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent>
+					{field.options?.map((option) => (
+						<SelectItem key={option} value={option}>
+							{option}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
+		);
 	}
 
 	return (
-		<section className="mt-10 scroll-mt-24" id="synced">
-			<SectionHeader
-				actions={
-					<>
-						<LiveBadge refreshing={inventoryQuery.isRefreshing} />
-						<Button disabled={syncing} onClick={() => void resync()} size="sm" variant="outline">
-							<RefreshCwIcon className="size-3.5" />
-							{syncing ? "Syncing…" : "Re-sync"}
-						</Button>
-					</>
-				}
-				description="Mirrored into SQLite by the FS watcher. Files stay the source of truth."
-				eyebrow="Synced"
-				title="From the Astro checkout"
-			/>
+		<Input
+			id={id}
+			onChange={(event) => onChange(event.target.value)}
+			value={typeof value === "string" ? value : String(value)}
+		/>
+	);
+}
 
-			{error ? (
-				<Hint className="mt-4" title="Inventory unavailable" variant="danger">
-					{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
-				</Hint>
-			) : null}
-
-			<div className="mt-4 grid gap-4">
-				{inventory === null && !error ? <Skeleton className="h-48 w-full" /> : null}
-				{SYNCED_GROUPS.map((group) => {
-					const files = inventory?.rows[group.scope] ?? [];
-					const synced = lastSyncFor(inventory?.status ?? [], group.scope);
-					return (
-						<Card className="scroll-mt-24" id={group.scope} key={group.scope}>
-							<CardHeader>
-								<div className="flex flex-wrap items-center justify-between gap-2">
-									<div>
-										<CardTitle>{group.title}</CardTitle>
-										<CardDescription className="font-mono text-11">
-											src/{group.scope} · {group.description}
-										</CardDescription>
-									</div>
-									<div className="flex items-center gap-1.5">
-										<Badge variant="secondary">{files.length} files</Badge>
-										<SyncBadge lastSync={synced} />
-									</div>
-								</div>
-							</CardHeader>
-							<CardContent className="p-0">
-								{files.length === 0 ? (
-									<EmptyState
-										className="m-4"
-										compact
-										description={
-											group.scope === "emails"
-												? "src/emails is not present in the Astro checkout (react-email is optional)."
-												: group.scope === "templates"
-													? "src/templates exists but holds no files yet."
-													: `No files under src/${group.scope} — the watcher will pick them up when added.`
-										}
-										icon={FileStackIcon}
-										title={`No ${group.title.toLowerCase()} found`}
-									/>
-								) : (
-									<Table>
-										<TableHeader>
-											<TableRow>
-												<TableHead className="pl-5">File</TableHead>
-												<TableHead className="hidden sm:table-cell">Details</TableHead>
-												<TableHead className="text-right">Updated</TableHead>
-											</TableRow>
-										</TableHeader>
-										<TableBody>
-											{files.slice(0, 30).map((file) => (
-												<TableRow key={file.path}>
-													<TableCell className="w-full max-w-0 pl-5">
-														<span className="block truncate font-mono text-xs">{file.name}</span>
-														<span className="block truncate font-mono text-10 text-muted-foreground">
-															{file.path}
-														</span>
-													</TableCell>
-													<TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
-														{file.props
-															? (() => {
-																	const props = JSON.parse(file.props) as string[];
-																	return (
-																		<span>
-																			{file.ext} · {props.length}{" "}
-																			{props.length === 1 ? "prop" : "props"}
-																			{file.hasSlot ? " · slot" : ""}
-																		</span>
-																	);
-																})()
-															: file.subject
-																? `subject: ${file.subject.slice(0, 60)}`
-																: file.ext}
-													</TableCell>
-													<TableCell className="text-right font-mono text-11">
-														{new Date(file.mtime).toLocaleDateString()}
-													</TableCell>
-												</TableRow>
-											))}
-										</TableBody>
-									</Table>
-								)}
-								{files.length > 30 ? (
-									<p className="px-5 py-2 font-mono text-10 text-muted-foreground">
-										Showing 30 of {files.length} — refine in the checkout or query the mirror.
-									</p>
-								) : null}
-							</CardContent>
-						</Card>
-					);
-				})}
+function PreviewCanvas({ fields, file }: { fields: ParamField[]; file: SyncedFile | null }) {
+	if (!file) {
+		return (
+			<div className="grid h-full min-h-80 place-items-center p-4">
+				<EmptyState
+					description="Pick a component, layout, or template from the left to stage it here."
+					icon={SquareDashedIcon}
+					title="Nothing staged"
+				/>
 			</div>
-		</section>
+		);
+	}
+
+	return (
+		<div className="flex h-full min-h-80 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-soft">
+			<div className="relative grid flex-1 place-items-center p-6">
+				<div aria-hidden="true" className="gb-dotgrid absolute inset-0 opacity-60" />
+				<div className="relative z-10 max-w-sm text-center">
+					<span className="mx-auto inline-flex size-12 items-center justify-center rounded-xl border border-border/70 bg-card text-brand shadow-soft">
+						<SquareDashedIcon className="size-5" />
+					</span>
+					<p className="mt-4 text-title font-bold tracking-heading">Preview mounts here</p>
+					<p className="gb-sub mt-1.5 text-sm">
+						The renderer is the next step. Selecting a file and editing parameters already updates
+						the workbench state.
+					</p>
+					<div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+						<Badge variant="secondary">{fields.length} params</Badge>
+						{file.hasSlot ? <Badge variant="brand">slot</Badge> : null}
+						<Badge className="font-mono" variant="outline">
+							{file.ext}
+						</Badge>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function FileList({
+	files,
+	onSelect,
+	selectedPath,
+}: {
+	files: SyncedFile[];
+	onSelect: (path: string) => void;
+	selectedPath: string | null;
+}) {
+	if (files.length === 0) {
+		return (
+			<EmptyState
+				className="m-2"
+				compact
+				description="Nothing matches this filter."
+				icon={FileCode2Icon}
+				title="No files"
+			/>
+		);
+	}
+
+	return (
+		<div className="grid gap-3">
+			{groupFiles(files).map((group) => (
+				<div key={group.dir}>
+					<div className="flex items-center gap-1.5 px-2 pb-1">
+						<FolderIcon className="size-3 shrink-0 text-muted-foreground" />
+						<p className="truncate font-mono text-9 text-muted-foreground">{group.dir}</p>
+					</div>
+					<ul className="grid gap-0.5">
+						{group.files.map((file) => {
+							const selected = file.path === selectedPath;
+							return (
+								<li key={file.path}>
+									<button
+										aria-pressed={selected}
+										className={cn(
+											"flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+											selected ? "bg-card ring-1 ring-border" : "hover:bg-muted/70",
+										)}
+										onClick={() => onSelect(file.path)}
+										type="button"
+									>
+										<FileTypeIcon
+											className={selected ? "text-brand" : "text-muted-foreground"}
+											ext={file.ext}
+										/>
+										<span className="min-w-0 flex-1">
+											<span className="block truncate text-13 font-semibold">{file.name}</span>
+										</span>
+									</button>
+								</li>
+							);
+						})}
+					</ul>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function ParameterRail({
+	dirty,
+	fields,
+	file,
+	onReset,
+	onUpdate,
+	values,
+}: {
+	dirty: boolean;
+	fields: ParamField[];
+	file: SyncedFile | null;
+	onReset: () => void;
+	onUpdate: (name: string, value: ParamValue) => void;
+	values: Record<string, ParamValue>;
+}) {
+	if (!file) {
+		return (
+			<div className="p-4">
+				<EmptyState
+					compact
+					description="Select a file to inspect the props declared in its interface."
+					icon={SlidersHorizontalIcon}
+					title="No parameters yet"
+				/>
+			</div>
+		);
+	}
+
+	return (
+		<>
+			<header className="border-b border-border/70 p-4">
+				<div className="flex items-center gap-2">
+					<SlidersHorizontalIcon className="size-4 text-brand" />
+					<h2 className="text-sm font-bold tracking-heading">Parameters</h2>
+					<Badge className="ml-auto font-mono" variant="outline">
+						{fields.length}
+					</Badge>
+				</div>
+				<p className="mt-1.5 text-11 leading-relaxed text-muted-foreground">
+					Edits update the workbench state immediately. The renderer will consume these values.
+				</p>
+			</header>
+
+			<div className="min-h-0 flex-1 overflow-y-auto p-4">
+				{fields.length === 0 ? (
+					<EmptyState
+						compact
+						description="This file has no interface Props fields, so there is nothing to tune yet."
+						icon={SlidersHorizontalIcon}
+						title="No props detected"
+					/>
+				) : (
+					<FieldGroup className="gap-4">
+						{fields.map((field) => (
+							<Field key={field.name}>
+								<div className="flex items-center justify-between gap-2">
+									<FieldLabel className="font-mono text-11" htmlFor={`param-${field.name}`}>
+										{field.name}
+									</FieldLabel>
+									<span className="font-mono text-9 tracking-12 text-muted-foreground uppercase">
+										{field.kind}
+									</span>
+								</div>
+								<ParamControl
+									field={field}
+									onChange={(value) => onUpdate(field.name, value)}
+									value={values[field.name] ?? field.defaultValue}
+								/>
+							</Field>
+						))}
+					</FieldGroup>
+				)}
+			</div>
+
+			<footer className="flex items-center gap-2 border-t border-border/70 px-4 py-3">
+				<Button className="flex-1" disabled={!dirty} onClick={onReset} size="sm" variant="outline">
+					<RotateCcwIcon />
+					Reset
+				</Button>
+			</footer>
+		</>
 	);
 }
 
 function ComponentsPage() {
+	const [tab, setTab] = useState<WorkbenchTab>("components");
+	const [query, setQuery] = useState("");
+	const [selectedPath, setSelectedPath] = useState<string | null>(null);
+	const [valuesByPath, setValuesByPath] = useState<Record<string, Record<string, ParamValue>>>({});
+
+	const fetchInventory = useCallback(() => fetchJson<SyncedInventory>(INVENTORY_KEY), []);
+	const inventoryQuery = useCachedFetch(INVENTORY_KEY, fetchInventory, {
+		errorMessage: "Could not refresh the component inventory",
+	});
+	const inventory = inventoryQuery.data;
+	const error = inventory === null ? inventoryQuery.error : null;
+	const routerHref = useRouterState({ select: (state) => state.location.href });
+
+	useEffect(() => {
+		const sync = () => {
+			const hash = window.location.hash.slice(1);
+			if (isWorkbenchTab(hash)) setTab(hash);
+		};
+		sync();
+		window.addEventListener("hashchange", sync);
+		return () => window.removeEventListener("hashchange", sync);
+	}, []);
+
+	useEffect(() => {
+		const hashAt = routerHref.indexOf("#");
+		const hash = hashAt >= 0 ? routerHref.slice(hashAt + 1) : "";
+		if (isWorkbenchTab(hash)) setTab(hash);
+	}, [routerHref]);
+
+	const rows = inventory?.rows;
+	const activeFiles = useMemo(() => rows?.[tab] ?? [], [rows, tab]);
+	const filteredFiles = useMemo(() => {
+		const needle = query.trim().toLowerCase();
+		if (!needle) return activeFiles;
+		return activeFiles.filter(
+			(file) =>
+				file.name.toLowerCase().includes(needle) || file.path.toLowerCase().includes(needle),
+		);
+	}, [activeFiles, query]);
+
+	useEffect(() => {
+		if (!rows) return;
+		const list = rows[tab] ?? [];
+		if (selectedPath && list.some((file) => file.path === selectedPath)) return;
+		const first = list.find((file) => parseProps(file.props).length > 0) ?? list[0] ?? null;
+		setSelectedPath(first?.path ?? null);
+	}, [rows, selectedPath, tab]);
+
+	const selectedFile = useMemo(
+		() => activeFiles.find((file) => file.path === selectedPath) ?? null,
+		[activeFiles, selectedPath],
+	);
+	const fields = useMemo(() => buildFields(parseProps(selectedFile?.props)), [selectedFile]);
+	const defaults = useMemo(
+		() =>
+			Object.fromEntries(fields.map((field) => [field.name, field.defaultValue])) as Record<
+				string,
+				ParamValue
+			>,
+		[fields],
+	);
+	const values = (selectedFile ? valuesByPath[selectedFile.path] : undefined) ?? defaults;
+	const dirty = fields.some((field) => values[field.name] !== field.defaultValue);
+	const activeTab = TABS.find((item) => item.tab === tab) ?? TABS[0];
+
+	function changeTab(next: WorkbenchTab) {
+		if (next === tab) return;
+		setTab(next);
+		setSelectedPath(null);
+		setQuery("");
+		if (window.location.hash !== `#${next}`) window.location.hash = next;
+	}
+
+	function updateParam(name: string, value: ParamValue) {
+		if (!selectedFile) return;
+		setValuesByPath((current) => ({
+			...current,
+			[selectedFile.path]: { ...(current[selectedFile.path] ?? defaults), [name]: value },
+		}));
+	}
+
+	function resetParams() {
+		if (!selectedFile) return;
+		setValuesByPath((current) => {
+			if (!(selectedFile.path in current)) return current;
+			const next = { ...current };
+			delete next[selectedFile.path];
+			return next;
+		});
+	}
+
+	const ActiveIcon = activeTab.icon;
+	const emptyCopy = EMPTY_COPY[tab];
+
 	return (
-		<PageShell>
-			<PageHeader
-				description="The same shadcn primitives and GitBook surfaces used across the CMS. Start from a template, then drop in the UI piece you need."
-				eyebrow="Components"
-				meta={
-					<>
-						<Badge variant="brand">
-							<BlocksIcon className="size-3" />
-							{primitives.length} primitives
-						</Badge>
-						<Badge variant="outline">{templates.length} templates</Badge>
-						<Badge variant="secondary">shadcn base-nova</Badge>
-					</>
-				}
-				title={
-					<>
-						Building blocks, <span className="text-brand">already assembled.</span>
-					</>
-				}
-			/>
-
-			<SyncedInventorySection />
-
-			<section className="mt-10 scroll-mt-24" id="components">
-				<SectionHeader
-					actions={
-						<Button nativeButton={false} render={<Link to="/design" />} size="sm" variant="ghost">
-							Open full reference
-							<ArrowRightIcon className="size-3.5" />
-						</Button>
-					}
-					eyebrow="Surfaces"
-					title="The working set"
-				/>
-
-				<div className="mt-4 grid gap-4 lg:grid-cols-2">
-					<Card>
-						<CardHeader>
-							<CardTitle>Actions</CardTitle>
-							<CardDescription>Black finishes the task; outline and ghost undo it.</CardDescription>
-						</CardHeader>
-						<CardContent className="flex flex-wrap items-center gap-2">
-							<Button>Save</Button>
-							<Button variant="secondary">Secondary</Button>
-							<Button variant="outline">Outline</Button>
-							<Button variant="ghost">Ghost</Button>
-							<Button variant="brand">Brand</Button>
-							<Button variant="destructive">Delete</Button>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Fields</CardTitle>
-							<CardDescription>36px controls, visible labels, orange focus ring.</CardDescription>
-						</CardHeader>
-						<CardContent className="grid gap-3">
-							<Input placeholder="Title" />
-							<Textarea placeholder="Description" />
-							<div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-								<span className="flex items-center gap-2">
-									<Switch aria-label="Publish immediately" defaultChecked /> Publish immediately
-								</span>
-								<span className="flex items-center gap-2">
-									<Checkbox aria-label="Include drafts" defaultChecked /> Include drafts
-								</span>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card className="lg:col-span-2">
-						<CardHeader>
-							<CardTitle>Status</CardTitle>
-							<CardDescription>Use hints for inline status, not alerts.</CardDescription>
-						</CardHeader>
-						<CardContent className="grid gap-2 sm:grid-cols-2">
-							<Hint title="Grounded answers" variant="info">
-								Every AI answer cites the exact page and section it came from.
-							</Hint>
-							<Hint title="Review passed" variant="success">
-								All checks pass. The content matches the current product.
-							</Hint>
-							<Hint title="Drift detected" variant="warning">
-								Two pages reference a flag that no longer exists.
-							</Hint>
-							<Hint title="Write blocked" variant="danger">
-								The path sits outside the project jail.
-							</Hint>
-						</CardContent>
-					</Card>
-				</div>
-			</section>
-
-			<section className="mt-12 scroll-mt-24" id="templates">
-				<SectionHeader
-					description="Every template is a real route. Copy the structure, keep the tokens."
-					eyebrow="Templates"
-					title="Pages that already exist"
-				/>
-
-				<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-					{templates.map((template) => {
-						const Icon = template.icon;
-						return (
-							<Link
-								className="gb-card-link group rounded-xl border border-border bg-card p-5"
-								key={template.label}
-								to={template.href as LinkProps["to"]}
-							>
-								<div className="flex items-start gap-3">
-									<span className="inline-flex size-9 items-center justify-center rounded-lg bg-muted text-foreground">
-										<Icon className="size-4" />
-									</span>
-									<span className="min-w-0 flex-1">
-										<span className="block text-sm font-bold tracking-tight">{template.label}</span>
-										<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-											{template.description}
-										</span>
-									</span>
-									<ArrowRightIcon className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-								</div>
-							</Link>
-						);
-					})}
-				</div>
-			</section>
-
-			<section className="mt-12 scroll-mt-24" id="ui">
-				<SectionHeader
-					description={
-						<>
-							All live in <code>src/components/ui</code> and stay token-first.
-						</>
-					}
-					eyebrow="UI"
-					title="Primitive index"
-				/>
-
-				<Card className="mt-4 overflow-hidden">
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead className="pl-5">Primitive</TableHead>
-								<TableHead>Purpose</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{primitives.map((primitive) => (
-								<TableRow key={primitive.name}>
-									<TableCell className="pl-5 font-mono text-xs">{primitive.name}</TableCell>
-									<TableCell className="text-muted-foreground">{primitive.purpose}</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				</Card>
-
-				<Separator className="my-6" />
-				<div className="flex flex-wrap items-center gap-2">
-					<Badge variant="outline">tokens in src/styles.css</Badge>
-					<Badge variant="outline">no arbitrary values</Badge>
-					<Badge variant="outline">motion respects reduced-motion</Badge>
-					<Button
-						className="ml-auto"
-						nativeButton={false}
-						render={<Link to="/design" hash="components" />}
-						size="sm"
-						variant="outline"
+		<div className="min-h-dvh lg:grid lg:grid-cols-docs-shell xl:h-dvh xl:grid-cols-workbench xl:overflow-hidden">
+			<aside className="flex flex-col border-b border-border/70 bg-sidebar/40 lg:sticky lg:top-0 lg:row-span-2 lg:h-dvh lg:self-start lg:border-r lg:border-b-0 xl:static xl:row-span-1">
+				<div className="border-b border-border/70 p-4">
+					<Tabs
+						className="gap-0"
+						onValueChange={(value) => changeTab(value as WorkbenchTab)}
+						value={tab}
 					>
-						See the gallery
-						<ArrowRightIcon className="size-3.5" />
-					</Button>
+						<TabsList className="grid w-full grid-cols-3">
+							{TABS.map((item) => (
+								<TabsTrigger className="px-1 text-10" key={item.tab} value={item.tab}>
+									{item.label}
+								</TabsTrigger>
+							))}
+						</TabsList>
+					</Tabs>
+				</div>
+
+				<div className="border-b border-border/70 px-3 py-2">
+					<div className="relative">
+						<SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							aria-label={`Search ${activeTab.label.toLowerCase()}`}
+							className="h-8 px-8 text-13"
+							onChange={(event) => setQuery(event.target.value)}
+							placeholder={`Filter ${activeTab.label.toLowerCase()}…`}
+							value={query}
+						/>
+						{query ? (
+							<button
+								aria-label="Clear search"
+								className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+								onClick={() => setQuery("")}
+								type="button"
+							>
+								<XIcon className="size-3" />
+							</button>
+						) : null}
+					</div>
+				</div>
+
+				<div className="flex max-h-72 min-h-0 flex-col overflow-y-auto px-2 py-3 lg:max-h-none lg:flex-1">
+					<div className="flex items-center justify-between gap-2 px-2 pb-2">
+						<div className="flex min-w-0 items-center gap-1.5">
+							<ActiveIcon className="size-3.5 shrink-0 text-brand" />
+							<span className="truncate text-11 font-bold tracking-12 text-muted-foreground uppercase">
+								{activeTab.label}
+							</span>
+						</div>
+						<Badge className="font-mono" variant="secondary">
+							{activeFiles.length}
+						</Badge>
+					</div>
+
+					{error ? (
+						<Hint className="m-2" title="Inventory unavailable" variant="danger">
+							{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
+						</Hint>
+					) : null}
+
+					{inventory === null && !error ? (
+						<div className="grid gap-2 p-2">
+							<Skeleton className="h-12 w-full" />
+							<Skeleton className="h-12 w-full" />
+						</div>
+					) : null}
+
+					{inventory !== null && filteredFiles.length > 0 ? (
+						<FileList
+							files={filteredFiles}
+							onSelect={setSelectedPath}
+							selectedPath={selectedPath}
+						/>
+					) : null}
+
+					{inventory !== null && filteredFiles.length === 0 ? (
+						<EmptyState
+							className="m-2"
+							compact
+							description={query ? "Try a different search." : emptyCopy.description}
+							icon={query ? SearchIcon : ActiveIcon}
+							title={query ? "No matches" : emptyCopy.title}
+						/>
+					) : null}
+				</div>
+			</aside>
+
+			<section className="flex min-h-96 flex-col border-b border-border/70 lg:border-b-0 xl:min-h-0">
+				<header className="flex flex-wrap items-center gap-2 border-b border-border/70 px-4 py-3">
+					<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+						{selectedFile ? (
+							<FileTypeIcon className="size-4" ext={selectedFile.ext} />
+						) : (
+							<ActiveIcon className="size-4" />
+						)}
+					</span>
+					<span className="min-w-0 flex-1">
+						<span className="flex min-w-0 items-center gap-1.5">
+							<h2 className="truncate text-13 font-bold tracking-tight">
+								{selectedFile?.name ?? "No selection"}
+							</h2>
+							<Badge variant="brand">{activeTab.label}</Badge>
+						</span>
+						<span className="mt-0.5 block truncate font-mono text-10 text-muted-foreground">
+							{selectedFile?.path ?? "Choose an item from the list"}
+						</span>
+					</span>
+				</header>
+
+				<div className="min-h-0 flex-1 overflow-y-auto p-4">
+					<PreviewCanvas fields={fields} file={selectedFile} />
 				</div>
 			</section>
-		</PageShell>
+
+			<aside className="flex min-h-0 flex-col border-border/70 bg-sidebar/30 lg:border-t xl:h-dvh xl:border-t-0 xl:border-l">
+				<ParameterRail
+					dirty={dirty}
+					fields={fields}
+					file={selectedFile}
+					onReset={resetParams}
+					onUpdate={updateParam}
+					values={values}
+				/>
+			</aside>
+		</div>
 	);
 }

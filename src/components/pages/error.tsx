@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { HouseIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react";
 
-import { BrandMark } from "#/components/gitbook/brand";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent } from "#/components/ui/card";
 
@@ -55,10 +54,6 @@ export function ErrorPage({ error, reset }: { error: unknown; reset: () => void 
 							<HouseIcon className="size-3.5" />
 							Back to dashboard
 						</Button>
-					</div>
-					<div className="mt-6 flex items-center justify-center gap-2 text-11 text-muted-foreground">
-						<BrandMark className="size-3.5 text-brand" title="" />
-						platipie-cms · local-first
 					</div>
 				</CardContent>
 			</Card>

@@ -456,6 +456,10 @@
 	grid-template-columns: minmax(0, 19rem) minmax(0, 1fr) minmax(0, 22rem);
 }
 
+@utility grid-cols-workbench {
+	grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) minmax(0, 19rem);
+}
+
 @utility grid-cols-page-meta {
 	grid-template-columns: 5.5rem minmax(0, 1fr);
 }

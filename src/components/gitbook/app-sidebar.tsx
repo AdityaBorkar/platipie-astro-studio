@@ -19,7 +19,6 @@ import {
 	LayoutDashboardIcon,
 	LayoutGridIcon,
 	ListIcon,
-	MailIcon,
 	MenuIcon,
 	PaletteIcon,
 	SearchIcon,
@@ -100,10 +99,9 @@ const designLinks: ShellLink[] = [
 ];
 
 const componentLinks: ShellLink[] = [
-	{ href: "/components", label: "Components" },
-	{ href: "/components#synced", label: "Synced inventory" },
+	{ href: "/components#components", label: "Components" },
+	{ href: "/components#layouts", label: "Layouts" },
 	{ href: "/components#templates", label: "Templates" },
-	{ href: "/components#ui", label: "UI" },
 ];
 
 function useWorkspace() {
@@ -1008,16 +1006,6 @@ function SidebarNav({
 					/>
 				))}
 			</SidebarGroup>
-
-			{workspace?.emailCount ? (
-				<SidebarLink
-					active={isActive("/components#emails", pathname, activeHref, true)}
-					href="/components#emails"
-					icon={MailIcon}
-					label="Emails"
-					onClick={onNavigate}
-				/>
-			) : null}
 
 			<SidebarGroup
 				active={pathname === "/content" || pathname.startsWith("/edit/")}
