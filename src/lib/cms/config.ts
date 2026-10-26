@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { cmsError } from "./errors.ts";
 
+export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 4000;
 export const DEFAULT_TRASH_TTL_DAYS = 30;
 // 10 MB default (§13)
@@ -28,9 +29,37 @@ export function getProjectRoot(): string {
 	return path.resolve(raw);
 }
 
+export function getHost(): string {
+	const host = (process.env.HOST ?? DEFAULT_HOST).trim();
+	if (!host) return DEFAULT_HOST;
+	return host;
+}
+
+/** Parse and validate a port string. Throws on anything outside 1-65535. */
+export function parsePortStrict(raw: string): number {
+	const port = Number(raw);
+	if (!Number.isInteger(port) || port <= 0 || port > 65_535)
+		throw new Error(`Invalid port: ${raw}`);
+	return port;
+}
+
+/**
+ * Resolve the listen port: explicit CLI flag wins, otherwise `PORT` env,
+ * otherwise `DEFAULT_PORT`. Throws on an invalid `PORT` value so
+ * misconfiguration fails loudly instead of silently falling back.
+ */
+export function resolvePort(cliPort?: number): number {
+	if (cliPort !== undefined) return cliPort;
+	const raw = process.env.PORT ?? String(DEFAULT_PORT);
+	return parsePortStrict(raw);
+}
+
 export function getPort(): number {
-	const p = Number(process.env.PORT ?? DEFAULT_PORT);
-	return Number.isFinite(p) && p > 0 ? p : DEFAULT_PORT;
+	try {
+		return resolvePort();
+	} catch {
+		return DEFAULT_PORT;
+	}
 }
 
 export function getTrashTtlDays(): number {

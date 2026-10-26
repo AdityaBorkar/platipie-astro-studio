@@ -4,133 +4,58 @@
 // project is loaded by default (PROJECT_PATH = cwd). Otherwise the server
 // starts with the current folder (non-Astro) and the web UI auto-opens the
 // Project Selector dialog so the user can pick a project.
-import { existsSync, readFileSync, statSync } from "node:fs";
+//
+// CLI parsing is handled by commander; session framing, prompts, and status
+// output use @clack/prompts (colours via picocolors). Interactive prompts
+// only run on a TTY — CI / piped runs never block waiting for input.
+import { existsSync } from "node:fs";
 import path from "node:path";
 
-const ASTRO_CONFIG_NAMES = [
-	"astro.config.cjs",
-	"astro.config.js",
-	"astro.config.mjs",
-	"astro.config.mts",
-	"astro.config.ts",
-] as const;
+import * as p from "@clack/prompts";
+import { Command, InvalidArgumentError } from "commander";
+import pc from "picocolors";
 
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 4000;
+import { isAstroProjectSync, isDirectorySync, readPackageVersionSync } from "#cms/astro-project.ts";
+import { getHost, parsePortStrict, resolvePort } from "#cms/config.ts";
+import { runSyncCommand } from "#cms/sync/command.ts";
+import type { SyncCommandOptions } from "#cms/sync/command.ts";
+import { SYNC_SCOPES } from "#cms/sync/index.ts";
 
-interface CliOptions {
+interface CliActionOptions {
 	dev: boolean;
-	help: boolean;
-	host: string | null;
+	host: string | undefined;
 	open: boolean;
-	port: string | null;
+	port: number | undefined;
 	prod: boolean;
-	project: string | null;
-	version: boolean;
+	project: string | undefined;
+	sync: boolean;
 }
 
-function defaultOptions(): CliOptions {
-	return {
-		dev: false,
-		help: false,
-		host: null,
-		open: false,
-		port: null,
-		prod: false,
-		project: null,
-		version: false,
-	};
+interface ProjectSelection {
+	autoOpen: boolean;
+	root: string;
 }
 
-function isAstroProjectSync(dir: string): boolean {
-	for (const name of ASTRO_CONFIG_NAMES) {
-		try {
-			const stat = statSync(path.join(dir, name));
-			if (stat.isFile()) return true;
-		} catch {
-			// Try the next candidate.
-		}
-	}
-	return false;
+interface ServerConfig {
+	host: string;
+	open: boolean;
+	port: number;
+	projectRoot: string;
+	syncEnabled: boolean;
+	useProd: boolean;
 }
 
-function isDirectorySync(dir: string): boolean {
+function fail(message: string): never {
+	p.log.error(message);
+	process.exit(1);
+}
+
+function parsePort(value: string): number {
 	try {
-		return statSync(dir).isDirectory();
+		return parsePortStrict(value);
 	} catch {
-		return false;
+		throw new InvalidArgumentError(`Invalid port: ${value}`);
 	}
-}
-
-function parseArgs(argv: string[]): CliOptions {
-	const options = defaultOptions();
-	for (let index = 0; index < argv.length; index += 1) {
-		const arg = argv[index] ?? "";
-		if (arg === "--help" || arg === "-h") {
-			options.help = true;
-		} else if (arg === "--version" || arg === "-v") {
-			options.version = true;
-		} else if (arg === "--dev") {
-			options.dev = true;
-		} else if (arg === "--prod") {
-			options.prod = true;
-		} else if (arg === "--open") {
-			options.open = true;
-		} else if (arg === "--project" || arg === "-p") {
-			const next = argv[index + 1];
-			if (!next) throw new Error("Missing value for --project <path>");
-			options.project = next;
-			index += 1;
-		} else if (arg.startsWith("--project=")) {
-			options.project = arg.slice("--project=".length);
-		} else if (arg === "--port") {
-			const next = argv[index + 1];
-			if (!next) throw new Error("Missing value for --port <number>");
-			options.port = next;
-			index += 1;
-		} else if (arg.startsWith("--port=")) {
-			options.port = arg.slice("--port=".length);
-		} else if (arg === "--host") {
-			const next = argv[index + 1];
-			if (!next) throw new Error("Missing value for --host <host>");
-			options.host = next;
-			index += 1;
-		} else if (arg.startsWith("--host=")) {
-			options.host = arg.slice("--host=".length);
-		} else if (arg === "--") {
-			break;
-		} else if (arg.startsWith("-")) {
-			throw new Error(`Unknown flag: ${arg}`);
-		} else if (options.project === null) {
-			// Bare positional arg is treated as the project path.
-			options.project = arg;
-		} else throw new Error(`Unexpected argument: ${arg}`);
-	}
-	return options;
-}
-
-function printHelp(): void {
-	const help = `platipie-cms — standalone content-management server for Astro sites.
-
-Usage:
-  bunx @platipie/cms [options] [project-path]
-
-Behaviour:
-  If the current folder is an Astro project (astro.config.* present) it is
-  loaded by default. Otherwise the server starts and the Project Selector
-  dialog opens by default in the web UI so you can pick a project.
-
-Options:
-  -p, --project <path>   Use this Astro project instead of auto-detecting.
-  --port <number>        Port to listen on (default: PORT env or 4000).
-  --host <host>          Host to bind (default: HOST env or 127.0.0.1).
-  --open                 Open the browser on startup.
-  --dev                  Run the Vite dev server (default).
-  --prod                 Run the production preview server (requires build).
-  -h, --help             Show this help.
-  -v, --version          Show the CLI version.
-`;
-	process.stdout.write(help);
 }
 
 function cmsRoot(): string {
@@ -138,113 +63,97 @@ function cmsRoot(): string {
 	return path.resolve(import.meta.dir, "..");
 }
 
-function readVersion(root: string): string {
-	try {
-		const raw = readFileSync(path.join(root, "package.json"), "utf8");
-		const parsed = JSON.parse(raw) as { version?: unknown };
-		if (typeof parsed.version === "string" && parsed.version.length > 0) return parsed.version;
-	} catch {
-		// Fall through to unknown.
-	}
-	return "unknown";
-}
-
-function resolvePort(raw: string | null): number {
-	const candidate = raw ?? process.env.PORT ?? String(DEFAULT_PORT);
-	const port = Number(candidate);
-	if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
-		throw new Error(`Invalid port: ${candidate}`);
-	}
-	return port;
-}
-
-function resolveHost(raw: string | null): string {
-	const host = (raw ?? process.env.HOST ?? DEFAULT_HOST).trim();
-	if (!host) return DEFAULT_HOST;
-	return host;
-}
-
-function resolveProjectRoot(options: CliOptions, cwd: string): { autoOpen: boolean; root: string } {
-	if (options.project) {
-		const root = path.resolve(options.project);
-		if (!isDirectorySync(root)) throw new Error(`Not a directory: ${options.project}`);
+/**
+ * Resolve which project to load. Precedence mirrors the server
+ * (`getProjectRoot`): explicit flag/arg first, then `PROJECT_PATH`, then cwd.
+ * An explicitly configured root (flag/arg/env) that is missing or not an
+ * Astro project throws instead of silently falling back to the selector —
+ * only a clean cwd without any configuration auto-opens the selector.
+ */
+function resolveProjectRoot(explicit: string | undefined, cwd: string): ProjectSelection {
+	if (explicit !== undefined) {
+		const root = path.resolve(explicit);
+		if (!isDirectorySync(root)) throw new Error(`Not a directory: ${explicit}`);
 		if (!isAstroProjectSync(root))
 			throw new Error(`Not an Astro project (astro.config.* missing): ${root}`);
 		return { autoOpen: false, root };
 	}
-	if (isAstroProjectSync(cwd)) return { autoOpen: false, root: cwd };
 	const envRoot = process.env.PROJECT_PATH?.trim();
 	if (envRoot) {
 		const resolved = path.resolve(envRoot);
-		if (isDirectorySync(resolved) && isAstroProjectSync(resolved)) {
-			return { autoOpen: false, root: resolved };
-		}
+		if (!isDirectorySync(resolved)) throw new Error(`Not a directory: ${envRoot}`);
+		if (!isAstroProjectSync(resolved))
+			throw new Error(`Not an Astro project (astro.config.* missing): ${resolved}`);
+		return { autoOpen: false, root: resolved };
 	}
+	if (isAstroProjectSync(cwd)) return { autoOpen: false, root: cwd };
 	return { autoOpen: true, root: cwd };
 }
 
-async function main(): Promise<void> {
-	let options: CliOptions;
-	try {
-		options = parseArgs(process.argv.slice(2));
-	} catch (error) {
-		console.error(`platipie-cms: ${error instanceof Error ? error.message : String(error)}`);
-		console.error("Run with --help for usage.");
-		process.exit(1);
+function isInteractive(): boolean {
+	if (process.env.CI) return false;
+	return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+async function maybePromptForProject(cwd: string): Promise<string | undefined> {
+	if (!isInteractive()) return undefined;
+	const confirm = await p.confirm({
+		initialValue: false,
+		message: "Enter an Astro project path now?",
+	});
+	if (p.isCancel(confirm) || !confirm) return undefined;
+	const input = await p.text({
+		message: "Astro project path",
+		placeholder: cwd,
+		validate: (value: string | undefined) => {
+			const candidate = value?.trim() || cwd;
+			const resolved = path.resolve(candidate);
+			if (!isDirectorySync(resolved)) return `Not a directory: ${candidate}`;
+			if (!isAstroProjectSync(resolved))
+				return `Not an Astro project (astro.config.* missing): ${resolved}`;
+		},
+	});
+	if (p.isCancel(input)) {
+		p.cancel("Project selection cancelled — continuing to the Project Selector.");
+		return undefined;
 	}
+	return path.resolve(input.trim() || cwd);
+}
+
+async function startServer(server: ServerConfig): Promise<void> {
 	const root = cmsRoot();
-	if (options.help) {
-		printHelp();
-		return;
-	}
-	if (options.version) {
-		process.stdout.write(`${readVersion(root)}\n`);
-		return;
-	}
-	if (options.dev && options.prod) throw new Error("Pass only one of --dev or --prod.");
-	const cwd = process.cwd();
-	let project: { autoOpen: boolean; root: string };
-	try {
-		project = resolveProjectRoot(options, cwd);
-	} catch (error) {
-		console.error(`platipie-cms: ${error instanceof Error ? error.message : String(error)}`);
-		process.exit(1);
-	}
-	const port = resolvePort(options.port);
-	const host = resolveHost(options.host);
-	const useProd = options.prod;
+	const displayHost = server.host === "0.0.0.0" || server.host === "::" ? "localhost" : server.host;
+	const url = `http://${displayHost}:${server.port}/`;
+	const mode = server.useProd ? "production preview" : "development";
 
-	const env = {
-		...process.env,
-		HOST: host,
-		PORT: String(port),
-		PROJECT_PATH: project.root,
-	};
-	const displayHost = host === "0.0.0.0" || host === "::" ? "localhost" : host;
-	if (project.autoOpen) {
-		console.log(`platipie-cms: no Astro project in ${cwd} — opening Project Selector by default.`);
-	} else {
-		console.log(`platipie-cms: loading Astro project ${project.root}`);
+	if (!server.useProd && !existsSync(path.join(root, "vite.config.ts"))) {
+		throw new Error(`Cannot find vite.config.ts in ${root}`);
 	}
-	console.log(`platipie-cms: starting server at http://${displayHost}:${port}/`);
+	if (server.useProd && !existsSync(path.join(root, ".output"))) {
+		throw new Error("Production output not found — run `bun run build` first or omit --prod.");
+	}
 
-	const args = useProd
-		? ["--bun", "vite", "preview", "--port", String(port), "--host", host]
-		: ["--bun", "vite", "dev", "--port", String(port), "--host", host];
-	if (options.open) args.push("--open");
-	if (!useProd && !existsSync(path.join(root, "vite.config.ts"))) {
-		console.error(`platipie-cms: cannot find vite.config.ts in ${root}`);
-		process.exit(1);
+	// Matches `bun --bun vite dev` / `bun run preview` in package.json: the
+	// leading `--bun` forces the bun runtime for the vite child process.
+	const subcommand = server.useProd ? "preview" : "dev";
+	const args = ["--bun", "vite", subcommand, "--port", String(server.port), "--host", server.host];
+	if (server.open) args.push("--open");
+
+	p.log.success(`Starting ${mode} server at ${pc.cyan(url)}`);
+	p.note(`Project  ${server.projectRoot}\nMode     ${mode}\nURL      ${url}`, "platipie-cms");
+	if (!server.syncEnabled) {
+		p.log.warn("Sync engine disabled (--no-sync) — the inventory will go stale.");
 	}
-	if (useProd && !existsSync(path.join(root, ".output"))) {
-		console.error(
-			"platipie-cms: production output not found — run `bun run build` first or omit --prod.",
-		);
-		process.exit(1);
-	}
+
 	const child = Bun.spawn(["bun", ...args], {
 		cwd: root,
-		env,
+		env: {
+			...process.env,
+			...(server.syncEnabled ? {} : { CMS_SYNC: "0" }),
+			HOST: server.host,
+			PORT: String(server.port),
+			PROJECT_PATH: server.projectRoot,
+		},
 		stdio: ["inherit", "inherit", "inherit"],
 	});
 	const onSignal = (signal: NodeJS.Signals) => {
@@ -257,7 +166,90 @@ async function main(): Promise<void> {
 	process.on("SIGINT", onSignal);
 	process.on("SIGTERM", onSignal);
 	const exitCode = await child.exited;
+	p.outro(`Server stopped (exit code ${exitCode}).`);
 	process.exit(exitCode);
+}
+
+async function serve(projectPath: string | undefined, options: CliActionOptions): Promise<void> {
+	p.intro(pc.cyan("platipie-cms"));
+	if (options.project && projectPath) {
+		throw new Error("Pass the project path only once — either as an argument or with --project.");
+	}
+	if (options.dev && options.prod) throw new Error("Pass only one of --dev or --prod.");
+
+	const cwd = process.cwd();
+	const project = resolveProjectRoot(options.project ?? projectPath, cwd);
+
+	let root = project.root;
+	if (project.autoOpen) {
+		p.log.warn(`No Astro project in ${cwd} — the Project Selector opens by default.`);
+		root = (await maybePromptForProject(cwd)) ?? root;
+	} else {
+		p.log.info(`Loading Astro project ${pc.cyan(root)}`);
+	}
+
+	await startServer({
+		host: options.host?.trim() || getHost(),
+		open: options.open,
+		port: resolvePort(options.port),
+		projectRoot: root,
+		syncEnabled: options.sync,
+		useProd: options.prod,
+	});
+}
+
+async function syncAction(options: SyncCommandOptions): Promise<void> {
+	p.intro(pc.cyan("platipie-cms sync"));
+	const code = await runSyncCommand(options);
+	process.exit(code);
+}
+
+function buildSyncCommand(): Command {
+	const sync = new Command("sync");
+	sync
+		.description(
+			"Build the SQLite read-model and watch the project (same engine as scripts/sync.ts).",
+		)
+		.option("--once", "Run one sync then exit (default: watch).")
+		.option("--scope <scope>", `Sync only one scope with --once (${SYNC_SCOPES.join("|")}).`)
+		.option("--machine-stats <seconds>", "Print CPU / memory / disk usage every N seconds.")
+		.option("--root <path>", "Override PROJECT_PATH for this run.")
+		.option("--db <path>", "Override the SQLite file (CMS_DB_PATH).")
+		.action(syncAction);
+	return sync;
+}
+
+function buildProgram(version: string): Command {
+	const program = new Command();
+	program
+		.name("platipie-cms")
+		.description("Standalone content-management server for Astro sites.")
+		.version(version, "-v, --version", "Show the CLI version.")
+		.argument("[project-path]", "Astro project to load (defaults to auto-detect).")
+		.option("-p, --project <path>", "Use this Astro project instead of auto-detecting.")
+		.option("--port <number>", "Port to listen on (default: PORT env or 4000).", parsePort)
+		.option("--host <host>", "Host to bind (default: HOST env or 127.0.0.1).")
+		.option("--open", "Open the browser on startup.")
+		.option("--dev", "Run the Vite dev server (default).")
+		.option("--prod", "Run the production preview server (requires build).")
+		.option("--no-sync", "Disable the sync engine (FS watcher) for this server run.")
+		.addHelpText(
+			"after",
+			"\nBehaviour:\n  If the current folder is an Astro project (astro.config.* present) it is\n  loaded by default and its sync engine starts with the server. Otherwise\n  the server starts and the Project Selector dialog opens by default in the\n  web UI so you can pick a project (opening one starts its engine).\n",
+		)
+		.showHelpAfterError("(Run with --help for usage.)")
+		.action(serve);
+	program.addCommand(buildSyncCommand());
+	return program;
+}
+
+async function main(): Promise<void> {
+	const program = buildProgram(readPackageVersionSync(cmsRoot()));
+	try {
+		await program.parseAsync(process.argv);
+	} catch (error) {
+		fail(error instanceof Error ? error.message : String(error));
+	}
 }
 
 await main();

@@ -1,9 +1,9 @@
 // Workspace identity + Astro page inventory for the app shell. Server-only.
-import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 
+import { isAstroProject, readGitBranch, readProjectName } from "./astro-project.ts";
 import { getProjectRoot } from "./config.ts";
 
 const PAGE_EXTENSIONS = new Map([
@@ -35,30 +35,6 @@ export interface Workspace {
 	reachable: boolean;
 }
 
-async function readProjectName(root: string): Promise<string> {
-	try {
-		const raw = await fs.readFile(path.join(root, "package.json"), "utf8");
-		const parsed = JSON.parse(raw) as { name?: unknown };
-		if (typeof parsed.name === "string" && parsed.name.trim()) return parsed.name.trim();
-	} catch {
-		// Fall back to the directory name.
-	}
-	return path.basename(root);
-}
-
-function readBranch(root: string): string {
-	try {
-		const branch = execFileSync("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-			timeout: 1500,
-		}).trim();
-		return branch === "HEAD" ? "detached" : branch || "unknown";
-	} catch {
-		return "unknown";
-	}
-}
-
 function humanize(value: string): string {
 	return value.replaceAll(/[-_]+/gu, " ").replaceAll(/\b\w/gu, (char) => char.toUpperCase());
 }
@@ -86,26 +62,6 @@ function isUtilityPage(relativeFromPages: string, stem: string): boolean {
 }
 
 const EMAIL_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
-
-const ASTRO_CONFIG_NAMES = [
-	"astro.config.cjs",
-	"astro.config.js",
-	"astro.config.mjs",
-	"astro.config.mts",
-	"astro.config.ts",
-] as const;
-
-async function isAstroProject(root: string): Promise<boolean> {
-	for (const name of ASTRO_CONFIG_NAMES) {
-		try {
-			const stat = await fs.stat(path.join(root, name));
-			if (stat.isFile()) return true;
-		} catch {
-			// Try the next candidate.
-		}
-	}
-	return false;
-}
 
 /** Count react-email templates under `<root>/src/emails` (optional upstream). */
 async function countEmailFiles(dirAbs: string): Promise<number> {
@@ -198,7 +154,7 @@ export async function getWorkspace(): Promise<Workspace> {
 		.then((stat) => stat.isDirectory())
 		.catch(() => false);
 	return {
-		branch: reachable ? readBranch(root) : "unknown",
+		branch: reachable ? readGitBranch(root) : "unknown",
 		emailCount: reachable ? await countEmailFiles(path.join(root, "src/emails")) : 0,
 		isAstro: reachable ? await isAstroProject(root) : false,
 		pages: reachable ? await listSitePages() : [],

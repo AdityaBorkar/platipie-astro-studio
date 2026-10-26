@@ -133,7 +133,7 @@ The CMS is a fixed left rail plus a scrolling content pane, not a top nav.
   Astro badge per folder; its primary action stays disabled until the selected
   folder contains `astro.config.*`. Selecting or adding one `POST`s to
   `/api/cms/projects` to repoint the project jail, remembers the root in
-  `.data/projects.json`, and reloads.
+  `$XDG_DATA_HOME/platipie-cms-dev/projects.json`, and reloads.
 - **Primary nav** — the same top-level items, with expandable children. Pages
   lists Astro routes with a kind icon (static, dynamic, utility), including
   `404`/`500` and endpoint routes; Content lists CMS collections with counts.

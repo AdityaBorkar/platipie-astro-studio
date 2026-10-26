@@ -8,12 +8,14 @@
 //   --scope=<scope>      assets|content|components|layouts|templates|pages|emails|astro
 //   --machine-stats=N    print CPU / memory / disk usage every N seconds
 //   --root=<path>        override PROJECT_PATH for this run
-//   --db=<path>          override CMS_DB_PATH for this run
-import { closeDb } from "../src/lib/cms/db/index.ts";
-import { SYNC_SCOPES, fullSync, getSyncStatus, syncScope } from "../src/lib/cms/sync/index.ts";
-import type { SyncScope } from "../src/lib/cms/sync/index.ts";
-import { startMachineStats } from "../src/lib/cms/sync/machine-stats.ts";
-import { startWatcher } from "../src/lib/cms/sync/watcher.ts";
+//   --db=<path>          override the SQLite file (CMS_DB_PATH)
+//   --help               show this help
+//
+// Thin wrapper: the implementation lives in
+// `src/lib/cms/sync/command.ts` so the `platipie-cms sync` CLI subcommand
+// shares the exact same engine and flags.
+import { runSyncCommand } from "#cms/sync/command.ts";
+import { SYNC_SCOPES } from "#cms/sync/index.ts";
 
 function usage(): void {
 	console.log(`platipie-cms sync — SQLite read-model + FS watcher
@@ -41,81 +43,21 @@ function hasFlag(name: string): boolean {
 	return process.argv.slice(2).includes(`--${name}`);
 }
 
-const scopeArg = flagValue("scope");
-if (scopeArg && !(SYNC_SCOPES as readonly string[]).includes(scopeArg)) {
-	console.error(`Unknown scope: ${scopeArg} (expected one of ${SYNC_SCOPES.join(", ")})`);
-	process.exit(1);
-}
-
-const rootArg = flagValue("root");
-if (rootArg) process.env.PROJECT_PATH = rootArg;
-const dbArg = flagValue("db");
-if (dbArg) process.env.CMS_DB_PATH = dbArg;
-
-const { getProjectRoot } = await import("../src/lib/cms/config.ts");
-const root = getProjectRoot();
-const { getDbPath } = await import("../src/lib/cms/db/index.ts");
-
-async function printStatus(): Promise<void> {
-	const status = await getSyncStatus();
-	console.log(`root: ${root}`);
-	console.log(`db:   ${getDbPath()}`);
-	for (const entry of status) {
-		const when = entry.lastSync ? new Date(entry.lastSync).toISOString() : "never";
-		console.log(`  ${entry.scope.padEnd(10)} rows=${entry.fileCount} lastSync=${when}`);
-	}
-}
-
 if (hasFlag("help")) {
 	usage();
 	process.exit(0);
 }
 
-const statsArg = flagValue("machine-stats");
-let stopStats: (() => void) | null = null;
-if (statsArg !== null) {
-	const seconds = Number(statsArg);
-	if (!Number.isFinite(seconds) || seconds <= 0) {
-		console.error(`Invalid --machine-stats value: ${statsArg} (expected seconds > 0)`);
-		process.exit(1);
-	}
-	stopStats = startMachineStats(seconds, root);
-}
-
-let failed = false;
+let code = 1;
 try {
-	if (hasFlag("once")) {
-		if (scopeArg) {
-			const count = await syncScope(scopeArg as SyncScope, root);
-			console.log(`[sync] scope ${scopeArg}: ${count} rows → ${getDbPath()}`);
-		} else {
-			const result = await fullSync(root);
-			console.log(`[sync] full sync of ${result.root} → ${getDbPath()}`);
-			for (const entry of result.scopes)
-				console.log(`  ${entry.scope.padEnd(10)} rows=${entry.fileCount}`);
-		}
-		await printStatus();
-	} else {
-		if (scopeArg) console.log(`[sync] --scope is only used with --once; watching all scopes`);
-		const watcher = await startWatcher(root);
-		await printStatus();
-		console.log("[sync] watching for changes (Ctrl+C to stop)");
-		const shutdown = async () => {
-			console.log("\n[sync] stopping…");
-			await watcher.close();
-			if (stopStats) stopStats();
-			closeDb();
-			process.exit(0);
-		};
-		process.on("SIGINT", () => void shutdown());
-		process.on("SIGTERM", () => void shutdown());
-		await new Promise(() => {});
-	}
+	code = await runSyncCommand({
+		db: flagValue("db") ?? undefined,
+		machineStats: flagValue("machine-stats") ?? undefined,
+		once: hasFlag("once"),
+		root: flagValue("root") ?? undefined,
+		scope: flagValue("scope") ?? undefined,
+	});
 } catch (error) {
-	failed = true;
-	console.error("[sync] failed:", (error as Error).message ?? error);
-} finally {
-	if (stopStats) stopStats();
-	closeDb();
+	console.error((error as Error).message ?? error);
 }
-if (failed) process.exit(1);
+process.exit(code);

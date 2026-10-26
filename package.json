@@ -40,11 +40,11 @@
 		"sync": "bun scripts/sync.ts",
 		"sync:once": "bun scripts/sync.ts --once",
 		"test": "bun test",
-		"verify": "bun check:format && bun check:lint && bun check:types && bun run build",
-		"verify:spec": "bun scripts/verify.ts"
+		"verify": "bun check:format && bun check:lint && bun check:types && bun run build"
 	},
 	"dependencies": {
 		"@base-ui/react": "1.9.0",
+		"@clack/prompts": "1.8.1",
 		"@fontsource-variable/geist-mono": "5.3.0",
 		"@monaco-editor/react": "4.7.0",
 		"@orpc/client": "1.16.1",
@@ -62,12 +62,14 @@
 		"chokidar": "6.0.0",
 		"class-variance-authority": "0.7.1",
 		"cn": "0.5.0",
+		"commander": "15.0.0",
 		"diff": "9.0.0",
 		"drizzle-orm": "0.45.4",
 		"js-yaml": "5.5.0",
 		"lucide-react": "1.61.0",
 		"marked": "18.1.1",
 		"nitro": "3.0.260903-beta",
+		"picocolors": "1.1.1",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",
 		"rehype-sanitize": "6.0.0",

@@ -1,11 +1,18 @@
 // Filesystem project discovery for the workspace switcher. Server-only.
-import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { isAstroProject, readGitBranch, readProjectName } from "./astro-project.ts";
 import { getProjectRoot } from "./config.ts";
 import { cmsError } from "./errors.ts";
+import { getLegacyDataDir, getProjectsFilePath, migrateLegacyFileSync } from "./paths.ts";
+import {
+	isSyncDisabled,
+	restartSyncEngine,
+	stopAllSyncEngines,
+	stopSyncEngine,
+} from "./sync/engine.ts";
 import { getWorkspace } from "./workspace.ts";
 import type { Workspace } from "./workspace.ts";
 
@@ -40,14 +47,6 @@ export interface BrowseView {
 	truncated: boolean;
 }
 
-const ASTRO_CONFIG_NAMES = [
-	"astro.config.mjs",
-	"astro.config.mts",
-	"astro.config.ts",
-	"astro.config.js",
-	"astro.config.cjs",
-] as const;
-
 const FAVICON_CANDIDATES = [
 	{ file: "public/favicon.svg", mime: "image/svg+xml" },
 	{ file: "public/favicon.ico", mime: "image/x-icon" },
@@ -59,26 +58,27 @@ const FAVICON_CANDIDATES = [
 
 const MAX_FAVICON_BYTES = 256 * 1024;
 const MAX_BROWSE_ENTRIES = 300;
-const PROJECTS_FILE = "projects.json";
 
-/** `.data/projects.json` (or alongside `CMS_DB_PATH`) remembers user-added roots. */
+/** XDG data dir (`CMS_DATA_DIR`/`XDG_DATA_HOME`); `projects.json` sits beside `cms.db`. */
 function projectsFilePath(): string {
-	const dbPath = process.env.CMS_DB_PATH?.trim();
-	const dir = dbPath ? path.dirname(path.resolve(dbPath)) : path.resolve(process.cwd(), ".data");
-	return path.join(dir, PROJECTS_FILE);
+	return getProjectsFilePath();
 }
 
 async function readRememberedRoots(): Promise<string[]> {
-	try {
-		const raw = await fs.readFile(projectsFilePath(), "utf8");
-		const parsed = JSON.parse(raw) as { roots?: unknown };
-		if (!Array.isArray(parsed.roots)) return [];
-		return parsed.roots
-			.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
-			.map((entry) => path.resolve(entry));
-	} catch {
-		return [];
+	migrateLegacyFileSync(projectsFilePath());
+	for (const file of [projectsFilePath(), path.join(getLegacyDataDir(), "projects.json")]) {
+		try {
+			const raw = await fs.readFile(file, "utf8");
+			const parsed = JSON.parse(raw) as { roots?: unknown };
+			if (!Array.isArray(parsed.roots)) return [];
+			return parsed.roots
+				.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+				.map((entry) => path.resolve(entry));
+		} catch {
+			// Try the next candidate.
+		}
 	}
+	return [];
 }
 
 async function rememberRoot(root: string): Promise<void> {
@@ -91,30 +91,6 @@ async function rememberRoot(root: string): Promise<void> {
 	const tmp = `${file}.tmp-${Date.now()}`;
 	await fs.writeFile(tmp, `${JSON.stringify({ roots: [...roots].toSorted() }, null, 2)}\n`, "utf8");
 	await fs.rename(tmp, file);
-}
-
-function readBranch(root: string): string {
-	try {
-		const branch = execFileSync("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-			timeout: 1500,
-		}).trim();
-		return branch === "HEAD" ? "detached" : branch || "unknown";
-	} catch {
-		return "unknown";
-	}
-}
-
-async function readProjectName(root: string): Promise<string> {
-	try {
-		const raw = await fs.readFile(path.join(root, "package.json"), "utf8");
-		const parsed = JSON.parse(raw) as { name?: unknown };
-		if (typeof parsed.name === "string" && parsed.name.trim()) return parsed.name.trim();
-	} catch {
-		// Fall back to the directory name.
-	}
-	return path.basename(root);
 }
 
 function displayPathFor(root: string): string {
@@ -137,18 +113,6 @@ async function readFavicon(root: string): Promise<string | null> {
 		}
 	}
 	return null;
-}
-
-export async function isAstroProject(root: string): Promise<boolean> {
-	for (const name of ASTRO_CONFIG_NAMES) {
-		try {
-			const stat = await fs.stat(path.join(root, name));
-			if (stat.isFile()) return true;
-		} catch {
-			// Try the next candidate.
-		}
-	}
-	return false;
 }
 
 export async function listProjects(): Promise<ProjectInfo[]> {
@@ -178,7 +142,7 @@ export async function listProjects(): Promise<ProjectInfo[]> {
 			if (!(await isAstroProject(root))) return null;
 			const [name, branch, favicon] = await Promise.all([
 				readProjectName(root),
-				readBranch(root),
+				readGitBranch(root),
 				readFavicon(root),
 			]);
 			return {
@@ -253,5 +217,24 @@ export async function selectProject(root: string): Promise<Workspace> {
 	// Single-user local server: point the PROJECT_PATH jail at the new workspace.
 	process.env.PROJECT_PATH = resolved;
 	await rememberRoot(resolved);
+	// Opening a project starts its sync engine (stopping the previous one).
+	// A sync failure must never fail the switch itself — the UI shows staleness.
+	if (isSyncDisabled()) {
+		await stopAllSyncEngines();
+	} else {
+		try {
+			await restartSyncEngine(resolved);
+		} catch (error) {
+			console.error(
+				`[sync-engine] failed to start for ${resolved}:`,
+				error instanceof Error ? error.message : error,
+			);
+		}
+	}
 	return getWorkspace();
+}
+
+/** Stop the sync engine for `root` (project closed). Server-only. */
+export function closeProjectSync(root: string = getProjectRoot()): Promise<boolean> {
+	return stopSyncEngine(root);
 }

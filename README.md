@@ -46,5 +46,5 @@ the rules and token table are in `DESIGN.md`.
 - Upload cap 10 MB, image MIME allowlist, filename sanitization, 1 MB read-only guard.
 - `AI_API_KEY` never leaves the server / never logged; AI off unless BYOK set.
 - Filename-is-slug: editing slug renames `my-post.md` → `new-slug.md`.
-- Verify: `bun run verify` (format + lint + types + build gate); SPEC §14 acceptance: `bun run verify:spec`.
+- Verify: `bun run verify` (format + lint + types + build gate).
 - Lint/format: `bun run check:format` (oxfmt, writes in place), `bun run check:lint` (oxlint), `bun run check:tailwind`, types via `bun run check:types` (tsrs).

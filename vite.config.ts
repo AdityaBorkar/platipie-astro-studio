@@ -4,6 +4,24 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import type { Plugin } from "vite";
+
+/** Eager sync-engine lifecycle for `vite dev`: start the watcher for the open
+ * project on server boot, stop it when the dev server (or process) closes.
+ * Production/preview boots lazily on the first API request instead. */
+function platipieSyncEngine(): Plugin {
+	return {
+		async configureServer(server) {
+			const engine = await import("./src/lib/cms/sync/engine.ts");
+			engine.registerSyncShutdownHooks();
+			engine.ensureServerSync();
+			server.httpServer?.once("close", () => {
+				void engine.stopAllSyncEngines().catch(() => {});
+			});
+		},
+		name: "platipie-sync-engine",
+	};
+}
 
 const port = Number(process.env.PORT ?? 4000);
 
@@ -20,6 +38,7 @@ export default defineConfig({
 		},
 	},
 	plugins: [
+		platipieSyncEngine(),
 		devtools(),
 		tailwindcss(),
 		// Nitro with `bun` preset: TanStack Start serves via Nitro; when building

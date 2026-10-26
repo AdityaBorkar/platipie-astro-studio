@@ -1,13 +1,16 @@
 // SQLite connection + DDL for the sync read-model. Server-only.
 //
 // Uses `bun:sqlite` (no native postinstall needed) through drizzle-orm.
-// The DB file lives at `CMS_DB_PATH` or `<cms-root>/.data/cms.db`.
+// The DB file lives at `CMS_DB_PATH` or `<XDG_DATA_HOME>/platipie-cms-dev/cms.db`
+// (see `../paths.ts`). Legacy `<cwd>/.data/cms.db` is migrated once on open.
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+
+import { getDbPath as resolveDbPath, migrateLegacyFileSync } from "../paths.ts";
 
 export type SyncDb = BunSQLiteDatabase;
 
@@ -16,12 +19,7 @@ let dbPath: string | null = null;
 
 export function getDbPath(): string {
 	if (dbPath) return dbPath;
-	const fromEnv = process.env.CMS_DB_PATH?.trim();
-	if (fromEnv) {
-		dbPath = path.resolve(fromEnv);
-		return dbPath;
-	}
-	dbPath = path.resolve(process.cwd(), ".data", "cms.db");
+	dbPath = resolveDbPath();
 	return dbPath;
 }
 
@@ -88,6 +86,11 @@ export function getDb(): SyncDb {
 	if (db) return db;
 	const file = getDbPath();
 	mkdirSync(path.dirname(file), { recursive: true });
+	migrateLegacyFileSync(file);
+	// WAL sidecars travel with the main file; carry them over on migration.
+	for (const suffix of ["-wal", "-shm"]) {
+		if (!existsSync(`${file}${suffix}`)) migrateLegacyFileSync(`${file}${suffix}`);
+	}
 	const sqlite = new Database(file, { create: true });
 	sqlite.exec("PRAGMA journal_mode = WAL;");
 	sqlite.exec("PRAGMA synchronous = NORMAL;");

@@ -6,6 +6,7 @@ import type { ORPCError } from "@orpc/server";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 
+import { ensureServerSync } from "../sync/engine.ts";
 import type { CmsContext } from "./base.ts";
 import { cmsRouter } from "./router.ts";
 
@@ -13,6 +14,10 @@ export function contextForRequest(request: Request): CmsContext {
 	const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
 	const ip = forwarded || request.headers.get("x-real-ip") || "127.0.0.1";
 	const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+	// Lazy engine start: the first API call for the open project boots its
+	// watcher (deduped, backgrounded). Project switches restart it via
+	// `selectProject`; shutdown hooks stop it when the server closes.
+	ensureServerSync();
 	return { ip, requestId };
 }
 
