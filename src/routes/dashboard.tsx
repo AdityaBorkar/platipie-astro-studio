@@ -66,7 +66,7 @@ interface DashboardData {
 
 export const Route = createFileRoute("/dashboard")({
 	component: Dashboard,
-	head: () => ({ meta: [{ title: "Dashboard · platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "Dashboard · platipie-astro-studio" }] }),
 });
 
 function Dashboard() {

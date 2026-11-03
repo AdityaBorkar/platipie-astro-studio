@@ -2,7 +2,7 @@ import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
 	component: IndexRedirect,
-	head: () => ({ meta: [{ title: "platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "platipie-astro-studio" }] }),
 });
 
 function IndexRedirect() {

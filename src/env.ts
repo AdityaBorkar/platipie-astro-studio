@@ -5,7 +5,7 @@ export const env = createEnv({
 	client: {
 		// Shown in the document title and header fallbacks when no project is open.
 		// Consumed by __root for the document title.
-		VITE_APP_TITLE: z.string().min(1).default("platipie-cms"),
+		VITE_APP_TITLE: z.string().min(1).default("platipie-astro-studio"),
 	},
 
 	clientPrefix: "VITE_",

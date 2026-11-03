@@ -158,7 +158,7 @@ function WorkspaceMenu({
 		setQuery("");
 	}, [open]);
 
-	// When the server starts outside an Astro project (e.g. `bunx @platipie/cms`
+	// When the server starts outside an Astro project (e.g. `bunx @platipie/astro-studio`
 	// from a non-Astro folder) the Project Selector opens by default.
 	useEffect(() => {
 		if (!autoOpened && workspace && workspace.isAstro === false) {
@@ -241,7 +241,7 @@ function WorkspaceMenu({
 				</span>
 				<span className="min-w-0 flex-1">
 					<span className="block truncate text-13 font-bold tracking-tight">
-						{workspace?.project ?? "platipie-cms"}
+						{workspace?.project ?? "platipie-astro-studio"}
 					</span>
 					<span className="mt-0.5 flex items-center gap-1 text-10 text-muted-foreground">
 						<GitBranchIcon className="size-3 shrink-0" />

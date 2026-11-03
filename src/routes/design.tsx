@@ -13,7 +13,7 @@ import { ViewportsSection } from "./design/sections/viewports";
 
 export const Route = createFileRoute("/design")({
 	component: DesignSystemPage,
-	head: () => ({ meta: [{ title: "Design system · platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "Design system · platipie-astro-studio" }] }),
 });
 
 function DesignSystemPage() {

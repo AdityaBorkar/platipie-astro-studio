@@ -1,9 +1,9 @@
 {
-	"name": "@platipie/cms",
+	"name": "@platipie/astro-studio",
 	"version": "0.1.0",
 	"description": "Standalone content-management server for the Astro site — TanStack Start + Bun + Nitro (bun preset).",
 	"bin": {
-		"platipie-cms": "./cli/index.ts"
+		"platipie-astro-studio": "./cli/index.ts"
 	},
 	"files": [
 		"cli/",

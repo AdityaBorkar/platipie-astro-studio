@@ -48,7 +48,7 @@ import { cmsKeys } from "./cms-keys";
 
 export const Route = createFileRoute("/settings")({
 	component: SettingsPage,
-	head: () => ({ meta: [{ title: "Settings · platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "Settings · platipie-astro-studio" }] }),
 });
 
 const sections = [

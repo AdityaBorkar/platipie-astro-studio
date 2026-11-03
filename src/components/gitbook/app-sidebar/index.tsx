@@ -100,7 +100,7 @@ export function AppSidebar() {
 				</Button>
 				<BrandMark className="size-4 text-brand" />
 				<span className="min-w-0 flex-1 truncate text-13 font-bold tracking-tight">
-					{workspace?.project ?? "platipie-cms"}
+					{workspace?.project ?? "platipie-astro-studio"}
 				</span>
 				<Badge className="max-w-28 gap-1 font-mono" variant="outline">
 					<GitBranchIcon className="size-3 shrink-0" />

@@ -4,7 +4,7 @@ import { parseSyncArgs, runSyncCommand } from "#/cms/sync/command.ts";
 import { SYNC_SCOPES } from "#/cms/sync/index.ts";
 
 function usage(): void {
-	console.log(`platipie-cms sync — SQLite read-model + FS watcher
+	console.log(`platipie-astro-studio sync — SQLite read-model + FS watcher
 Usage:
   bun scripts/sync.ts [options]
 

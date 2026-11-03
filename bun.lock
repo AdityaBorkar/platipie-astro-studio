@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "platipie-cms",
+      "name": "platipie-astro-studio",
       "dependencies": {
         "@base-ui/react": "1.9.0",
         "@clack/prompts": "1.8.1",

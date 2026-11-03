@@ -50,7 +50,7 @@ import { markdownToSafeHtml } from "./markdown";
 
 export const Route = createFileRoute("/edit/$collection/$id")({
 	component: UnifiedEditor,
-	head: ({ params }) => ({ meta: [{ title: `${params.id} · platipie-cms` }] }),
+	head: ({ params }) => ({ meta: [{ title: `${params.id} · platipie-astro-studio` }] }),
 	validateSearch: (s: Record<string, unknown>) => ({
 		path:
 			typeof s.path === "string" ? s.path : Array.isArray(s.path) ? String(s.path[0] ?? "") : "",

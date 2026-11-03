@@ -36,7 +36,7 @@ import { parseEntryRef } from "./edit/helpers";
 
 export const Route = createFileRoute("/content")({
 	component: ContentPage,
-	head: () => ({ meta: [{ title: "Content · platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "Content · platipie-astro-studio" }] }),
 	validateSearch: (s: Record<string, unknown>) => ({
 		collection: typeof s.collection === "string" ? s.collection : undefined,
 		entry: typeof s.entry === "string" ? s.entry : undefined,

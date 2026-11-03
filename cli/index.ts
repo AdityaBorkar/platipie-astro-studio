@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Entry point for `bunx @platipie/cms`: loads cwd Astro project by default, else auto-opens Project Selector.
+// Entry point for `bunx @platipie/astro-studio`: loads cwd Astro project by default, else auto-opens Project Selector.
 // Interactive prompts run TTY-only so CI never blocks.
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -134,7 +134,10 @@ async function startServer(server: ServerConfig): Promise<void> {
 	if (server.open) args.push("--open");
 
 	p.log.success(`Starting ${mode} server at ${pc.cyan(url)}`);
-	p.note(`Project  ${server.projectRoot}\nMode     ${mode}\nURL      ${url}`, "platipie-cms");
+	p.note(
+		`Project  ${server.projectRoot}\nMode     ${mode}\nURL      ${url}`,
+		"platipie-astro-studio",
+	);
 	if (!server.syncEnabled) {
 		p.log.warn("Sync engine disabled (--no-sync) — the inventory will go stale.");
 	}
@@ -163,7 +166,7 @@ async function startServer(server: ServerConfig): Promise<void> {
 }
 
 async function serve(projectPath: string | undefined, options: CliActionOptions): Promise<void> {
-	p.intro(pc.cyan("platipie-cms"));
+	p.intro(pc.cyan("platipie-astro-studio"));
 	if (options.project && projectPath) {
 		throw new Error("Pass the project path only once — either as an argument or with --project.");
 	}
@@ -191,7 +194,7 @@ async function serve(projectPath: string | undefined, options: CliActionOptions)
 }
 
 async function syncAction(options: SyncCommandOptions): Promise<void> {
-	p.intro(pc.cyan("platipie-cms sync"));
+	p.intro(pc.cyan("platipie-astro-studio sync"));
 	if (options.scope && !options.once) {
 		throw new Error("--scope requires --once (scoped watch is not supported).");
 	}
@@ -223,7 +226,7 @@ function buildSyncCommand(): Command {
 function buildProgram(version: string): Command {
 	const program = new Command();
 	program
-		.name("platipie-cms")
+		.name("platipie-astro-studio")
 		.description("Standalone content-management server for Astro sites.")
 		.version(version, "-v, --version", "Show the CLI version.")
 		.argument("[project-path]", "Astro project to load (defaults to auto-detect).")

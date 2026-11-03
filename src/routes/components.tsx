@@ -29,7 +29,7 @@ import { cmsKeys } from "./cms-keys";
 
 export const Route = createFileRoute("/components")({
 	component: ComponentsPage,
-	head: () => ({ meta: [{ title: "Components · platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "Components · platipie-astro-studio" }] }),
 });
 
 type ParamKind = "boolean" | "number" | "select" | "text";

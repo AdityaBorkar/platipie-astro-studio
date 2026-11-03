@@ -83,7 +83,7 @@ export function PatternsSection() {
 					<div className="overflow-hidden rounded-xl border border-border">
 						<div className="flex items-center gap-2 border-b border-border bg-sidebar px-3 py-2">
 							<BrandMark className="size-4 text-brand" />
-							<span className="text-xs font-bold">platipie-cms</span>
+							<span className="text-xs font-bold">platipie-astro-studio</span>
 							<Badge className="ml-auto font-mono" variant="outline">
 								main
 							</Badge>

@@ -53,7 +53,7 @@ export const Route = createRootRoute({
 		meta: [
 			{ charSet: "utf-8" },
 			{ content: "width=device-width, initial-scale=1", name: "viewport" },
-			{ title: env.VITE_APP_TITLE ?? "platipie-cms" },
+			{ title: env.VITE_APP_TITLE ?? "platipie-astro-studio" },
 			{
 				content:
 					"Standalone content-management server for the Astro site. Files are the source of truth; SQLite holds a synced read-model.",

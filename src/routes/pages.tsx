@@ -93,7 +93,7 @@ interface SchemaDetail {
 
 export const Route = createFileRoute("/pages")({
 	component: PagesPage,
-	head: () => ({ meta: [{ title: "Pages · platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "Pages · platipie-astro-studio" }] }),
 	validateSearch: (search: Record<string, unknown>) => ({
 		page: typeof search.page === "string" ? search.page : undefined,
 	}),

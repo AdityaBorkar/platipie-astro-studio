@@ -1,4 +1,4 @@
-# platipie-cms
+# platipie-astro-studio
 
 Standalone content-management server for an Astro site. Files under the project root stay the source of truth; the CMS reads and writes them directly.
 

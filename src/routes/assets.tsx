@@ -44,7 +44,7 @@ type AssetView = "folders" | "free";
 
 export const Route = createFileRoute("/assets")({
 	component: AssetsPage,
-	head: () => ({ meta: [{ title: "Assets · platipie-cms" }] }),
+	head: () => ({ meta: [{ title: "Assets · platipie-astro-studio" }] }),
 });
 
 async function copyPath(path: string) {

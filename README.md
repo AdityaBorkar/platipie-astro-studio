@@ -1,4 +1,4 @@
-# platipie-cms
+# platipie-astro-studio
 
 Standalone content-management server for the Astro site.
 TanStack Start (latest) + Bun + Nitro (`bun` preset). Files under `PROJECT_PATH`
