@@ -72,13 +72,6 @@
 	--chart-4: oklch(0.9053 0.0939 163.87);
 	--chart-5: oklch(0.6352 0.0073 106.61);
 	--radius: 0.75rem;
-	--radius-sm: 0.5rem;
-	--radius-md: 0.5rem;
-	--radius-lg: 0.75rem;
-	--radius-xl: 1rem;
-	--radius-2xl: 1.5rem;
-	--radius-3xl: 1.75rem;
-	--radius-4xl: 2rem;
 	--sidebar: oklch(0.9848 0.0013 106.42);
 	--sidebar-foreground: oklch(0.2161 0.0061 56.04);
 	--sidebar-primary: oklch(0.675 0.2143 36.97);
@@ -284,10 +277,6 @@
 	max-height: 58vh;
 }
 
-@utility max-h-asset-preview {
-	max-height: 58vh;
-}
-
 @utility min-h-60vh {
 	min-height: 60vh;
 }
@@ -310,18 +299,6 @@
 
 @utility tabs-trigger-h {
 	height: calc(100% - 1px);
-}
-
-@utility grid-cols-fields {
-	grid-template-columns: minmax(0, 8rem) minmax(0, 4.5rem) minmax(0, 1fr);
-}
-
-@utility grid-cols-fields-wide {
-	grid-template-columns: minmax(0, 14rem) minmax(0, 7rem) minmax(0, 1fr);
-}
-
-@utility grid-cols-history {
-	grid-template-columns: 320px minmax(0, 1fr);
 }
 
 @utility grid-cols-docs-shell {
@@ -444,16 +421,8 @@
 	padding-left: 16.5rem;
 }
 
-@utility max-h-workspace-menu {
-	max-height: min(72dvh, 32rem);
-}
-
 @utility grid-cols-app-rail {
 	grid-template-columns: minmax(0, 1fr) 20rem;
-}
-
-@utility grid-cols-pages-workspace {
-	grid-template-columns: minmax(0, 19rem) minmax(0, 1fr) minmax(0, 22rem);
 }
 
 @utility grid-cols-workbench {
@@ -524,7 +493,7 @@ p {
 			color-mix(in oklch, var(--brand) 6%, transparent),
 			transparent 70%
 		);
-	mask-image: linear-gradient(to bottom, oklch(0 0 0) 0%, transparent 94%);
+	mask-image: linear-gradient(to bottom, black 0%, transparent 94%);
 }
 
 .gb-halo {
@@ -574,7 +543,7 @@ p {
 		linear-gradient(to bottom, var(--border) 1px, transparent 1px);
 	background-size: 48px 48px;
 	opacity: 0.5;
-	mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, oklch(0 0 0) 20%, transparent 75%);
+	mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 20%, transparent 75%);
 }
 
 @layer base {
@@ -606,10 +575,6 @@ p {
 	button:disabled,
 	[aria-disabled="true"] {
 		cursor: not-allowed;
-	}
-
-	a[target="_blank"] {
-		cursor: pointer;
 	}
 }
 
@@ -973,17 +938,11 @@ pre {
 			transparent 0
 		);
 		background-size: 22px 22px;
-		mask-image: radial-gradient(ellipse 75% 65% at 50% 0%, oklch(0 0 0) 25%, transparent 78%);
+		mask-image: radial-gradient(ellipse 75% 65% at 50% 0%, black 25%, transparent 78%);
 	}
 
 	.gb-mask-fade-x {
-		mask-image: linear-gradient(
-			to right,
-			transparent,
-			oklch(0 0 0) 10%,
-			oklch(0 0 0) 90%,
-			transparent
-		);
+		mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
 	}
 
 	.gb-card-hover {

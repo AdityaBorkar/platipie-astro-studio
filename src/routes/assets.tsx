@@ -33,6 +33,7 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 import { cn } from "#/lib/utils";
+import { cmsKeys } from "./cms-keys";
 
 interface InventoryResponse {
 	rows: AssetRow[];
@@ -60,7 +61,7 @@ async function putAsset(file: File, slug?: string): Promise<string> {
 	form.set("file", file);
 	form.set("dest", "assets");
 	if (slug) form.set("slug", slug);
-	const response = await fetch("/api/cms/media", { body: form, method: "POST" });
+	const response = await fetch(cmsKeys.media, { body: form, method: "POST" });
 	const json = (await response.json().catch(() => ({}))) as {
 		message?: string;
 		path?: string;
@@ -90,10 +91,10 @@ function AssetsPage() {
 	const dragDepth = useRef(0);
 
 	const fetchAssets = useCallback(
-		() => fetchJson<InventoryResponse>("/api/cms/inventory?scope=assets"),
+		() => fetchJson<InventoryResponse>(cmsKeys.inventory("assets")),
 		[],
 	);
-	const assetsQuery = useCachedFetch("/api/cms/inventory?scope=assets", fetchAssets, {
+	const assetsQuery = useCachedFetch(cmsKeys.inventory("assets"), fetchAssets, {
 		errorMessage: "Could not refresh assets",
 	});
 	const assets = assetsQuery.data?.rows ?? null;
@@ -282,11 +283,16 @@ function AssetsPage() {
 									title={needle ? "No assets match" : "No assets yet"}
 								/>
 							) : (
-								<AssetGrid
-									onCopy={(path) => void copyPath(path)}
-									onOpen={(asset) => setActive(asset)}
-									rows={filtered}
-								/>
+								<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+									{filtered.map((item) => (
+										<AssetCard
+											asset={item}
+											key={item.path}
+											onCopy={(path) => void copyPath(path)}
+											onOpen={(asset) => setActive(asset)}
+										/>
+									))}
+								</ul>
 							)
 						) : (
 							<div className="grid gap-4 md:grid-cols-asset-browser">
@@ -294,7 +300,9 @@ function AssetsPage() {
 									<p className="px-2 py-1 text-10 font-bold tracking-14 text-muted-foreground uppercase">
 										Directories
 									</p>
-									<FolderTree activeDir={activeDir} node={folderTree} onSelect={goToFolder} />
+									<ul className="space-y-0.5">
+										<FolderTreeNode activeDir={activeDir} node={folderTree} onSelect={goToFolder} />
+									</ul>
 								</aside>
 								<section className="min-w-0">
 									{needle ? (
@@ -305,11 +313,16 @@ function AssetsPage() {
 											</p>
 											{filtered.length > 0 ? (
 												<div className="mt-3">
-													<AssetGrid
-														onCopy={(path) => void copyPath(path)}
-														onOpen={(asset) => setActive(asset)}
-														rows={filtered}
-													/>
+													<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+														{filtered.map((item) => (
+															<AssetCard
+																asset={item}
+																key={item.path}
+																onCopy={(path) => void copyPath(path)}
+																onOpen={(asset) => setActive(asset)}
+															/>
+														))}
+													</ul>
 												</div>
 											) : (
 												<div className="mt-3">
@@ -383,12 +396,17 @@ function AssetsPage() {
 
 											{folderRows.length > 0 ? (
 												<div className="mt-3">
-													<AssetGrid
-														onCopy={(path) => void copyPath(path)}
-														onOpen={(asset) => setActive(asset)}
-														rows={folderRows}
-														showPath={false}
-													/>
+													<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+														{folderRows.map((item) => (
+															<AssetCard
+																asset={item}
+																key={item.path}
+																onCopy={(path) => void copyPath(path)}
+																onOpen={(asset) => setActive(asset)}
+																showPath={false}
+															/>
+														))}
+													</ul>
 												</div>
 											) : currentFolder.children.length === 0 ? (
 												<div className="mt-3">
@@ -434,51 +452,13 @@ function AssetsPage() {
 	);
 }
 
-interface AssetGridProps {
-	onCopy: (path: string) => void;
-	onOpen: (asset: AssetRow) => void;
-	rows: AssetRow[];
-	showPath?: boolean;
-}
-
-function AssetGrid({ onCopy, onOpen, rows, showPath = true }: AssetGridProps) {
-	return (
-		<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-			{rows.map((item) => (
-				<AssetCard
-					asset={item}
-					key={item.path}
-					onCopy={onCopy}
-					onOpen={onOpen}
-					showPath={showPath}
-				/>
-			))}
-		</ul>
-	);
-}
-
-interface FolderTreeProps {
-	activeDir: string;
-	node: FolderNode;
-	onSelect: (path: string) => void;
-}
-
-function FolderTree({ activeDir, node, onSelect }: FolderTreeProps) {
-	return (
-		<ul className="space-y-0.5">
-			<FolderTreeNode activeDir={activeDir} depth={0} node={node} onSelect={onSelect} />
-		</ul>
-	);
-}
-
 interface FolderTreeNodeProps {
 	activeDir: string;
-	depth: number;
 	node: FolderNode;
 	onSelect: (path: string) => void;
 }
 
-function FolderTreeNode({ activeDir, depth, node, onSelect }: FolderTreeNodeProps) {
+function FolderTreeNode({ activeDir, node, onSelect }: FolderTreeNodeProps) {
 	const active = node.path === activeDir;
 	const hasChildren = node.children.length > 0;
 
@@ -486,13 +466,12 @@ function FolderTreeNode({ activeDir, depth, node, onSelect }: FolderTreeNodeProp
 		<li>
 			<button
 				className={cn(
-					"flex w-full items-center gap-1.5 rounded-lg py-1.5 pr-2 text-left transition-colors",
+					"flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors",
 					active
 						? "bg-secondary text-foreground"
 						: "text-muted-foreground hover:bg-muted hover:text-foreground",
 				)}
 				onClick={() => onSelect(node.path)}
-				style={{ paddingLeft: `${depth * 12 + 8}px` }}
 				type="button"
 			>
 				{hasChildren ? (
@@ -508,11 +487,10 @@ function FolderTreeNode({ activeDir, depth, node, onSelect }: FolderTreeNodeProp
 				<span className="font-mono text-10 opacity-60">{node.total}</span>
 			</button>
 			{hasChildren ? (
-				<ul className="space-y-0.5">
+				<ul className="space-y-0.5 pl-3">
 					{node.children.map((child) => (
 						<FolderTreeNode
 							activeDir={activeDir}
-							depth={depth + 1}
 							key={child.path}
 							node={child}
 							onSelect={onSelect}

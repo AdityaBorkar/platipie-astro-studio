@@ -1,14 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { isAstroProject, readGitBranch, readProjectName } from "./astro-project.ts";
-import { getProjectRoot } from "./config.ts";
+import { getProjectRoot, setProjectRoot } from "./config.ts";
 import { cmsError } from "./errors.ts";
+import { mapChunked } from "./fs-walk.ts";
 import { getLegacyDataDir, getProjectsFilePath, migrateLegacyFileSync } from "./paths.ts";
 import {
 	isSyncDisabled,
-	restartSyncEngine,
+	startSyncEngine,
 	stopAllSyncEngines,
 	stopSyncEngine,
 } from "./sync/engine.ts";
@@ -68,7 +70,7 @@ async function readRememberedRoots(): Promise<string[]> {
 		try {
 			const raw = await fs.readFile(file, "utf8");
 			const parsed = JSON.parse(raw) as { roots?: unknown };
-			if (!Array.isArray(parsed.roots)) return [];
+			if (!Array.isArray(parsed.roots)) continue;
 			return parsed.roots
 				.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
 				.map((entry) => path.resolve(entry));
@@ -86,7 +88,7 @@ async function rememberRoot(root: string): Promise<void> {
 	roots.add(resolved);
 	const file = projectsFilePath();
 	await fs.mkdir(path.dirname(file), { recursive: true });
-	const tmp = `${file}.tmp-${Date.now()}`;
+	const tmp = `${file}.tmp-${randomUUID()}`;
 	await fs.writeFile(tmp, `${JSON.stringify({ roots: [...roots].toSorted() }, null, 2)}\n`, "utf8");
 	await fs.rename(tmp, file);
 }
@@ -134,25 +136,23 @@ export async function listProjects(): Promise<ProjectInfo[]> {
 	}
 	roots.add(current);
 
-	const projects = await Promise.all(
-		[...roots].map(async (root) => {
-			// Only Astro projects are offered in the switcher.
-			if (!(await isAstroProject(root))) return null;
-			const [name, branch, favicon] = await Promise.all([
-				readProjectName(root),
-				readGitBranch(root),
-				readFavicon(root),
-			]);
-			return {
-				branch,
-				current: root === current,
-				displayPath: displayPathFor(root),
-				favicon,
-				name,
-				root,
-			} satisfies ProjectInfo;
-		}),
-	);
+	const projects = await mapChunked([...roots], async (root) => {
+		// Only Astro projects are offered in the switcher.
+		if (!(await isAstroProject(root))) return null;
+		const [name, branch, favicon] = await Promise.all([
+			readProjectName(root),
+			readGitBranch(root),
+			readFavicon(root),
+		]);
+		return {
+			branch,
+			current: root === current,
+			displayPath: displayPathFor(root),
+			favicon,
+			name,
+			root,
+		} satisfies ProjectInfo;
+	});
 	return projects
 		.filter((project): project is ProjectInfo => project !== null)
 		.toSorted((a, b) => Number(b.current) - Number(a.current) || a.name.localeCompare(b.name));
@@ -160,13 +160,40 @@ export async function listProjects(): Promise<ProjectInfo[]> {
 
 export async function browseDirectory(input?: string): Promise<BrowseView> {
 	const home = os.homedir();
-	const target = path.resolve(input?.trim() || home);
-	const stat = await fs.stat(target).catch(() => null);
+	const rawInput = input?.trim() || home;
+	// Expand leading ~ before resolve: path.resolve("~") would yield <cwd>/~.
+	const expanded =
+		rawInput === "~"
+			? home
+			: rawInput.startsWith("~/")
+				? path.join(home, rawInput.slice(2))
+				: rawInput;
+	const target = path.resolve(expanded);
+	// Jail: only home, the current project root, and remembered roots (plus
+	// their descendants) are browsable. Everything else is 403 — this endpoint
+	// is unauthenticated, so path.resolve alone is not enough.
+	const remembered = await readRememberedRoots();
+	const allowedRoots = [home, getProjectRoot(), ...remembered].map((root) => path.resolve(root));
+	const allowed = allowedRoots.some(
+		(root) => target === root || target.startsWith(`${root}${path.sep}`),
+	);
+	if (!allowed) {
+		throw cmsError("VALIDATION", `Browsing outside allowed roots is forbidden: ${target}`, 403);
+	}
+	const stat = await fs.stat(target).catch((e: unknown) => {
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw cmsError("NOT_FOUND", `Not a folder: ${target}`, 404);
+		}
+		throw e;
+	});
 	if (!stat || !stat.isDirectory()) {
 		throw cmsError("NOT_FOUND", `Not a folder: ${target}`, 404);
 	}
 
-	const names = await fs.readdir(target).catch(() => {
+	const names = await fs.readdir(target).catch((e: unknown) => {
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw cmsError("NOT_FOUND", `Not a folder: ${target}`, 404);
+		}
 		throw cmsError("IO", `Cannot read folder: ${target}`, 400);
 	});
 	const folders: string[] = [];
@@ -177,17 +204,24 @@ export async function browseDirectory(input?: string): Promise<BrowseView> {
 		if (entryStat?.isDirectory()) folders.push(name);
 	}
 
-	const entries = await Promise.all(
-		folders.slice(0, MAX_BROWSE_ENTRIES).map(async (name) => {
-			const abs = path.join(target, name);
-			return {
-				isAstro: await isAstroProject(abs),
-				name,
-				path: abs,
-			} satisfies BrowseFolder;
-		}),
-	);
-	const parent = path.dirname(target);
+	const entries = await mapChunked(folders.slice(0, MAX_BROWSE_ENTRIES), async (name) => {
+		const abs = path.join(target, name);
+		return {
+			isAstro: await isAstroProject(abs),
+			name,
+			path: abs,
+		} satisfies BrowseFolder;
+	});
+	const rawParent = path.dirname(target);
+	// Clamp parent to the jail: a parent above all allowed roots would 403
+	// on click, so report no parent instead of an unbrowsable path.
+	const parentAllowed =
+		rawParent === target
+			? false
+			: allowedRoots.some(
+					(root) => rawParent === root || rawParent.startsWith(`${root}${path.sep}`),
+				);
+	const parent = rawParent === target || !parentAllowed ? null : rawParent;
 	const places: BrowsePlace[] = [
 		{ label: "Home", path: home },
 		{ label: "Current project", path: getProjectRoot() },
@@ -197,7 +231,7 @@ export async function browseDirectory(input?: string): Promise<BrowseView> {
 		entries,
 		isAstro: await isAstroProject(target),
 		name: path.basename(target) || target,
-		parent: parent === target ? null : parent,
+		parent,
 		path: target,
 		places,
 		truncated: folders.length > MAX_BROWSE_ENTRIES,
@@ -211,15 +245,17 @@ export async function selectProject(root: string): Promise<Workspace> {
 	if (!(await isAstroProject(resolved))) {
 		throw cmsError("VALIDATION", "Not an Astro project (astro.config.* missing)", 400);
 	}
-	// Single-user local server: point the PROJECT_PATH jail at the new workspace.
-	process.env.PROJECT_PATH = resolved;
+	// Single-user local server: point the project jail at the new workspace.
+	// The single-project policy lives here — the engine itself supports many
+	// roots, so stop the others before starting this one. No process.env
+	// mutation: the jail override is threaded via config.
+	setProjectRoot(resolved);
 	await rememberRoot(resolved);
 	// Sync failure must never fail the switch; the UI shows staleness.
-	if (isSyncDisabled()) {
-		await stopAllSyncEngines();
-	} else {
+	await stopAllSyncEngines();
+	if (!isSyncDisabled()) {
 		try {
-			await restartSyncEngine(resolved);
+			await startSyncEngine(resolved);
 		} catch (error) {
 			console.error(
 				`[sync-engine] failed to start for ${resolved}:`,
@@ -227,7 +263,7 @@ export async function selectProject(root: string): Promise<Workspace> {
 			);
 		}
 	}
-	return getWorkspace();
+	return getWorkspace(resolved);
 }
 
 export function closeProjectSync(root: string = getProjectRoot()): Promise<boolean> {

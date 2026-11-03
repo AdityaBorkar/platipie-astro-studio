@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { DatabaseIcon, FileStackIcon, ImageIcon, RefreshCwIcon, ShapesIcon } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
 import { EmptyState, PageHeader, PageShell } from "#/components/gitbook/page";
@@ -9,6 +10,8 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Skeleton } from "#/components/ui/skeleton";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
+import { cmsKeys } from "./cms-keys";
+import { formatMtimeDate } from "./format-mtime";
 
 interface ProjectEntry {
 	branch: string;
@@ -41,7 +44,10 @@ interface CollectionsResponse {
 		aiEnabled: boolean;
 		astroUrl: string | null;
 		port: number;
-		projectReachable: boolean;
+		// null = unknown (transient fetch failure). Never render a hardcoded
+		// `false` here: that would flash a false "Project missing" badge while
+		// only the content scope failed. Callers must treat null as unknown.
+		projectReachable: boolean | null;
 		trashTtlDays: number;
 	};
 	recent: RecentEntry[];
@@ -65,44 +71,81 @@ export const Route = createFileRoute("/dashboard")({
 
 function Dashboard() {
 	const fetchProjects = useCallback(
-		() => fetchJson<{ projects: ProjectEntry[] }>("/api/cms/projects"),
+		() => fetchJson<{ projects: ProjectEntry[] }>(cmsKeys.projects),
 		[],
 	);
 	const fetchCollections = useCallback(
-		() => fetchJson<CollectionsResponse>("/api/cms/collections"),
+		() => fetchJson<CollectionsResponse>(cmsKeys.collections),
 		[],
 	);
 	const fetchInventory = useCallback(
-		() => fetchJson<InventoryResponse>("/api/cms/inventory?scope=pages,assets,components"),
+		() => fetchJson<InventoryResponse>(cmsKeys.inventory("pages,assets,components")),
 		[],
 	);
-	const projectsQuery = useCachedFetch("/api/cms/projects", fetchProjects, {
+	const projectsQuery = useCachedFetch(cmsKeys.projects, fetchProjects, {
 		errorMessage: "Could not refresh projects",
 	});
-	const collectionsQuery = useCachedFetch("/api/cms/collections", fetchCollections, {
+	const collectionsQuery = useCachedFetch(cmsKeys.collections, fetchCollections, {
 		errorMessage: "Could not refresh collections",
 	});
-	const inventoryQuery = useCachedFetch(
-		"/api/cms/inventory?scope=pages,assets,components",
-		fetchInventory,
-		{
-			errorMessage: "Could not refresh inventory",
-		},
-	);
+	const inventoryKey = cmsKeys.inventory("pages,assets,components");
+	const inventoryQuery = useCachedFetch(inventoryKey, fetchInventory, {
+		errorMessage: "Could not refresh inventory",
+	});
 
+	const failedScopes = useMemo(() => {
+		const failed: string[] = [];
+		if (projectsQuery.error && !projectsQuery.data) failed.push("projects");
+		if (collectionsQuery.error && !collectionsQuery.data) failed.push("content");
+		if (inventoryQuery.error && !inventoryQuery.data) failed.push("inventory");
+		return failed;
+	}, [
+		collectionsQuery.data,
+		collectionsQuery.error,
+		inventoryQuery.data,
+		inventoryQuery.error,
+		projectsQuery.data,
+		projectsQuery.error,
+	]);
+	// Partial data still renders: each scope degrades independently instead of
+	// holding the whole page at data === null on a single failure. failedScopes
+	// is surfaced via toast + inline Hint below (mirroring
+	// content/model.ts fetchContentIndex); zeros below are real only when their
+	// scope loaded.
 	const data = useMemo<DashboardData | null>(() => {
-		if (!projectsQuery.data || !collectionsQuery.data || !inventoryQuery.data) return null;
-		const entries = projectsQuery.data.projects ?? [];
+		if (!projectsQuery.data && !collectionsQuery.data && !inventoryQuery.data) return null;
+		const entries = projectsQuery.data?.projects ?? [];
 		return {
-			collections: collectionsQuery.data,
-			inventory: inventoryQuery.data,
+			collections: collectionsQuery.data ?? {
+				collections: [],
+				counts: {},
+				drift: [],
+				env: {
+					aiEnabled: false,
+					astroUrl: null,
+					port: 0,
+					projectReachable: null,
+					trashTtlDays: 0,
+				},
+				recent: [],
+			},
+			inventory: inventoryQuery.data ?? { rows: {}, status: [] },
 			project: entries.find((entry) => entry.current) ?? null,
 		};
 	}, [collectionsQuery.data, inventoryQuery.data, projectsQuery.data]);
+
+	useEffect(() => {
+		if (failedScopes.length > 0 && data !== null) {
+			toast.warning(`Some dashboard scopes failed to load: ${failedScopes.join(", ")}`);
+		}
+	}, [data, failedScopes]);
 	const loading =
 		data === null &&
 		(projectsQuery.isLoading || collectionsQuery.isLoading || inventoryQuery.isLoading);
-	const loadError = projectsQuery.error ?? collectionsQuery.error ?? inventoryQuery.error;
+	const loadError =
+		failedScopes.length === 3
+			? (projectsQuery.error ?? collectionsQuery.error ?? inventoryQuery.error)
+			: null;
 
 	function refreshAll() {
 		collectionsQuery.refresh();
@@ -195,6 +238,12 @@ function Dashboard() {
 				}
 			/>
 
+			{failedScopes.length > 0 ? (
+				<Hint className="mt-4" title="Partial data" variant="warning">
+					{`Some scopes failed to load (${failedScopes.join(", ")}). Figures below cover only the scopes that loaded.`}
+				</Hint>
+			) : null}
+
 			<div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 				{stats.map((stat) => {
 					const Icon = stat.icon;
@@ -257,7 +306,7 @@ function Dashboard() {
 											</span>
 											<Badge variant="secondary">{entry.collection}</Badge>
 											<span className="font-mono text-10 text-muted-foreground">
-												{new Date(entry.mtime).toLocaleDateString()}
+												{formatMtimeDate(entry.mtime)}
 											</span>
 										</Link>
 									</li>

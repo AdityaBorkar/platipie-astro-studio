@@ -1,1 +1,2 @@
-bun fmt --staged
+git diff --cached --name-only -z --diff-filter=ACMR -- '*.ts' '*.tsx' '*.css' | xargs -0 -r bunx oxfmt --write
+git diff --cached --name-only -z --diff-filter=ACMR -- '*.ts' '*.tsx' '*.css' | xargs -0 -r git add --

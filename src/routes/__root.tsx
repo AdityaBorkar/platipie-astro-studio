@@ -2,12 +2,14 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { useEffect } from "react";
+import type { ReactNode } from "react";
 
 import { AppSidebar } from "#/components/gitbook/app-sidebar";
 import { ErrorPage } from "#/components/pages/error";
 import { LoadingPage } from "#/components/pages/loading";
 import { NotFoundPage } from "#/components/pages/not-found";
 import { Toaster } from "#/components/ui/sonner";
+import { env } from "#/env";
 import { themeScript } from "#/hooks/use-theme";
 
 import appCss from "../styles.css?url";
@@ -51,7 +53,7 @@ export const Route = createRootRoute({
 		meta: [
 			{ charSet: "utf-8" },
 			{ content: "width=device-width, initial-scale=1", name: "viewport" },
-			{ title: "platipie-cms" },
+			{ title: env.VITE_APP_TITLE ?? "platipie-cms" },
 			{
 				content:
 					"Standalone content-management server for the Astro site. Files are the source of truth; SQLite holds a synced read-model.",
@@ -67,14 +69,12 @@ export const Route = createRootRoute({
 // React Grab: dev-only lazy browser load for copying element source context.
 function ReactGrabDevtools() {
 	useEffect(() => {
-		if (import.meta.env.DEV) {
-			void import("react-grab");
-		}
+		void import("react-grab");
 	}, []);
 	return null;
 }
 
-function RootDocument({ children }: { children: React.ReactNode }) {
+function RootDocument({ children }: { children: ReactNode }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<head>
@@ -97,7 +97,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 					</div>
 				</div>
 				<Toaster position="top-center" richColors />
-				<ReactGrabDevtools />
+				{import.meta.env.DEV ? <ReactGrabDevtools /> : null}
 				<TanStackDevtools
 					config={{
 						position: "bottom-left",

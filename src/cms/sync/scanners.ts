@@ -1,12 +1,16 @@
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 
-import { balancedSlice, findBlockEnd, topLevelKeys, topLevelListItems } from "../balanced.ts";
+import {
+	balancedSlice,
+	escapeRegExp,
+	findBlockEnd,
+	topLevelKeys,
+	topLevelListItems,
+} from "../balanced.ts";
 import { IMAGE_EXTS } from "../config.ts";
-import { walkDir } from "../fs-walk.ts";
-import { routeFor, titleFor } from "../route-utils.ts";
-
-export { routeFor };
+import { mapChunked, walkDir } from "../fs-walk.ts";
+import { listEmailFiles, listSitePages } from "../workspace.ts";
 
 export interface AssetScan {
 	dir: string;
@@ -141,8 +145,9 @@ async function countFileEntries(projectRoot: string, base: string): Promise<numb
 		const raw = await fs.readFile(path.join(projectRoot, base.replace(/^\.\//u, "")), "utf8");
 		const parsed: unknown = JSON.parse(raw);
 		return Array.isArray(parsed) ? parsed.length : 0;
-	} catch {
-		return 0;
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return 0;
+		throw e;
 	}
 }
 
@@ -152,7 +157,14 @@ export async function scanContentCollections(
 	const rel = findContentConfig(projectRoot);
 	if (!rel) return [];
 	const abs = path.join(projectRoot, rel);
-	const text = await fs.readFile(abs, "utf8").catch(() => "");
+	let text: string;
+	try {
+		text = await fs.readFile(abs, "utf8");
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+		if ((e as NodeJS.ErrnoException)?.code === "ENOTDIR") return [];
+		throw e;
+	}
 	if (!text) return [];
 	const st = await fs.stat(abs).catch(() => null);
 	const mtime = st?.mtimeMs ?? 0;
@@ -220,10 +232,9 @@ function parsePropsFields(text: string): string[] {
 
 export async function scanComponentDir(projectRoot: string, dir: string): Promise<ComponentScan[]> {
 	const entries = await walkDir(path.join(projectRoot, "src", dir), `src/${dir}`);
-	const out: ComponentScan[] = [];
-	for (const entry of entries) {
+	const out = await mapChunked(entries, async (entry): Promise<ComponentScan | null> => {
 		const ext = path.extname(entry.rel).toLowerCase();
-		if (!COMPONENT_EXTS.has(ext)) continue;
+		if (!COMPONENT_EXTS.has(ext)) return null;
 		let props: string[] = [];
 		let hasSlot = false;
 		try {
@@ -233,7 +244,7 @@ export async function scanComponentDir(projectRoot: string, dir: string): Promis
 		} catch {
 			// Unreadable file still gets a row, without parsed fields.
 		}
-		out.push({
+		return {
 			dir: path.dirname(entry.rel).replaceAll("\\", "/"),
 			ext,
 			hasSlot,
@@ -242,17 +253,17 @@ export async function scanComponentDir(projectRoot: string, dir: string): Promis
 			path: entry.rel,
 			props,
 			size: entry.size,
-		});
-	}
-	return out.toSorted((a, b) => a.path.localeCompare(b.path));
+		};
+	});
+	return out
+		.filter((row): row is ComponentScan => row !== null)
+		.toSorted((a, b) => a.path.localeCompare(b.path));
 }
 
 export async function scanEmails(projectRoot: string): Promise<EmailScan[]> {
-	const entries = await walkDir(path.join(projectRoot, "src", "emails"), "src/emails");
-	const out: EmailScan[] = [];
-	for (const entry of entries) {
+	const entries = await listEmailFiles(projectRoot);
+	const out = await mapChunked(entries, async (entry): Promise<EmailScan> => {
 		const ext = path.extname(entry.rel).toLowerCase();
-		if (![".tsx", ".ts", ".jsx", ".js"].includes(ext)) continue;
 		let subject: string | null = null;
 		try {
 			const text = await fs.readFile(entry.abs, "utf8");
@@ -271,7 +282,7 @@ export async function scanEmails(projectRoot: string): Promise<EmailScan[]> {
 		} catch {
 			// Keep the row with subject null.
 		}
-		out.push({
+		return {
 			dir: path.dirname(entry.rel).replaceAll("\\", "/"),
 			ext,
 			mtime: entry.mtime,
@@ -279,14 +290,14 @@ export async function scanEmails(projectRoot: string): Promise<EmailScan[]> {
 			path: entry.rel,
 			size: entry.size,
 			subject,
-		});
-	}
+		};
+	});
 	return out.toSorted((a, b) => a.path.localeCompare(b.path));
 }
 
 function quotedValue(text: string, key: string): string | null {
 	const match = new RegExp(
-		`const\\s+${key}\\s*=\\s*("([^"\\\\]|\\\\.)*"|'([^'\\\\]|\\\\.)*')`,
+		`const\\s+${escapeRegExp(key)}\\s*=\\s*("([^"\\\\]|\\\\.)*"|'([^'\\\\]|\\\\.)*')`,
 		"su",
 	).exec(text);
 	if (!match?.[1]) return null;
@@ -318,16 +329,16 @@ function schemaTypesValue(text: string): string[] {
 	return out;
 }
 
-// Keep private `_` files flagged so the Pages route shows the full picture.
+// Maps over the single listSitePages enumerator, enriching each page with the
+// SEO fields read from its source file. Private `_` files stay flagged so the
+// Pages route shows the full picture.
 export async function scanPages(projectRoot: string): Promise<PageScan[]> {
-	const entries = await walkDir(path.join(projectRoot, "src", "pages"), "src/pages");
-	const out: PageScan[] = [];
-	for await (const entry of entries) {
-		const ext = path.extname(entry.rel).toLowerCase();
-		const type = ext === ".astro" ? "astro" : ext === ".md" ? "md" : ext === ".mdx" ? "mdx" : ext;
-		if (!["astro", "md", "mdx", "ts"].includes(type)) continue;
-		const fromPages = entry.rel.replace(/^src\/pages\//u, "");
-		const { dynamic, route } = routeFor(fromPages);
+	const sitePages = await listSitePages(projectRoot);
+	const out = await mapChunked(sitePages, async (page): Promise<PageScan | null> => {
+		if (page.type !== "astro" && page.type !== "md" && page.type !== "mdx" && page.type !== "ts") {
+			return null;
+		}
+		const fromPages = page.path.replace(/^src\/pages\//u, "");
 		const segments = fromPages.replace(/\.(astro|md|mdx|ts)$/u, "").split("/");
 		const isPrivate = segments.some((segment) => segment.startsWith("_"));
 		let prerender = "unset";
@@ -335,8 +346,12 @@ export async function scanPages(projectRoot: string): Promise<PageScan[]> {
 		let seoDescription: string | null = null;
 		let seoKeywords: string[] = [];
 		let schemaTypes: string[] = [];
+		let size = 0;
 		try {
-			const text = await fs.readFile(entry.abs, "utf8");
+			const abs = path.join(projectRoot, page.path);
+			const st = await fs.stat(abs).catch(() => null);
+			size = st?.size ?? 0;
+			const text = await fs.readFile(abs, "utf8");
 			const prerenderMatch = /export\s+const\s+prerender\s*=\s*(true|false)/u.exec(text);
 			if (prerenderMatch) prerender = prerenderMatch[1];
 			seoTitle = quotedValue(text, "title");
@@ -346,30 +361,39 @@ export async function scanPages(projectRoot: string): Promise<PageScan[]> {
 		} catch {
 			// Keep the row with defaults.
 		}
-		out.push({
-			dynamic,
+		return {
+			dynamic: page.kind === "dynamic",
 			hasSeo: Boolean(seoTitle && seoDescription),
-			mtime: entry.mtime,
-			path: entry.rel,
+			mtime: page.mtime,
+			path: page.path,
 			prerender,
 			private: isPrivate,
-			route,
+			route: page.route,
 			schemaTypes,
 			seoDescription,
 			seoKeywords,
 			seoTitle,
-			size: entry.size,
-			title: seoTitle ?? titleFor(segments, dynamic),
-			type,
-		});
-	}
-	return out.toSorted((a, b) => a.route.localeCompare(b.route));
+			size,
+			title: seoTitle ?? page.title,
+			type: page.type,
+		};
+	});
+	return out
+		.filter((row): row is PageScan => row !== null)
+		.toSorted((a, b) => a.route.localeCompare(b.route));
 }
 
 export async function scanAstroSettings(projectRoot: string): Promise<AstroSettingsScan | null> {
 	const rel = "astro.config.mjs";
 	const abs = path.join(projectRoot, rel);
-	const raw = await fs.readFile(abs, "utf8").catch(() => null);
+	let raw: string | null;
+	try {
+		raw = await fs.readFile(abs, "utf8");
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+		if ((e as NodeJS.ErrnoException)?.code === "ENOTDIR") return null;
+		throw e;
+	}
 	if (raw === null) return null;
 	const st = await fs.stat(abs).catch(() => null);
 	let site: string | null = null;

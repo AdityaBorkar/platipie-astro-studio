@@ -4,7 +4,7 @@
 // this only extracts a display excerpt, never evaluates project code.
 import { promises as fs } from "node:fs";
 
-import { balancedSlice, findBlockEnd } from "./balanced.ts";
+import { balancedSlice, escapeRegExp, findBlockEnd, topLevelKeys } from "./balanced.ts";
 import { resolveRepoPath } from "./config.ts";
 import { CmsError } from "./errors.ts";
 
@@ -45,7 +45,7 @@ function objectBodyAt(text: string, braceAt: number): string | null {
 }
 
 function registryBody(text: string, name: string): string | null {
-	const at = text.search(new RegExp(`\\b${name}\\b`, "u"));
+	const at = text.search(new RegExp(`\\b${escapeRegExp(name)}\\b`, "u"));
 	if (at === -1) return null;
 	// Skip the type annotation (`: Record<…>` / `: { … }`); the value starts at `= {`.
 	const eqAt = text.indexOf("=", at);
@@ -105,12 +105,8 @@ async function readRepoFile(repoRel: string): Promise<string | null> {
 	}
 }
 
-function canonicalRepoRel(repoRel: string): string {
-	return repoRel.endsWith("/index.ts") ? repoRel : repoRel;
-}
-
 function extractObjectForIdentifier(source: string, identifier: string): string | null {
-	const pattern = new RegExp(`\\b${identifier}\\b`, "u");
+	const pattern = new RegExp(`\\b${escapeRegExp(identifier)}\\b`, "u");
 	const at = source.search(pattern);
 	if (at === -1) return null;
 	const braceAt = source.indexOf("{", at);
@@ -124,8 +120,9 @@ function extractObjectForIdentifier(source: string, identifier: string): string 
 }
 
 function extractBuilderBlock(source: string, builder: string): string | null {
+	const name = escapeRegExp(builder);
 	const pattern = new RegExp(
-		`export\\s+(?:async\\s+)?(?:function\\s+${builder}\\b|const\\s+${builder}\\b)[\\s\\S]*?\\{`,
+		`export\\s+(?:async\\s+)?(?:function\\s+${name}\\b|const\\s+${name}\\b)[\\s\\S]*?\\{`,
 		"u",
 	);
 	const match = pattern.exec(source);
@@ -140,42 +137,8 @@ function extractBuilderBlock(source: string, builder: string): string | null {
 }
 
 function extractQuoted(body: string, key: string): string | null {
-	const match = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`, "u").exec(body);
+	const match = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*"([^"]+)"`, "u").exec(body);
 	return match?.[1] ?? null;
-}
-
-function topKeys(body: string): string[] {
-	const keys: string[] = [];
-	let depth = 0;
-	let inStr: string | null = null;
-	let escaped = false;
-	let segment = "";
-	const flush = () => {
-		const match = /^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*))\s*:/u.exec(segment);
-		const key = match?.[1] ?? match?.[2] ?? match?.[3];
-		if (key && !keys.includes(key)) keys.push(key);
-		segment = "";
-	};
-	for (const ch of body) {
-		if (inStr) {
-			segment += depth === 0 ? ch : "";
-			if (escaped) escaped = false;
-			else if (ch === "\\") escaped = true;
-			else if (ch === inStr) inStr = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'" || ch === "`") {
-			inStr = ch;
-			segment += depth === 0 ? ch : "";
-			continue;
-		}
-		if (ch === "{" || ch === "[") depth++;
-		if (ch === "}" || ch === "]") depth--;
-		if (ch === "," && depth === 0) flush();
-		else if (depth === 0) segment += ch;
-	}
-	flush();
-	return keys;
 }
 
 export async function readSchemaDetail(type: string): Promise<SchemaDetail> {
@@ -230,11 +193,11 @@ export async function readSchemaDetail(type: string): Promise<SchemaDetail> {
 			encoded: text,
 			id: extractQuoted(body, "@id"),
 			identifier: staticId,
-			keys: topKeys(body),
+			keys: topLevelKeys(body),
 			kind: "static",
 			schemaType: extractQuoted(body, "@type"),
 			snippet,
-			sourceFile: canonicalRepoRel(file),
+			sourceFile: file,
 			type: name,
 		};
 	}
@@ -262,7 +225,7 @@ export async function readSchemaDetail(type: string): Promise<SchemaDetail> {
 			kind: "dynamic",
 			schemaType: null,
 			snippet,
-			sourceFile: canonicalRepoRel(file),
+			sourceFile: file,
 			type: name,
 		};
 	}

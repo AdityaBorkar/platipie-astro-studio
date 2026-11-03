@@ -20,18 +20,12 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "#/components/ui/select";
 import { Skeleton } from "#/components/ui/skeleton";
-import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 import { cn } from "#/lib/utils";
+import { WorkbenchShell } from "./_workbench-shell";
+import { cmsKeys } from "./cms-keys";
 
 export const Route = createFileRoute("/components")({
 	component: ComponentsPage,
@@ -71,7 +65,7 @@ interface FileGroup {
 	files: SyncedFile[];
 }
 
-const INVENTORY_KEY = "/api/cms/inventory?scope=components,layouts,templates";
+const INVENTORY_KEY = cmsKeys.inventory("components,layouts,templates");
 
 const TABS: { icon: LucideIcon; label: string; tab: WorkbenchTab }[] = [
 	{ icon: ComponentIcon, label: "Components", tab: "components" },
@@ -95,99 +89,8 @@ const EMPTY_COPY: Record<WorkbenchTab, { description: string; title: string }> =
 	},
 };
 
-const PARAM_OPTIONS: Record<string, string[]> = {
-	align: ["start", "center", "end"],
-	as: ["div", "span", "button", "a"],
-	direction: ["row", "column"],
-	justify: ["start", "center", "end", "between"],
-	orientation: ["horizontal", "vertical"],
-	position: ["top", "right", "bottom", "left"],
-	size: ["xs", "sm", "default", "lg", "xl", "icon"],
-	target: ["_self", "_blank"],
-	theme: ["light", "dark", "system"],
-	type: ["button", "submit", "reset"],
-	variant: ["default", "secondary", "outline", "ghost", "destructive", "brand", "link"],
-};
-
-const TEXT_DEFAULTS: Record<string, string> = {
-	alt: "Preview image",
-	description: "A short description",
-	heading: "A short heading",
-	href: "#",
-	label: "Label",
-	name: "sample",
-	placeholder: "Placeholder",
-	text: "Text",
-	title: "A short title",
-};
-
-const BOOLEAN_PARAMS = new Set([
-	"active",
-	"allow",
-	"autoplay",
-	"can",
-	"checked",
-	"closable",
-	"compact",
-	"disabled",
-	"dismissible",
-	"expandable",
-	"external",
-	"fluid",
-	"full",
-	"has",
-	"hidden",
-	"hide",
-	"horizontal",
-	"hover",
-	"invalid",
-	"inverse",
-	"is",
-	"loading",
-	"loop",
-	"muted",
-	"no",
-	"open",
-	"outlined",
-	"pause",
-	"readonly",
-	"required",
-	"reverse",
-	"rounded",
-	"should",
-	"show",
-	"vertical",
-	"without",
-]);
-
-const NUMBER_PARAMS = new Set([
-	"cols",
-	"columns",
-	"count",
-	"delay",
-	"depth",
-	"gap",
-	"height",
-	"index",
-	"length",
-	"level",
-	"limit",
-	"max",
-	"min",
-	"offset",
-	"opacity",
-	"page",
-	"ratio",
-	"repeat",
-	"rows",
-	"size",
-	"spacing",
-	"speed",
-	"step",
-	"total",
-	"width",
-]);
-
+// The inventory only carries prop names (no TS types yet), so every parameter
+// renders as text until a typed inventory exists.
 function isWorkbenchTab(value: string): value is WorkbenchTab {
 	return value === "components" || value === "layouts" || value === "templates";
 }
@@ -204,44 +107,8 @@ function parseProps(raw?: string): string[] {
 	}
 }
 
-function nameTokens(name: string): string[] {
-	return name
-		.replaceAll(/([a-z\d])([A-Z])/gu, "$1 $2")
-		.toLowerCase()
-		.split(/[^a-z\d]+/u)
-		.filter(Boolean);
-}
-
-function paramKind(name: string): ParamKind {
-	const key = name.toLowerCase();
-	if (PARAM_OPTIONS[key]) return "select";
-	const tokens = nameTokens(name);
-	if (BOOLEAN_PARAMS.has(key) || tokens.some((token) => BOOLEAN_PARAMS.has(token))) {
-		return "boolean";
-	}
-	if (NUMBER_PARAMS.has(key) || tokens.some((token) => NUMBER_PARAMS.has(token))) {
-		return "number";
-	}
-	return "text";
-}
-
-function paramDefault(name: string, kind: ParamKind): ParamValue {
-	if (kind === "boolean") return false;
-	if (kind === "number") return 0;
-	if (kind === "select") return PARAM_OPTIONS[name.toLowerCase()]?.[0] ?? "";
-	return TEXT_DEFAULTS[name.toLowerCase()] ?? "";
-}
-
 function buildFields(props: string[]): ParamField[] {
-	return props.map((name) => {
-		const kind = paramKind(name);
-		return {
-			defaultValue: paramDefault(name, kind),
-			kind,
-			name,
-			options: kind === "select" ? PARAM_OPTIONS[name.toLowerCase()] : undefined,
-		};
-	});
+	return props.map((name) => ({ defaultValue: "", kind: "text", name }));
 }
 
 function groupFiles(files: SyncedFile[]): FileGroup[] {
@@ -267,47 +134,6 @@ function ParamControl({
 	value: ParamValue;
 }) {
 	const id = `param-${field.name}`;
-
-	if (field.kind === "boolean") {
-		const checked = Boolean(value);
-		return (
-			<div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card px-3 py-2">
-				<span className="font-mono text-11 text-muted-foreground">{String(checked)}</span>
-				<Switch checked={checked} id={id} onCheckedChange={(next) => onChange(next)} />
-			</div>
-		);
-	}
-
-	if (field.kind === "number") {
-		return (
-			<Input
-				id={id}
-				onChange={(event) => {
-					const next = event.target.valueAsNumber;
-					onChange(Number.isNaN(next) ? 0 : next);
-				}}
-				type="number"
-				value={typeof value === "number" ? value : 0}
-			/>
-		);
-	}
-
-	if (field.kind === "select") {
-		return (
-			<Select onValueChange={(next) => onChange(next ?? "")} value={String(value)}>
-				<SelectTrigger className="w-full" id={id} size="sm">
-					<SelectValue />
-				</SelectTrigger>
-				<SelectContent>
-					{field.options?.map((option) => (
-						<SelectItem key={option} value={option}>
-							{option}
-						</SelectItem>
-					))}
-				</SelectContent>
-			</Select>
-		);
-	}
 
 	return (
 		<Input
@@ -598,121 +424,123 @@ function ComponentsPage() {
 	const emptyCopy = EMPTY_COPY[tab];
 
 	return (
-		<div className="min-h-dvh lg:grid lg:grid-cols-docs-shell xl:h-dvh xl:grid-cols-workbench xl:overflow-hidden">
-			<aside className="flex flex-col border-b border-border/70 bg-sidebar/40 lg:sticky lg:top-0 lg:row-span-2 lg:h-dvh lg:self-start lg:border-r lg:border-b-0 xl:static xl:row-span-1">
-				<div className="border-b border-border/70 p-4">
-					<Tabs
-						className="gap-0"
-						onValueChange={(value) => changeTab(value as WorkbenchTab)}
-						value={tab}
-					>
-						<TabsList className="grid w-full grid-cols-3">
-							{TABS.map((item) => (
-								<TabsTrigger className="px-1 text-10" key={item.tab} value={item.tab}>
-									{item.label}
-								</TabsTrigger>
-							))}
-						</TabsList>
-					</Tabs>
-				</div>
+		<WorkbenchShell
+			sidebar={
+				<>
+					<div className="border-b border-border/70 p-4">
+						<Tabs
+							className="gap-0"
+							onValueChange={(value) => changeTab(value as WorkbenchTab)}
+							value={tab}
+						>
+							<TabsList className="grid w-full grid-cols-3">
+								{TABS.map((item) => (
+									<TabsTrigger className="px-1 text-10" key={item.tab} value={item.tab}>
+										{item.label}
+									</TabsTrigger>
+								))}
+							</TabsList>
+						</Tabs>
+					</div>
 
-				<div className="border-b border-border/70 px-3 py-2">
-					<div className="relative">
-						<SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-						<Input
-							aria-label={`Search ${activeTab.label.toLowerCase()}`}
-							className="h-8 px-8 text-13"
-							onChange={(event) => setQuery(event.target.value)}
-							placeholder={`Filter ${activeTab.label.toLowerCase()}…`}
-							value={query}
-						/>
-						{query ? (
-							<button
-								aria-label="Clear search"
-								className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-								onClick={() => setQuery("")}
-								type="button"
-							>
-								<XIcon className="size-3" />
-							</button>
+					<div className="border-b border-border/70 px-3 py-2">
+						<div className="relative">
+							<SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								aria-label={`Search ${activeTab.label.toLowerCase()}`}
+								className="h-8 px-8 text-13"
+								onChange={(event) => setQuery(event.target.value)}
+								placeholder={`Filter ${activeTab.label.toLowerCase()}…`}
+								value={query}
+							/>
+							{query ? (
+								<button
+									aria-label="Clear search"
+									className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+									onClick={() => setQuery("")}
+									type="button"
+								>
+									<XIcon className="size-3" />
+								</button>
+							) : null}
+						</div>
+					</div>
+
+					<div className="flex max-h-72 min-h-0 flex-col overflow-y-auto px-2 py-3 lg:max-h-none lg:flex-1">
+						<div className="flex items-center justify-between gap-2 px-2 pb-2">
+							<div className="flex min-w-0 items-center gap-1.5">
+								<ActiveIcon className="size-3.5 shrink-0 text-brand" />
+								<span className="truncate text-11 font-bold tracking-12 text-muted-foreground uppercase">
+									{activeTab.label}
+								</span>
+							</div>
+							<Badge className="font-mono" variant="secondary">
+								{activeFiles.length}
+							</Badge>
+						</div>
+
+						{error ? (
+							<Hint className="m-2" title="Inventory unavailable" variant="danger">
+								{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
+							</Hint>
+						) : null}
+
+						{inventory === null && !error ? (
+							<div className="grid gap-2 p-2">
+								<Skeleton className="h-12 w-full" />
+								<Skeleton className="h-12 w-full" />
+							</div>
+						) : null}
+
+						{inventory !== null && filteredFiles.length > 0 ? (
+							<FileList
+								files={filteredFiles}
+								onSelect={setSelectedPath}
+								selectedPath={selectedPath}
+							/>
+						) : null}
+
+						{inventory !== null && filteredFiles.length === 0 ? (
+							<EmptyState
+								className="m-2"
+								compact
+								description={query ? "Try a different search." : emptyCopy.description}
+								icon={query ? SearchIcon : ActiveIcon}
+								title={query ? "No matches" : emptyCopy.title}
+							/>
 						) : null}
 					</div>
-				</div>
-
-				<div className="flex max-h-72 min-h-0 flex-col overflow-y-auto px-2 py-3 lg:max-h-none lg:flex-1">
-					<div className="flex items-center justify-between gap-2 px-2 pb-2">
-						<div className="flex min-w-0 items-center gap-1.5">
-							<ActiveIcon className="size-3.5 shrink-0 text-brand" />
-							<span className="truncate text-11 font-bold tracking-12 text-muted-foreground uppercase">
-								{activeTab.label}
+				</>
+			}
+			stage={
+				<>
+					<header className="flex flex-wrap items-center gap-2 border-b border-border/70 px-4 py-3">
+						<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+							{selectedFile ? (
+								<FileTypeIcon className="size-4" ext={selectedFile.ext} />
+							) : (
+								<ActiveIcon className="size-4" />
+							)}
+						</span>
+						<span className="min-w-0 flex-1">
+							<span className="flex min-w-0 items-center gap-1.5">
+								<h2 className="truncate text-13 font-bold tracking-tight">
+									{selectedFile?.name ?? "No selection"}
+								</h2>
+								<Badge variant="brand">{activeTab.label}</Badge>
 							</span>
-						</div>
-						<Badge className="font-mono" variant="secondary">
-							{activeFiles.length}
-						</Badge>
+							<span className="mt-0.5 block truncate font-mono text-10 text-muted-foreground">
+								{selectedFile?.path ?? "Choose an item from the list"}
+							</span>
+						</span>
+					</header>
+
+					<div className="min-h-0 flex-1 overflow-y-auto p-4">
+						<PreviewCanvas fields={fields} file={selectedFile} />
 					</div>
-
-					{error ? (
-						<Hint className="m-2" title="Inventory unavailable" variant="danger">
-							{error} Run <code>bun run sync:once</code> to build the SQLite mirror.
-						</Hint>
-					) : null}
-
-					{inventory === null && !error ? (
-						<div className="grid gap-2 p-2">
-							<Skeleton className="h-12 w-full" />
-							<Skeleton className="h-12 w-full" />
-						</div>
-					) : null}
-
-					{inventory !== null && filteredFiles.length > 0 ? (
-						<FileList
-							files={filteredFiles}
-							onSelect={setSelectedPath}
-							selectedPath={selectedPath}
-						/>
-					) : null}
-
-					{inventory !== null && filteredFiles.length === 0 ? (
-						<EmptyState
-							className="m-2"
-							compact
-							description={query ? "Try a different search." : emptyCopy.description}
-							icon={query ? SearchIcon : ActiveIcon}
-							title={query ? "No matches" : emptyCopy.title}
-						/>
-					) : null}
-				</div>
-			</aside>
-
-			<section className="flex min-h-96 flex-col border-b border-border/70 lg:border-b-0 xl:min-h-0">
-				<header className="flex flex-wrap items-center gap-2 border-b border-border/70 px-4 py-3">
-					<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-						{selectedFile ? (
-							<FileTypeIcon className="size-4" ext={selectedFile.ext} />
-						) : (
-							<ActiveIcon className="size-4" />
-						)}
-					</span>
-					<span className="min-w-0 flex-1">
-						<span className="flex min-w-0 items-center gap-1.5">
-							<h2 className="truncate text-13 font-bold tracking-tight">
-								{selectedFile?.name ?? "No selection"}
-							</h2>
-							<Badge variant="brand">{activeTab.label}</Badge>
-						</span>
-						<span className="mt-0.5 block truncate font-mono text-10 text-muted-foreground">
-							{selectedFile?.path ?? "Choose an item from the list"}
-						</span>
-					</span>
-				</header>
-
-				<div className="min-h-0 flex-1 overflow-y-auto p-4">
-					<PreviewCanvas fields={fields} file={selectedFile} />
-				</div>
-			</section>
-
-			<aside className="flex min-h-0 flex-col border-border/70 bg-sidebar/30 lg:border-t xl:h-dvh xl:border-t-0 xl:border-l">
+				</>
+			}
+			rail={
 				<ParameterRail
 					dirty={dirty}
 					fields={fields}
@@ -721,7 +549,7 @@ function ComponentsPage() {
 					onUpdate={updateParam}
 					values={values}
 				/>
-			</aside>
-		</div>
+			}
+		/>
 	);
 }

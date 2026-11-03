@@ -87,30 +87,47 @@ export function knownSchemaTypes(): string[] {
 	return KNOWN_SCHEMA_TYPES;
 }
 
+// Narrowing helpers for untrusted frontmatter: every read below goes through
+// these instead of `as string` / `as string[]` casts.
+function str(value: unknown): string | null {
+	return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function strArr(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return value.filter((item): item is string => typeof item === "string");
+}
+
+function optStr(value: unknown): string | undefined {
+	return typeof value === "string" ? value : undefined;
+}
+
 export function buildJsonLdPreview(
 	fm: Record<string, unknown>,
 	body: string,
 	slug: string,
 ): Record<string, unknown> | null {
-	const type = typeof fm.schemaType === "string" && fm.schemaType ? fm.schemaType : "WebPage";
-	const title = (fm.metaTitle as string) ?? (fm.title as string) ?? slug;
+	const schemaRaw = typeof fm.schemaType === "string" && fm.schemaType ? fm.schemaType : "WebPage";
+	const type = schemaRaw.split("/")[0] || "WebPage";
+	const title = str(fm.metaTitle) ?? str(fm.title) ?? slug;
 	const description =
-		(fm.metaDescription as string) ??
-		(fm.excerpt as string) ??
-		(fm.description as string) ??
-		body.slice(0, 160);
+		str(fm.metaDescription) ?? str(fm.excerpt) ?? str(fm.description) ?? body.slice(0, 160);
+	const author = str(fm.author);
+	const publishDate = str(fm.publishDate) ?? str(fm.date);
+	const modifiedDate = str(fm.modifiedDate);
+	const keywords = strArr(fm.keywords);
 	const base: Record<string, unknown> = {
 		"@context": "https://schema.org",
-		"@type": type.split("/")[0],
+		"@type": type,
 		description,
 		headline: title,
-		...(fm.author ? { author: { "@type": "Person", name: fm.author } } : {}),
-		...(fm.publishDate || fm.date ? { datePublished: fm.publishDate ?? fm.date } : {}),
-		...(fm.modifiedDate ? { dateModified: fm.modifiedDate } : {}),
-		...(fm.keywords ? { keywords: fm.keywords } : {}),
+		...(author ? { author: { "@type": "Person", name: author } } : {}),
+		...(publishDate ? { datePublished: publishDate } : {}),
+		...(modifiedDate ? { dateModified: modifiedDate } : {}),
+		...(keywords.length > 0 ? { keywords } : {}),
 	};
 	if (fm.schemaFields && typeof fm.schemaFields === "object") {
-		Object.assign(base, fm.schemaFields as Record<string, unknown>);
+		Object.assign(base, fm.schemaFields);
 	}
 	return base;
 }
@@ -120,8 +137,8 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 	const push = (id: string, label: string, status: "pass" | "warn" | "fail", detail?: string) =>
 		checks.push({ detail, id, label, status });
 
-	const title = (fm.metaTitle as string) ?? (fm.title as string) ?? "";
-	const desc = (fm.metaDescription as string) ?? (fm.excerpt as string) ?? "";
+	const title = str(fm.metaTitle) ?? str(fm.title) ?? "";
+	const desc = str(fm.metaDescription) ?? str(fm.excerpt) ?? "";
 	const words = body.split(/\s+/u).filter(Boolean);
 
 	if (!title) push("metaTitle", "metaTitle present", "fail", "Missing title");
@@ -139,7 +156,7 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 	else if (slug.length > 60) push("slug", "Slug readable", "warn", "Long slug");
 	else push("slug", "Slug readable", "pass", slug);
 
-	const canon = fm.canonicalUrl as string | undefined;
+	const canon = optStr(fm.canonicalUrl);
 	if (canon) {
 		try {
 			const u = new URL(canon, "https://example.com");
@@ -156,14 +173,14 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 		push("canonical", "Canonical valid", "pass", "No canonical (uses default URL)");
 	}
 
-	const feat = (fm.featuredImage as string) ?? (fm.hero_image as string) ?? (fm.ogImage as string);
+	const feat = str(fm.featuredImage) ?? str(fm.hero_image) ?? str(fm.ogImage);
 	if (!feat)
 		push("featuredImage", "Featured/OG image", "warn", "Missing featuredImage/hero_image/ogImage");
 	else if (imageResolves(feat)) push("featuredImage", "Featured/OG image", "pass", feat);
 	else push("featuredImage", "Featured/OG image", "fail", `Missing file: ${feat}`);
 
-	const tags = (fm.tags as string[]) ?? [];
-	const keywords = (fm.keywords as string[]) ?? [];
+	const tags = strArr(fm.tags);
+	const keywords = strArr(fm.keywords);
 	if (keywords.length === 0)
 		push("keywords", "Keywords set", "warn", "Missing keywords (defaults to tags)");
 	else {
@@ -179,10 +196,10 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 		push("noindex", "noindex vs sitemap", "warn", "noindex set — conflicts with sitemap inclusion");
 	else push("noindex", "noindex vs sitemap", "pass", "Indexable");
 
-	if (!fm.excerpt && !(fm as Record<string, unknown>).description)
+	if (!str(fm.excerpt) && !str(fm.description))
 		push("excerpt", "Excerpt present", "warn", "Missing excerpt");
 	else push("excerpt", "Excerpt present", "pass");
-	if (fm.schemaType) {
+	if (str(fm.schemaType)) {
 		push("schemaType", "schemaType selected", "pass", String(fm.schemaType));
 	} else {
 		push("schemaType", "schemaType selected", "warn", "Missing schemaType");
@@ -223,11 +240,19 @@ export function scoreEntry(fm: Record<string, unknown>, body: string, slug: stri
 
 // Rate limiting lives in the oRPC `aiRateLimitMiddleware`, not here.
 
+function toSuggestion(item: unknown): string {
+	if (typeof item === "string") return item;
+	try {
+		return JSON.stringify(item) ?? String(item);
+	} catch {
+		return String(item);
+	}
+}
+
 export async function aiSuggest(
 	action: "excerpt" | "keywords" | "titles",
 	fm: Record<string, unknown>,
 	body: string,
-	_ip?: string,
 ): Promise<{ action: string; model: string; suggestions: string[] }> {
 	const cfg = getAiConfig();
 	if (!cfg) {
@@ -237,7 +262,7 @@ export async function aiSuggest(
 			{ status: 400 },
 		);
 	}
-	const title = (fm.title as string) ?? "";
+	const title = str(fm.title) ?? "";
 	const prompt =
 		action === "titles"
 			? `Suggest 5 SEO meta titles (<=60 chars) for a post titled "${title}". Body excerpt: ${body.slice(0, 1500)}. Return JSON array of strings.`
@@ -267,10 +292,11 @@ export async function aiSuggest(
 	let suggestions: string[] = [];
 	try {
 		const parsed = JSON.parse(content);
-		if (Array.isArray(parsed)) suggestions = parsed.map(String).slice(0, 8);
+		if (Array.isArray(parsed)) suggestions = parsed.map((item) => toSuggestion(item)).slice(0, 8);
 		else if (typeof parsed === "object" && parsed !== null) {
 			const vals = Object.values(parsed as Record<string, unknown>);
-			if (Array.isArray(vals[0])) suggestions = (vals[0] as unknown[]).map(String).slice(0, 8);
+			if (Array.isArray(vals[0]))
+				suggestions = (vals[0] as unknown[]).map((item) => toSuggestion(item)).slice(0, 8);
 		}
 	} catch {
 		suggestions = content

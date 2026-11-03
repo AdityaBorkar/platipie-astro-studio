@@ -4,6 +4,8 @@ import { promises as fs } from "node:fs";
 import { arrayBody, findStatementEnd, parseStringLiteral, stripComments } from "./balanced.ts";
 import { resolveRepoPath } from "./config.ts";
 import { CmsError } from "./errors.ts";
+import { frontmatterBounds } from "./frontmatter.ts";
+import type { FrontmatterBounds } from "./frontmatter.ts";
 import { isStaleWrite } from "./mtime.ts";
 import { routeFor } from "./route-utils.ts";
 import { atomicWrite, backupFile, unifiedDiff } from "./save.ts";
@@ -69,22 +71,6 @@ interface ConstBlock {
 	key: SeoKey;
 	start: number;
 	valueStart: number;
-}
-
-interface FrontmatterBounds {
-	end: number;
-	start: number;
-}
-
-function frontmatterBounds(text: string): FrontmatterBounds | null {
-	if (!text.startsWith("---")) return null;
-	const firstLineEnd = text.indexOf("\n");
-	if (firstLineEnd === -1) return null;
-	const start = firstLineEnd + 1;
-	const rest = text.slice(start);
-	const closeOffset = rest.search(/^---[ \t]*\r?$/mu);
-	if (closeOffset === -1) return null;
-	return { end: start + closeOffset, start };
 }
 
 function findConstBlocks(text: string, bounds: FrontmatterBounds): Map<SeoKey, ConstBlock> {
@@ -219,9 +205,16 @@ function pageRoute(repoRel: string): string {
 
 export async function readPageSeo(repoRel: string): Promise<PageSeoDetail> {
 	const abs = resolveRepoPath(repoRel);
-	const st = await fs.stat(abs).catch(() => {
-		throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
-	});
+	let st;
+	try {
+		st = await fs.stat(abs);
+	} catch (e) {
+		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+		}
+		throw e;
+	}
 	const text = await fs.readFile(abs, "utf8");
 	return { ...parsePageSource(text), mtime: st.mtimeMs, path: repoRel, route: pageRoute(repoRel) };
 }
@@ -258,22 +251,23 @@ function formatConst(key: SeoKey, value: string | string[], raw: string): string
 	)};`;
 }
 
+function sameSet(a: string[], b: string[]): boolean {
+	if (a.length !== b.length) return false;
+	const sortedA = [...a].toSorted();
+	const sortedB = [...b].toSorted();
+	return sortedA.every((item, i) => item === sortedB[i]);
+}
+
 function mismatchedFields(next: ReturnType<typeof parsePageSource>, patch: PageSeoPatch): string[] {
 	const mismatched: string[] = [];
 	if (patch.title !== undefined && next.title !== patch.title) mismatched.push("title");
 	if (patch.description !== undefined && next.description !== patch.description) {
 		mismatched.push("description");
 	}
-	if (
-		patch.keywords !== undefined &&
-		next.keywords.join("\u0000") !== patch.keywords.join("\u0000")
-	) {
+	if (patch.keywords !== undefined && !sameSet(next.keywords, patch.keywords)) {
 		mismatched.push("keywords");
 	}
-	if (
-		patch.schema !== undefined &&
-		next.schemaTypes.join("\u0000") !== patch.schema.join("\u0000")
-	) {
+	if (patch.schema !== undefined && !sameSet(next.schemaTypes, patch.schema)) {
 		mismatched.push("schema");
 	}
 	return mismatched;
@@ -294,8 +288,11 @@ export async function writePageSeo(
 		throw new CmsError("VALIDATION", "title and description must be strings", { status: 400 });
 	}
 	const abs = resolveRepoPath(repoRel);
-	const oldText = await fs.readFile(abs, "utf8").catch(() => {
-		throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+	const oldText = await fs.readFile(abs, "utf8").catch((e: unknown) => {
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+		}
+		throw e;
 	});
 	const st = await fs.stat(abs);
 	if (!opts?.force && isStaleWrite(st.mtimeMs, mtime)) {

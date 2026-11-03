@@ -29,7 +29,7 @@ import {
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
-import { Field, FieldGroup, FieldLabel } from "#/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { Skeleton } from "#/components/ui/skeleton";
 import { Switch } from "#/components/ui/switch";
@@ -44,6 +44,7 @@ import {
 import { Textarea } from "#/components/ui/textarea";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 import { useTheme } from "#/hooks/use-theme";
+import { cmsKeys } from "./cms-keys";
 
 export const Route = createFileRoute("/settings")({
 	component: SettingsPage,
@@ -59,6 +60,22 @@ const sections = [
 	{ href: "#trash", icon: Trash2Icon, label: "Trash" },
 ];
 
+export interface SettingsValues {
+	IS_AVAILABLE_NOW?: boolean;
+	LABS_URL?: string;
+	PRICING?: unknown;
+	SITE_URL?: string;
+	SOCIALS?: Record<string, unknown>;
+}
+
+interface EnvInfo {
+	aiEnabled: boolean;
+	astroUrl: string | null;
+	port: number;
+	projectReachable: boolean;
+	trashTtlDays: number;
+}
+
 interface AstroSettings {
 	adapter: string | null;
 	filePath: string;
@@ -70,31 +87,49 @@ interface AstroSettings {
 	site: string | null;
 }
 
-function parseList(raw: string): string[] {
+interface SettingsApiResponse {
+	env: EnvInfo;
+	mtime: number;
+	raw: string;
+	values?: SettingsValues;
+}
+
+function parseStringArray(raw: string, fallback: string[] = []): string[] {
 	try {
 		const parsed: unknown = JSON.parse(raw);
-		return Array.isArray(parsed) ? parsed.map(String) : [];
+		return Array.isArray(parsed)
+			? parsed.filter((entry): entry is string => typeof entry === "string")
+			: fallback;
 	} catch {
-		return [];
+		return fallback;
 	}
 }
 
-function parseRecord(raw: string): Record<string, string> {
+function parseStringRecord(
+	raw: string,
+	fallback: Record<string, string> = {},
+): Record<string, string> {
 	try {
 		const parsed: unknown = JSON.parse(raw);
-		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-			return parsed as Record<string, string>;
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+			return fallback;
 		}
-		return {};
+		const out: Record<string, string> = {};
+		for (const [key, value] of Object.entries(parsed)) {
+			if (typeof value === "string") out[key] = value;
+		}
+		return out;
 	} catch {
-		return {};
+		return fallback;
 	}
 }
 
 function SettingsPage() {
 	const { resolved } = useTheme();
 	const [raw, setRaw] = useState("");
-	const [values, setValues] = useState<Record<string, any>>({});
+	const [values, setValues] = useState<SettingsValues>({});
+	const [pricingRaw, setPricingRaw] = useState<string | null>(null);
+	const [pricingError, setPricingError] = useState<string | null>(null);
 	const [mtime, setMtime] = useState(0);
 	const [msg, setMsg] = useState<string | null>(null);
 	const [err, setErr] = useState<string | null>(null);
@@ -102,40 +137,31 @@ function SettingsPage() {
 	const [activeSection, setActiveSection] = useState("environment");
 	const [initialized, setInitialized] = useState(false);
 
-	const fetchSettings = useCallback(
-		() =>
-			fetchJson<{
-				env: unknown;
-				mtime: number;
-				raw: string;
-				values?: Record<string, unknown>;
-			}>("/api/cms/settings"),
-		[],
-	);
+	const fetchSettings = useCallback(() => fetchJson<SettingsApiResponse>(cmsKeys.settings), []);
 	const fetchTrash = useCallback(
-		() => fetchJson<{ trash: { path: string }[] }>("/api/cms/restore"),
+		() => fetchJson<{ trash: { path: string }[] }>(cmsKeys.restore),
 		[],
 	);
 	const fetchAstro = useCallback(
 		() =>
 			fetchJson<{ rows: AstroSettings[]; status: { lastSync: number | null; scope: string }[] }>(
-				"/api/cms/inventory?scope=astro",
+				cmsKeys.inventory("astro"),
 			),
 		[],
 	);
-	const settingsQuery = useCachedFetch("/api/cms/settings", fetchSettings, {
+	const settingsQuery = useCachedFetch(cmsKeys.settings, fetchSettings, {
 		errorMessage: "Could not refresh settings",
 	});
-	const trashQuery = useCachedFetch("/api/cms/restore", fetchTrash, {
+	const trashQuery = useCachedFetch(cmsKeys.restore, fetchTrash, {
 		errorMessage: "Could not refresh trash",
 		toastOnBackgroundError: false,
 	});
-	const astroQuery = useCachedFetch("/api/cms/inventory?scope=astro", fetchAstro, {
+	const astroQuery = useCachedFetch(cmsKeys.inventory("astro"), fetchAstro, {
 		errorMessage: "Could not refresh Astro settings",
 		toastOnBackgroundError: false,
 	});
 
-	const env = (settingsQuery.data as { env?: unknown } | null)?.env as any;
+	const env = settingsQuery.data?.env ?? null;
 	const trash = trashQuery.data?.trash ?? [];
 	const astro = astroQuery.data?.rows[0] ?? null;
 	const astroSync =
@@ -147,7 +173,9 @@ function SettingsPage() {
 	useEffect(() => {
 		if (!initialized && settingsQuery.data) {
 			setRaw(settingsQuery.data.raw);
-			setValues((settingsQuery.data.values ?? {}) as Record<string, unknown>);
+			setValues(settingsQuery.data.values ?? {});
+			setPricingRaw(null);
+			setPricingError(null);
 			setMtime(settingsQuery.data.mtime);
 			setInitialized(true);
 		}
@@ -158,22 +186,28 @@ function SettingsPage() {
 		astroQuery.refresh();
 		settingsQuery.refresh();
 		trashQuery.refresh();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [astroQuery, settingsQuery, trashQuery]);
 
-	async function saveRaw() {
+	async function saveSettings(
+		payload: { raw: string } | { values: SettingsValues },
+		label: string,
+	): Promise<boolean> {
 		setErr(null);
 		setMsg(null);
 		try {
-			const json = await fetchJson<{ mtime: number }>("/api/cms/settings", {
-				body: JSON.stringify({ mtime, raw }),
+			const json = await fetchJson<{ mtime: number; raw?: string }>(cmsKeys.settings, {
+				body: JSON.stringify({ mtime, ...payload }),
 				headers: { "Content-Type": "application/json" },
 				method: "PUT",
 			});
 			setMtime(json.mtime);
-			setMsg("Settings saved (raw)");
-			toast.success("Settings saved (raw)");
+			if (typeof json.raw === "string") setRaw(json.raw);
+			setPricingRaw(null);
+			setPricingError(null);
+			setMsg(`Settings saved (${label})`);
+			toast.success(`Settings saved (${label})`);
 			settingsQuery.refresh();
+			return true;
 		} catch (e: unknown) {
 			const code = (e as { code?: unknown }).code;
 			const message =
@@ -184,33 +218,37 @@ function SettingsPage() {
 						: String(e);
 			setErr(message);
 			toast.error(message);
+			return false;
 		}
 	}
 
+	async function saveRaw() {
+		await saveSettings({ raw }, "raw");
+	}
+
 	async function saveForm() {
-		setErr(null);
-		setMsg(null);
-		try {
-			const json = await fetchJson<{ mtime: number; raw: string }>("/api/cms/settings", {
-				body: JSON.stringify({ mtime, values }),
-				headers: { "Content-Type": "application/json" },
-				method: "PUT",
-			});
-			setMtime(json.mtime);
-			setRaw(json.raw);
-			setMsg("Settings saved (typed form)");
-			toast.success("Settings saved (typed form)");
-			settingsQuery.refresh();
-		} catch (e: unknown) {
-			const message = e instanceof Error ? e.message : String(e);
-			setErr(message);
-			toast.error(message);
+		let next = values;
+		if (pricingRaw !== null) {
+			try {
+				const parsed: unknown = JSON.parse(pricingRaw);
+				next = { ...values, PRICING: parsed };
+				setPricingError(null);
+			} catch {
+				const message = "PRICING is not valid JSON — fix it before saving.";
+				setPricingError(message);
+				setErr(message);
+				return;
+			}
 		}
+		// Only adopt the parsed PRICING into form state after the save
+		// succeeds, so a failed PUT never leaves unpersisted values on screen.
+		const ok = await saveSettings({ values: next }, "typed form");
+		if (ok) setValues(next);
 	}
 
 	async function restoreTrash(trashPath: string) {
 		try {
-			const json = await fetchJson<{ path: string }>("/api/cms/restore", {
+			const json = await fetchJson<{ path: string }>(cmsKeys.restore, {
 				body: JSON.stringify({ trashPath }),
 				headers: { "Content-Type": "application/json" },
 				method: "POST",
@@ -376,23 +414,23 @@ function SettingsPage() {
 											adapter {astro.adapter ?? "unset"}
 										</Badge>
 										<Badge className="font-mono" variant="secondary">
-											{parseList(astro.integrations).length} integrations
+											{parseStringArray(astro.integrations).length} integrations
 										</Badge>
 										<Badge className="font-mono" variant="secondary">
-											{Object.keys(parseRecord(astro.redirects)).length} redirects
+											{Object.keys(parseStringRecord(astro.redirects)).length} redirects
 										</Badge>
 										<SyncBadge lastSync={astroSync} />
 									</div>
-									{parseList(astro.integrations).length > 0 ? (
+									{parseStringArray(astro.integrations).length > 0 ? (
 										<div className="flex flex-wrap gap-1">
-											{parseList(astro.integrations).map((integration) => (
+											{parseStringArray(astro.integrations).map((integration) => (
 												<Badge className="font-mono" key={integration} variant="outline">
 													{integration}
 												</Badge>
 											))}
 										</div>
 									) : null}
-									{Object.keys(parseRecord(astro.redirects)).length > 0 ? (
+									{Object.keys(parseStringRecord(astro.redirects)).length > 0 ? (
 										<Table>
 											<TableHeader>
 												<TableRow>
@@ -401,7 +439,7 @@ function SettingsPage() {
 												</TableRow>
 											</TableHeader>
 											<TableBody>
-												{Object.entries(parseRecord(astro.redirects)).map(([from, to]) => (
+												{Object.entries(parseStringRecord(astro.redirects)).map(([from, to]) => (
 													<TableRow key={from}>
 														<TableCell className="font-mono text-xs">{from}</TableCell>
 														<TableCell className="text-right font-mono text-xs">{to}</TableCell>
@@ -484,18 +522,29 @@ function SettingsPage() {
 									<Textarea
 										className="min-h-40 font-mono text-xs"
 										id="pricing"
-										onChange={(event) => {
+										onBlur={(event) => {
 											try {
-												setValues((previous) => ({
-													...previous,
-													PRICING: JSON.parse(event.target.value),
-												}));
+												JSON.parse(event.target.value);
+												setPricingError(null);
 											} catch {
-												/* keep typing */
+												setPricingError("PRICING is not valid JSON yet.");
 											}
 										}}
-										value={JSON.stringify(values.PRICING ?? {}, null, 2)}
+										onChange={(event) => {
+											const text = event.target.value;
+											setPricingRaw(text);
+											try {
+												JSON.parse(text);
+												setPricingError(null);
+											} catch {
+												setPricingError(
+													"Invalid JSON — keep typing; save is blocked until it parses.",
+												);
+											}
+										}}
+										value={pricingRaw ?? JSON.stringify(values.PRICING ?? {}, null, 2)}
 									/>
+									{pricingError ? <FieldError>{pricingError}</FieldError> : null}
 								</Field>
 								<div>
 									<Button onClick={() => void saveForm()}>

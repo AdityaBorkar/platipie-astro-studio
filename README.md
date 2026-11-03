@@ -1,7 +1,10 @@
 # platipie-cms
 
 Standalone content-management server for the Astro site.
-TanStack Start (latest) + Bun + Nitro (`bun` preset). No database — `cms/` files are the source of truth.
+TanStack Start (latest) + Bun + Nitro (`bun` preset). Files under `PROJECT_PATH`
+(falls back to cwd) are the source of truth; SQLite
+(`$XDG_DATA_HOME/platipie-cms-dev/cms.db` or `CMS_DB_PATH`) is only the derived
+sync read-model.
 
 ## Run
 
@@ -43,6 +46,8 @@ the rules and token table are in `DESIGN.md`.
 ## Notes
 
 - Binds localhost by default, no auth in V1 (documented risk; backups + danger-zone confirms).
+- Distributed bin is raw TS (`./cli/index.ts`, Bun-only) — install/run via `bunx`, never `npx`.
+- Sync engine (`CMS_SYNC=0` or `--no-sync` disables it) keeps the SQLite read-model fresh; soft deletes go to `.cms-trash/` with `TRASH_TTL_DAYS` expiry.
 - Upload cap 10 MB, image MIME allowlist, filename sanitization, 1 MB read-only guard.
 - `AI_API_KEY` never leaves the server / never logged; AI off unless BYOK set.
 - Filename-is-slug: editing slug renames `my-post.md` → `new-slug.md`.

@@ -1,16 +1,61 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-interface CacheEntry<T> {
-	data: T;
-	updatedAt: number;
+export class ApiError extends Error {
+	code?: unknown;
+	diff?: unknown;
+	fields?: unknown;
+	status?: number;
+
+	constructor(
+		message: string,
+		init?: { code?: unknown; diff?: unknown; fields?: unknown; status?: number },
+	) {
+		super(message);
+		this.code = init?.code;
+		this.diff = init?.diff;
+		this.fields = init?.fields;
+		this.name = "ApiError";
+		this.status = init?.status;
+	}
+}
+
+interface ErrorPayload {
+	code?: unknown;
+	diff?: unknown;
+	fields?: unknown;
+	message?: unknown;
+}
+
+export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+	const response = await fetch(url, init);
+	let body: unknown = null;
+	try {
+		body = await response.json();
+	} catch {
+		body = null;
+	}
+	const payload = (body ?? {}) as ErrorPayload;
+	if (!response.ok) {
+		const message =
+			typeof payload.message === "string" ? payload.message : `Request failed (${response.status})`;
+		throw new ApiError(message, {
+			code: payload.code,
+			diff: payload.diff,
+			fields: payload.fields,
+			status: response.status,
+		});
+	}
+	return payload as T;
 }
 
 interface UseCachedFetchOptions {
 	enabled?: boolean;
 	errorMessage?: string;
+	maxAgeMs?: number;
 	persist?: boolean;
 	toastOnBackgroundError?: boolean;
+	validate?: (data: unknown) => boolean;
 }
 
 interface UseCachedFetchResult<T> {
@@ -22,42 +67,83 @@ interface UseCachedFetchResult<T> {
 	updatedAt: number | null;
 }
 
-const MEMORY = new Map<string, CacheEntry<unknown>>();
-const INFLIGHT = new Map<string, Promise<unknown>>();
-
-function storageKey(key: string): string {
-	return `cms.cache.v1.${key}`;
+interface Snapshot<T> {
+	attempt: number;
+	data: T | null;
+	key: string;
+	updatedAt: number | null;
 }
 
-function readStorage<T>(key: string): CacheEntry<T> | null {
-	if (typeof window === "undefined") return null;
+const MEMORY = new Map<string, { data: unknown; updatedAt: number }>();
+const STORAGE_VERSION = 2;
+const DEFAULT_MAX_AGE_MS = 10 * 60 * 1000;
+const SWEEP_MARKER = `cms.cache.swept.v${STORAGE_VERSION}`;
+let legacySwept = false;
+
+function sweepLegacyCaches(): void {
+	if (legacySwept || typeof window === "undefined") return;
+	legacySwept = true;
 	try {
-		const raw = window.localStorage.getItem(storageKey(key));
-		if (!raw) return null;
-		const parsed = JSON.parse(raw) as CacheEntry<T>;
-		if (!parsed || typeof parsed !== "object" || !("data" in parsed)) return null;
-		return parsed;
+		if (window.localStorage.getItem(SWEEP_MARKER)) return;
+		const victims: string[] = [];
+		for (let index = 0; index < window.localStorage.length; index += 1) {
+			const storedKey = window.localStorage.key(index);
+			if (storedKey?.startsWith("cms.cache.v1.")) victims.push(storedKey);
+		}
+		for (const victim of victims) window.localStorage.removeItem(victim);
+		window.localStorage.setItem(SWEEP_MARKER, String(Date.now()));
 	} catch {
-		return null;
+		// Quota or private-mode failures must not break the UI.
 	}
 }
 
-function readCached<T>(key: string, persist: boolean): CacheEntry<T> | null {
-	const memory = MEMORY.get(key) as CacheEntry<T> | undefined;
-	if (memory) return memory;
-	if (!persist) return null;
-	const stored = readStorage<T>(key);
-	if (stored) MEMORY.set(key, stored);
-	return stored;
+function storageKey(key: string): string {
+	return `cms.cache.v${STORAGE_VERSION}.${key}`;
+}
+
+function readCached<T>(
+	key: string,
+	options: { maxAgeMs: number; persist: boolean; validate?: (data: unknown) => boolean },
+): Snapshot<T> {
+	const empty: Snapshot<T> = { attempt: 0, data: null, key, updatedAt: null };
+	const memory = MEMORY.get(key);
+	const candidate: { data: unknown; updatedAt: unknown } | undefined = memory ?? readStorage(key);
+	if (!candidate) return empty;
+	if (typeof candidate.updatedAt !== "number" || !Number.isFinite(candidate.updatedAt)) {
+		return empty;
+	}
+	if (Date.now() - candidate.updatedAt > options.maxAgeMs) return empty;
+	if (options.validate && !options.validate(candidate.data)) return empty;
+	if (memory === undefined && options.persist) {
+		MEMORY.set(key, { data: candidate.data, updatedAt: candidate.updatedAt });
+	}
+	return { attempt: 0, data: candidate.data as T, key, updatedAt: candidate.updatedAt };
+}
+
+function readStorage(key: string): { data: unknown; updatedAt: unknown } | undefined {
+	if (typeof window === "undefined") return undefined;
+	sweepLegacyCaches();
+	try {
+		const raw = window.localStorage.getItem(storageKey(key));
+		if (!raw) return undefined;
+		const parsed = JSON.parse(raw) as { data?: unknown; updatedAt?: unknown; version?: unknown };
+		if (!parsed || typeof parsed !== "object") return undefined;
+		if (parsed.version !== STORAGE_VERSION || !("data" in parsed)) return undefined;
+		return { data: parsed.data, updatedAt: parsed.updatedAt };
+	} catch {
+		return undefined;
+	}
 }
 
 function writeCached<T>(key: string, data: T, persist: boolean): number {
 	const updatedAt = Date.now();
-	const entry: CacheEntry<T> = { data, updatedAt };
-	MEMORY.set(key, entry);
+	MEMORY.set(key, { data, updatedAt });
 	if (persist && typeof window !== "undefined") {
 		try {
-			window.localStorage.setItem(storageKey(key), JSON.stringify(entry));
+			window.localStorage.setItem(
+				storageKey(key),
+				JSON.stringify({ data, updatedAt, version: STORAGE_VERSION }),
+			);
 		} catch {
 			// Quota or private-mode failures must not break the UI.
 		}
@@ -65,154 +151,87 @@ function writeCached<T>(key: string, data: T, persist: boolean): number {
 	return updatedAt;
 }
 
-function stableStringify(value: unknown): string {
-	if (value === null || value === undefined) return String(value);
-	if (Array.isArray(value)) return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
-	if (typeof value === "object") {
-		const record = value as Record<string, unknown>;
-		const keys = Object.keys(record).toSorted();
-		return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record[k])}`).join(",")}}`;
-	}
-	return JSON.stringify(value) ?? String(value);
-}
-
-function isDeepEqual(a: unknown, b: unknown): boolean {
-	if (a === b) return true;
-	return stableStringify(a) === stableStringify(b);
-}
-
-export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-	const response = await fetch(url, init);
-	const json = (await response.json().catch(() => ({}))) as {
-		code?: unknown;
-		diff?: unknown;
-		fields?: unknown;
-		message?: unknown;
-	};
-	if (!response.ok) {
-		const message =
-			typeof json.message === "string" ? json.message : `Request failed (${response.status})`;
-		const error = new Error(message) as Error & {
-			code?: unknown;
-			diff?: unknown;
-			fields?: unknown;
-			status?: number;
-		};
-		error.code = json.code;
-		error.diff = json.diff;
-		error.fields = json.fields;
-		error.status = response.status;
-		throw error;
-	}
-	return json as T;
-}
-
 export function useCachedFetch<T>(
 	key: string,
-	fetcher: () => Promise<T>,
+	fetcher: (signal?: AbortSignal) => Promise<T>,
 	options?: UseCachedFetchOptions,
 ): UseCachedFetchResult<T> {
 	const enabled = options?.enabled ?? true;
 	const errorMessage = options?.errorMessage;
-	const persist = options?.persist ?? true;
+	const maxAgeMs = options?.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+	const persist = options?.persist ?? false;
 	const toastOnBackgroundError = options?.toastOnBackgroundError ?? true;
+	const validate = options?.validate;
 
-	const [snapshot, setSnapshot] = useState<{
-		data: T | null;
-		key: string;
-		updatedAt: number | null;
-	}>(() => {
-		const cached = readCached<T>(key, persist);
-		return { data: cached?.data ?? null, key, updatedAt: cached?.updatedAt ?? null };
-	});
-	if (snapshot.key !== key) {
-		const cached = readCached<T>(key, persist);
-		setSnapshot({ data: cached?.data ?? null, key, updatedAt: cached?.updatedAt ?? null });
-	}
+	const [snapshot, setSnapshot] = useState<Snapshot<T>>(() =>
+		readCached<T>(key, { maxAgeMs, persist, validate }),
+	);
 	const [error, setError] = useState<string | null>(null);
-	const [pending, setPending] = useState(enabled);
-	const [tick, setTick] = useState(0);
+	const [nonce, setNonce] = useState(0);
+	const [pending, setPending] = useState(false);
 
-	const data = snapshot.key === key ? snapshot.data : null;
-	const updatedAt = snapshot.key === key ? snapshot.updatedAt : null;
-
+	// Fetcher stays in a ref so route call sites can pass inline closures
+	// without forcing every consumer onto useCallback. Boring fetch per mount.
 	const fetcherRef = useRef(fetcher);
-	const dataRef = useRef<T | null>(null);
-
 	useEffect(() => {
 		fetcherRef.current = fetcher;
 	});
 
+	// Reset on key change via effect — never setState during render.
 	useEffect(() => {
-		dataRef.current = snapshot.key === key ? snapshot.data : null;
-	}, [key, snapshot]);
+		if (snapshot.key === key) return;
+		setSnapshot(readCached<T>(key, { maxAgeMs, persist, validate }));
+	}, [key, maxAgeMs, persist, snapshot.key, validate]);
 
 	const refresh = useCallback(() => {
-		setTick((value) => value + 1);
+		setNonce((value) => value + 1);
 	}, []);
 
-	const generationRef = useRef(0);
-
 	useEffect(() => {
-		const generation = tick;
-		generationRef.current = generation;
+		// Each manual refresh bumps `nonce`, so `attempt` identifies this run. A slower
+		// overlapping run must not overwrite state settled by a newer attempt.
+		const attempt = nonce;
 		if (!enabled) {
 			setPending(false);
 			return;
 		}
+		const controller = new AbortController();
 		let alive = true;
-		setPending(true);
 		setError(null);
+		setPending(true);
 
 		const run = async () => {
 			try {
-				let inflight = INFLIGHT.get(key) as Promise<T> | undefined;
-				if (!inflight) {
-					inflight = fetcherRef.current();
-					INFLIGHT.set(key, inflight);
-					inflight
-						.finally(() => {
-							if (INFLIGHT.get(key) === inflight) INFLIGHT.delete(key);
-						})
-						.catch(() => {});
-				}
-				const fresh = await inflight;
-				if (!alive || generation !== generationRef.current) return;
-				const previous = dataRef.current;
-				if (previous === null || !isDeepEqual(previous, fresh)) {
-					setSnapshot({ data: fresh, key, updatedAt: Date.now() });
-					dataRef.current = fresh;
-				} else {
-					setSnapshot((current) =>
-						current.key === key ? current : { data: previous, key, updatedAt: current.updatedAt },
-					);
-				}
+				const fresh = await fetcherRef.current(controller.signal);
+				if (!alive || controller.signal.aborted) return;
 				const stamp = writeCached<T>(key, fresh, persist);
-				if (!alive || generation !== generationRef.current) return;
+				if (!alive || controller.signal.aborted) return;
 				setSnapshot((current) =>
-					current.key === key ? { ...current, updatedAt: stamp } : current,
+					current.key !== key || attempt < current.attempt
+						? current
+						: { attempt, data: fresh, key, updatedAt: stamp },
 				);
 				setError(null);
 			} catch (e: unknown) {
-				if (!alive || generation !== generationRef.current) return;
+				if (!alive || controller.signal.aborted) return;
 				const message = e instanceof Error ? e.message : String(e);
-				if (dataRef.current === null) {
-					setError(message);
-					if (toastOnBackgroundError) toast.error(errorMessage ?? message);
-				} else if (toastOnBackgroundError) {
-					toast.error(errorMessage ?? message);
-				}
+				const cached = readCached<T>(key, { maxAgeMs, persist, validate });
+				if (cached.data === null) setError(message);
+				if (toastOnBackgroundError && cached.data === null) toast.error(errorMessage ?? message);
 			} finally {
-				if (alive && generation === generationRef.current) setPending(false);
+				if (alive && !controller.signal.aborted) setPending(false);
 			}
 		};
 
 		void run();
 		return () => {
 			alive = false;
+			controller.abort();
 		};
-	}, [enabled, errorMessage, key, persist, tick, toastOnBackgroundError]);
+	}, [enabled, errorMessage, key, maxAgeMs, nonce, persist, toastOnBackgroundError, validate]);
 
+	const data = snapshot.key === key ? snapshot.data : null;
+	const updatedAt = snapshot.key === key ? snapshot.updatedAt : null;
 	const isLoading = pending && data === null;
 	const isRefreshing = pending && data !== null;
 

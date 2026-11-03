@@ -2,8 +2,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { ORPCError } from "@orpc/server";
-
 import {
 	collectionCounts,
 	COLLECTIONS,
@@ -31,7 +29,7 @@ import {
 import { readSchemaDetail } from "#/cms/schema-detail.ts";
 import { aiSuggest, scoreEntry } from "#/cms/seo.ts";
 import {
-	parseSettingsValues,
+	parseSettingsDetailed,
 	patchSettingsValues,
 	readSettingsRaw,
 	writeSettingsRaw,
@@ -63,10 +61,16 @@ import {
 	syncRunSchema,
 } from "./schemas.ts";
 
-function filterByQuery<T>(items: T[], q: string, fields: ((item: T) => string)[]): T[] {
+function filterByQuery<T>(items: T[], q: string, fields: (keyof T)[]): T[] {
 	const needle = q.toLowerCase();
 	if (!needle) return items;
-	return items.filter((item) => fields.some((pick) => pick(item).toLowerCase().includes(needle)));
+	return items.filter((item) =>
+		fields.some((field) =>
+			String(item[field] ?? "")
+				.toLowerCase()
+				.includes(needle),
+		),
+	);
 }
 
 const collectionsList = base.route({ method: "GET", path: "/collections" }).handler(async () => {
@@ -94,11 +98,7 @@ const entriesList = base
 		const entries = await listEntries(input.collection);
 		return {
 			collection: input.collection,
-			entries: filterByQuery(entries, input.q ?? "", [
-				(e) => e.id,
-				(e) => e.title ?? "",
-				(e) => e.path,
-			]),
+			entries: filterByQuery(entries, input.q ?? "", ["id", "title", "path"]),
 		};
 	});
 
@@ -140,15 +140,11 @@ const pageGet = base
 const pageSave = base
 	.route({ method: "PUT", path: "/page" })
 	.input(pageSaveSchema)
-	.handler(async ({ input }) => {
+	.handler(({ input }) => {
 		const patch: PageSeoPatch = { ...input.seo };
 		if (input.schema !== undefined) patch.schema = input.schema;
-		const res = await writePageSeo(input.path, patch, input.mtime, { force: input.force });
-		// Mirror failure must not mask the source write, but must stay visible.
-		await syncScope("pages").catch((e: unknown) => {
-			console.error("[pageSave] mirror sync failed:", e);
-		});
-		return res;
+		// No inline re-sync: the FS watcher is the sole sync path.
+		return writePageSeo(input.path, patch, input.mtime, { force: input.force });
 	});
 
 const projectsList = base
@@ -157,11 +153,7 @@ const projectsList = base
 	.handler(async ({ input }) => {
 		const projects = await listProjects();
 		return {
-			projects: filterByQuery(projects, input.q ?? "", [
-				(project) => project.name,
-				(project) => project.displayPath,
-				(project) => project.branch,
-			]),
+			projects: filterByQuery(projects, input.q ?? "", ["name", "displayPath", "branch"]),
 		};
 	});
 
@@ -177,7 +169,8 @@ const projectsBrowse = base
 
 const settingsGet = base.route({ method: "GET", path: "/settings" }).handler(async () => {
 	const [{ mtime, raw }, env] = await Promise.all([readSettingsRaw(), envStatus()]);
-	return { env, mtime, raw, values: parseSettingsValues(raw) };
+	const { errors, values } = parseSettingsDetailed(raw);
+	return { env, errors, mtime, raw, values };
 });
 
 const settingsSave = base
@@ -186,7 +179,12 @@ const settingsSave = base
 	.handler(async ({ input }) => {
 		if (input.raw !== undefined) {
 			const res = await writeSettingsRaw(input.raw, input.mtime, { force: input.force });
-			return { ...res, raw: input.raw, values: parseSettingsValues(input.raw) };
+			return {
+				...res,
+				errors: parseSettingsDetailed(input.raw).errors,
+				raw: input.raw,
+				values: parseSettingsDetailed(input.raw).values,
+			};
 		}
 		if (input.values !== undefined) {
 			return patchSettingsValues(input.values, input.mtime, { force: input.force });
@@ -203,7 +201,7 @@ const syncRun = base
 	.input(syncRunSchema)
 	.handler(async ({ input }) => {
 		if (input.scope) {
-			const fileCount = await syncScope(input.scope as SyncScope);
+			const fileCount = await syncScope(input.scope);
 			return { fileCount, scope: input.scope, status: await getSyncStatus() };
 		}
 		const result = await fullSync();
@@ -214,12 +212,9 @@ const inventoryGet = base
 	.route({ method: "GET", path: "/inventory" })
 	.input(inventoryGetSchema)
 	.handler(async ({ input }) => {
-		const scopeParam = input.scope ?? "all";
+		// input.scope is pre-split and validated by the schema (no manual checks).
+		const scopes = input.scope ?? ["all"];
 		const status = await getSyncStatus();
-		const scopes = scopeParam
-			.split(",")
-			.map((entry) => entry.trim())
-			.filter(Boolean);
 		if (scopes.includes("all")) {
 			const entries = await Promise.all(
 				SYNC_SCOPES.map(async (entry) => [entry, await getInventory(entry)] as const),
@@ -227,20 +222,16 @@ const inventoryGet = base
 			const rows = Object.fromEntries(entries) as Record<SyncScope, Record<string, unknown>[]>;
 			return { rows, scope: "all", status };
 		}
-		for (const scope of scopes) {
-			if (!(SYNC_SCOPES as readonly string[]).includes(scope)) {
-				throw new ORPCError("VALIDATION", { message: `Unknown scope: ${scope}`, status: 400 });
-			}
-		}
-		if (scopes.length === 1) {
-			const scope = scopes[0] as SyncScope;
+		const unique = [...new Set(scopes)] as SyncScope[];
+		if (unique.length === 1) {
+			const scope = unique[0];
 			return { rows: await getInventory(scope), scope, status };
 		}
 		const entries = await Promise.all(
-			scopes.map(async (scope) => [scope, await getInventory(scope as SyncScope)] as const),
+			unique.map(async (scope) => [scope, await getInventory(scope)] as const),
 		);
 		const rows = Object.fromEntries(entries) as Record<string, Record<string, unknown>[]>;
-		return { rows, scope: scopes.join(","), status };
+		return { rows, scope: unique.join(","), status };
 	});
 
 const diffGet = base
@@ -248,11 +239,21 @@ const diffGet = base
 	.input(diffGetSchema)
 	.handler(async ({ input }) => {
 		const abs = resolveRepoPath(input.path);
-		const cur = await fs.readFile(abs, "utf8").catch(() => {
-			throw new CmsError("NOT_FOUND", `Not found: ${input.path}`, { status: 404 });
-		});
+		let cur: string;
+		try {
+			cur = await fs.readFile(abs, "utf8");
+		} catch (e) {
+			if (e instanceof CmsError) throw e;
+			if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+				throw new CmsError("NOT_FOUND", `Not found: ${input.path}`, { status: 404 });
+			}
+			throw e;
+		}
 		const rev = input.rev ?? "bak";
-		const bakPath = rev === "bak" ? `${abs}.bak` : `${abs}.bak.${rev}`;
+		const bakPath = rev === "bak" ? `${abs}.bak` : `${abs}.bak.${path.basename(rev)}`;
+		if (!bakPath.startsWith(abs)) {
+			throw new CmsError("VALIDATION", "Invalid revision", { status: 400 });
+		}
 		const old = await fs.readFile(bakPath, "utf8").catch(() => "");
 		if (!old) return { diff: "", note: "No backup revision found", path: input.path };
 		return { diff: unifiedDiff(old, cur, input.path), path: input.path };
@@ -284,8 +285,15 @@ const seoScore = base
 	.input(seoGetSchema)
 	.handler(async ({ input }) => {
 		const entry = await loadEntry(input.path);
+		if (entry.corrupt) {
+			throw new CmsError(
+				"VALIDATION",
+				`Frontmatter YAML is corrupt — fix it before scoring: ${entry.parseError ?? "Unparsable YAML"}`,
+				{ fields: { frontmatter: entry.parseError ?? "Unparsable YAML" }, status: 422 },
+			);
+		}
 		const slug = path.parse(input.path).name;
-		return scoreEntry(entry.frontmatter, entry.body, slug);
+		return { ...scoreEntry(entry.frontmatter, entry.body, slug), corrupt: false };
 	});
 
 const schemaGet = base

@@ -5,15 +5,14 @@ import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 
 import { clientIp } from "../api-helpers.ts";
-import { ensureServerSync } from "../sync/engine.ts";
 import type { CmsContext } from "./base.ts";
 import { cmsRouter } from "./router.ts";
 
+// Pure request context: no hidden sync boot. The watcher starts explicitly via
+// the dev-server plugin (vite.config.ts) and the production entry point.
 export function contextForRequest(request: Request): CmsContext {
 	const ip = clientIp(request);
-	const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-	// First API call lazily boots the watcher (deduped, backgrounded).
-	ensureServerSync();
+	const requestId = crypto.randomUUID();
 	return { ip, requestId };
 }
 
@@ -24,6 +23,8 @@ function encodeCmsError(error: ORPCError<string, unknown>): unknown {
 		issues?: { message?: unknown; path?: unknown }[];
 	};
 	// Legacy contract uses VALIDATION + fields map, not BAD_REQUEST + issues.
+	// Keep this shim while the frontend fetchJson expects the legacy shape;
+	// remove it when the frontend migrates to BAD_REQUEST + issues.
 	if (error.code === "BAD_REQUEST" && Array.isArray(data.issues)) {
 		const fields: Record<string, string> = {};
 		for (const issue of data.issues) {

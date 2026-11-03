@@ -30,11 +30,11 @@
 			}
 		},
 		{
-			"files": ["src/routes/content.tsx"],
+			"files": ["src/routes/content.tsx", "src/routes/content/**/*.tsx"],
 			"rules": { "react/no-danger": "off" }
 		},
 		{
-			"files": ["src/routes/edit.$collection.$id.tsx"],
+			"files": ["src/routes/edit.$collection.$id.tsx", "src/routes/edit/**/*.tsx"],
 			"rules": { "react/no-danger": "off" }
 		},
 		{

@@ -60,23 +60,25 @@ function cmsRoot(): string {
 	return path.resolve(import.meta.dir, "..");
 }
 
+/** Resolve + validate an explicit project root (flag/env/arg/prompt).
+ * Throws with a labelled message; reuses src/cms/astro-project.ts checks. */
+function assertAstroRoot(candidate: string, label: string): string {
+	const resolved = path.resolve(candidate);
+	if (!isDirectorySync(resolved)) throw new Error(`Not a directory: ${label}`);
+	if (!isAstroProjectSync(resolved))
+		throw new Error(`Not an Astro project (astro.config.* missing): ${resolved}`);
+	return resolved;
+}
+
 /** Explicit root (flag/arg/env) throws instead of silently falling back;
  * only clean cwd auto-opens selector. */
 function resolveProjectRoot(explicit: string | undefined, cwd: string): ProjectSelection {
 	if (explicit !== undefined) {
-		const root = path.resolve(explicit);
-		if (!isDirectorySync(root)) throw new Error(`Not a directory: ${explicit}`);
-		if (!isAstroProjectSync(root))
-			throw new Error(`Not an Astro project (astro.config.* missing): ${root}`);
-		return { autoOpen: false, root };
+		return { autoOpen: false, root: assertAstroRoot(explicit, explicit) };
 	}
 	const envRoot = process.env.PROJECT_PATH?.trim();
 	if (envRoot) {
-		const resolved = path.resolve(envRoot);
-		if (!isDirectorySync(resolved)) throw new Error(`Not a directory: ${envRoot}`);
-		if (!isAstroProjectSync(resolved))
-			throw new Error(`Not an Astro project (astro.config.* missing): ${resolved}`);
-		return { autoOpen: false, root: resolved };
+		return { autoOpen: false, root: assertAstroRoot(envRoot, envRoot) };
 	}
 	if (isAstroProjectSync(cwd)) return { autoOpen: false, root: cwd };
 	return { autoOpen: true, root: cwd };
@@ -99,10 +101,11 @@ async function maybePromptForProject(cwd: string): Promise<string | undefined> {
 		placeholder: cwd,
 		validate: (value: string | undefined) => {
 			const candidate = value?.trim() || cwd;
-			const resolved = path.resolve(candidate);
-			if (!isDirectorySync(resolved)) return `Not a directory: ${candidate}`;
-			if (!isAstroProjectSync(resolved))
-				return `Not an Astro project (astro.config.* missing): ${resolved}`;
+			try {
+				assertAstroRoot(candidate, candidate);
+			} catch (error) {
+				return error instanceof Error ? error.message : String(error);
+			}
 		},
 	});
 	if (p.isCancel(input)) {
@@ -189,7 +192,13 @@ async function serve(projectPath: string | undefined, options: CliActionOptions)
 
 async function syncAction(options: SyncCommandOptions): Promise<void> {
 	p.intro(pc.cyan("platipie-cms sync"));
-	const code = await runSyncCommand(options);
+	if (options.scope && !options.once) {
+		throw new Error("--scope requires --once (scoped watch is not supported).");
+	}
+	const controller = new AbortController();
+	process.once("SIGINT", () => controller.abort());
+	process.once("SIGTERM", () => controller.abort());
+	const code = await runSyncCommand(options, controller.signal);
 	process.exit(code);
 }
 
@@ -201,9 +210,12 @@ function buildSyncCommand(): Command {
 		)
 		.option("--once", "Run one sync then exit (default: watch).")
 		.option("--scope <scope>", `Sync only one scope with --once (${SYNC_SCOPES.join("|")}).`)
-		.option("--machine-stats <seconds>", "Print CPU / memory / disk usage every N seconds.")
 		.option("--root <path>", "Override PROJECT_PATH for this run.")
 		.option("--db <path>", "Override the SQLite file (CMS_DB_PATH).")
+		.addHelpText(
+			"after",
+			"\nNote: --machine-stats was removed in a prior release; passing it now errors. Use an external monitor for CPU/memory/disk.\n",
+		)
 		.action(syncAction);
 	return sync;
 }

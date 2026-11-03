@@ -1,4 +1,6 @@
-import { eq } from "drizzle-orm";
+import { promises as fs } from "node:fs";
+
+import { notInArray } from "drizzle-orm";
 import type { AnySQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import { getProjectRoot } from "../config.ts";
@@ -70,66 +72,73 @@ async function syncTableRows<TTable extends SQLiteTable, TScan>(
 ): Promise<number> {
 	const db = getDb();
 	const stamp = now();
-	const live = new Set<string>();
-	for (const item of scanned) {
-		const values = mapRow(item, stamp);
-		live.add(String(values[keyColumn.name]));
-		await db.insert(table).values(values).onConflictDoUpdate({ set: values, target: keyColumn });
-	}
-	for (const row of await db.select({ key: keyColumn }).from(table)) {
-		const key = String(row.key);
-		if (!live.has(key)) await db.delete(table).where(eq(keyColumn, row.key));
-	}
+	const valuesList = scanned.map((item) => mapRow(item, stamp));
+	const live = new Set(valuesList.map((values) => String(values[keyColumn.name])));
+	// Single transaction per scope: one bulk upsert loop plus one stale-row
+	// delete, instead of N+1 autocommit statements. Empty scans never wipe:
+	// a typo'd root or unreadable dir must leave tables intact.
+	await db.transaction(async (tx) => {
+		for (const values of valuesList) {
+			await tx.insert(table).values(values).onConflictDoUpdate({ set: values, target: keyColumn });
+		}
+		if (live.size > 0) {
+			await tx.delete(table).where(notInArray(keyColumn, [...live]));
+		}
+	});
 	return scanned.length;
 }
 
-type PathInventoryTable = typeof components | typeof layouts | typeof templates;
+// Table-driven scope sync: one generic path plus the astro special case.
+function makeTableSyncer<TTable extends SQLiteTable, TScan>(
+	table: TTable,
+	keyColumn: AnySQLiteColumn,
+	scan: (root: string) => Promise<TScan[]>,
+	mapRow: (item: TScan, stamp: number) => TTable["$inferInsert"] & Record<string, unknown>,
+): (root: string) => Promise<number> {
+	return async (root: string) => {
+		const scanned = await scan(root);
+		return syncTableRows(table, keyColumn, scanned, mapRow);
+	};
+}
 
-async function syncAssets(root: string): Promise<number> {
-	const scanned = await scanAssets(root);
-	return syncTableRows(assets, assets.path, scanned, (row, stamp) => ({
+const SCOPE_SYNCERS: Record<Exclude<SyncScope, "astro">, (root: string) => Promise<number>> = {
+	assets: makeTableSyncer(assets, assets.path, scanAssets, (row, stamp) => ({
 		...row,
 		updatedAt: stamp,
-	}));
-}
-
-async function syncContent(root: string): Promise<number> {
-	const scanned = await scanContentCollections(root);
-	return syncTableRows(contentCollections, contentCollections.name, scanned, (row, stamp) => ({
-		base: row.base,
-		count: row.count,
-		filePath: row.filePath,
-		loader: row.loader,
-		mtime: Math.round(row.mtime),
-		name: row.name,
-		pattern: row.pattern,
-		schemaKeys: JSON.stringify(row.schemaKeys),
-		updatedAt: stamp,
-	}));
-}
-
-async function syncComponentDir(
-	root: string,
-	table: PathInventoryTable,
-	dir: string,
-): Promise<number> {
-	const scanned = await scanComponentDir(root, dir);
-	return syncTableRows(table, table.path, scanned, (row, stamp) => ({
-		dir: row.dir,
-		ext: row.ext,
-		hasSlot: row.hasSlot ? 1 : 0,
-		mtime: Math.round(row.mtime),
-		name: row.name,
-		path: row.path,
-		props: JSON.stringify(row.props),
-		size: row.size,
-		updatedAt: stamp,
-	}));
-}
-
-async function syncEmails(root: string): Promise<number> {
-	const scanned = await scanEmails(root);
-	return syncTableRows(emails, emails.path, scanned, (row, stamp) => ({
+	})),
+	components: makeTableSyncer(
+		components,
+		components.path,
+		(root) => scanComponentDir(root, "components"),
+		(row, stamp) => ({
+			dir: row.dir,
+			ext: row.ext,
+			hasSlot: row.hasSlot ? 1 : 0,
+			mtime: Math.round(row.mtime),
+			name: row.name,
+			path: row.path,
+			props: JSON.stringify(row.props),
+			size: row.size,
+			updatedAt: stamp,
+		}),
+	),
+	content: makeTableSyncer(
+		contentCollections,
+		contentCollections.name,
+		scanContentCollections,
+		(row, stamp) => ({
+			base: row.base,
+			count: row.count,
+			filePath: row.filePath,
+			loader: row.loader,
+			mtime: Math.round(row.mtime),
+			name: row.name,
+			pattern: row.pattern,
+			schemaKeys: JSON.stringify(row.schemaKeys),
+			updatedAt: stamp,
+		}),
+	),
+	emails: makeTableSyncer(emails, emails.path, scanEmails, (row, stamp) => ({
 		dir: row.dir,
 		ext: row.ext,
 		mtime: Math.round(row.mtime),
@@ -138,12 +147,24 @@ async function syncEmails(root: string): Promise<number> {
 		size: row.size,
 		subject: row.subject,
 		updatedAt: stamp,
-	}));
-}
-
-async function syncPages(root: string): Promise<number> {
-	const scanned = await scanPages(root);
-	return syncTableRows(pages, pages.path, scanned, (row, stamp) => ({
+	})),
+	layouts: makeTableSyncer(
+		layouts,
+		layouts.path,
+		(root) => scanComponentDir(root, "layouts"),
+		(row, stamp) => ({
+			dir: row.dir,
+			ext: row.ext,
+			hasSlot: row.hasSlot ? 1 : 0,
+			mtime: Math.round(row.mtime),
+			name: row.name,
+			path: row.path,
+			props: JSON.stringify(row.props),
+			size: row.size,
+			updatedAt: stamp,
+		}),
+	),
+	pages: makeTableSyncer(pages, pages.path, scanPages, (row, stamp) => ({
 		dynamic: row.dynamic ? 1 : 0,
 		hasSeo: row.hasSeo ? 1 : 0,
 		mtime: Math.round(row.mtime),
@@ -159,15 +180,32 @@ async function syncPages(root: string): Promise<number> {
 		title: row.title,
 		type: row.type,
 		updatedAt: stamp,
-	}));
-}
+	})),
+	templates: makeTableSyncer(
+		templates,
+		templates.path,
+		(root) => scanComponentDir(root, "templates"),
+		(row, stamp) => ({
+			dir: row.dir,
+			ext: row.ext,
+			hasSlot: row.hasSlot ? 1 : 0,
+			mtime: Math.round(row.mtime),
+			name: row.name,
+			path: row.path,
+			props: JSON.stringify(row.props),
+			size: row.size,
+			updatedAt: stamp,
+		}),
+	),
+};
 
 async function syncAstro(root: string): Promise<number> {
 	const db = getDb();
 	const stamp = now();
 	const scanned = await scanAstroSettings(root);
 	if (!scanned) {
-		await db.delete(astroSettings);
+		// Empty scan never wipes: leave the row intact (typo'd root already
+		// throws above; a genuinely removed config stays stale, not wiped).
 		return 0;
 	}
 	const row = {
@@ -202,43 +240,47 @@ async function syncAstro(root: string): Promise<number> {
 	return 1;
 }
 
-export async function syncScope(scope: SyncScope, root = getProjectRoot()): Promise<number> {
-	let count = 0;
-	switch (scope) {
-		case "assets":
-			count = await syncAssets(root);
-			break;
-		case "astro":
-			count = await syncAstro(root);
-			break;
-		case "components":
-			count = await syncComponentDir(root, components, "components");
-			break;
-		case "content":
-			count = await syncContent(root);
-			break;
-		case "emails":
-			count = await syncEmails(root);
-			break;
-		case "layouts":
-			count = await syncComponentDir(root, layouts, "layouts");
-			break;
-		case "pages":
-			count = await syncPages(root);
-			break;
-		case "templates":
-			count = await syncComponentDir(root, templates, "templates");
-			break;
+async function assertRootReachable(root: string): Promise<void> {
+	const st = await fs.stat(root).catch(() => null);
+	if (!st || !st.isDirectory()) {
+		throw new Error(`[sync] root unreachable, refusing sync: ${root}`);
 	}
+}
+
+function syncScopeCount(scope: SyncScope, root: string): Promise<number> {
+	return scope === "astro" ? syncAstro(root) : SCOPE_SYNCERS[scope](root);
+}
+
+export async function syncScope(scope: SyncScope, root = getProjectRoot()): Promise<number> {
+	await assertRootReachable(root);
+	const count = await syncScopeCount(scope, root);
 	await stampScope(scope, count);
 	return count;
 }
 
 export async function fullSync(root = getProjectRoot()): Promise<SyncResult> {
+	await assertRootReachable(root);
 	const scopes: ScopeStatus[] = [];
 	// WARNING: bun:sqlite has a single connection — keep sequential, never Promise.all.
+	// Two-phase: count first so an all-zero scan (typo'd root, unmounted
+	// volume) never wipes tables + stamps success.
+	const counts = new Map<SyncScope, number>();
 	for (const scope of SYNC_SCOPES) {
-		const fileCount = await syncScope(scope, root);
+		counts.set(scope, await syncScopeCount(scope, root));
+	}
+	const total = [...counts.values()].reduce((a, b) => a + b, 0);
+	if (total === 0) {
+		console.warn(
+			`[sync] refusing full sync of ${root}: all scopes scanned 0 files, tables left intact`,
+		);
+		for (const scope of SYNC_SCOPES) {
+			scopes.push({ fileCount: 0, lastSync: null, scope });
+		}
+		return { root, scopes };
+	}
+	for (const scope of SYNC_SCOPES) {
+		const fileCount = counts.get(scope) ?? 0;
+		await stampScope(scope, fileCount);
 		scopes.push({ fileCount, lastSync: now(), scope });
 	}
 	return { root, scopes };
@@ -259,7 +301,10 @@ export async function getSyncStatus(): Promise<ScopeStatus[]> {
 }
 
 // Thunks keep drizzle table inference (no casts).
-const INVENTORY_SOURCES: Record<SyncScope, { key: string; read: () => Promise<unknown[]> }> = {
+const INVENTORY_SOURCES: Record<
+	SyncScope,
+	{ key: string; read: () => Promise<Record<string, unknown>[]> }
+> = {
 	assets: { key: "path", read: () => getDb().select().from(assets) },
 	astro: { key: "id", read: () => getDb().select().from(astroSettings) },
 	components: { key: "path", read: () => getDb().select().from(components) },
@@ -272,7 +317,7 @@ const INVENTORY_SOURCES: Record<SyncScope, { key: string; read: () => Promise<un
 
 export async function getInventory(scope: SyncScope): Promise<Record<string, unknown>[]> {
 	const source = INVENTORY_SOURCES[scope];
-	const rows = (await source.read()) as Record<string, unknown>[];
+	const rows = await source.read();
 	return rows.toSorted((a, b) =>
 		String(a[source.key] ?? "").localeCompare(String(b[source.key] ?? "")),
 	);

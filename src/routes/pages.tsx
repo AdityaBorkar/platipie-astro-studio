@@ -25,6 +25,8 @@ import {
 import { Skeleton } from "#/components/ui/skeleton";
 import { Textarea } from "#/components/ui/textarea";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
+import { WorkbenchShell } from "./_workbench-shell";
+import { cmsKeys } from "./cms-keys";
 
 interface DbPage {
 	dynamic: number;
@@ -128,10 +130,6 @@ function isDirty(detail: PageDetail | null, draft: Draft | null): boolean {
 	return detail.schemaMode === "list" && !sameList(draft.schema, detail.schemaTypes);
 }
 
-function prerenderVariant(prerender: string): "secondary" | "success" {
-	return prerender === "true" ? "success" : "secondary";
-}
-
 function PagesPage() {
 	const search = Route.useSearch();
 	const [selected, setSelected] = useState<string | null>(search.page ?? null);
@@ -141,15 +139,14 @@ function PagesPage() {
 	const [saving, setSaving] = useState(false);
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [conflict, setConflict] = useState(false);
-	const [detailPath, setDetailPath] = useState<string | null>(null);
 	const [keywordInput, setKeywordInput] = useState("");
 	const [activeSchema, setActiveSchema] = useState<string | null>(null);
 
 	const fetchInventory = useCallback(
-		() => fetchJson<InventoryResponse>("/api/cms/inventory?scope=pages"),
+		() => fetchJson<InventoryResponse>(cmsKeys.inventory("pages")),
 		[],
 	);
-	const inventoryQuery = useCachedFetch("/api/cms/inventory?scope=pages", fetchInventory, {
+	const inventoryQuery = useCachedFetch(cmsKeys.inventory("pages"), fetchInventory, {
 		errorMessage: "Could not refresh pages",
 	});
 	const inventory = inventoryQuery.data?.rows ?? null;
@@ -167,47 +164,27 @@ function PagesPage() {
 		null;
 	const selectedPath = selectedPage?.path ?? null;
 
-	const detailKey = selectedPath ? `/api/cms/page?path=${encodeURIComponent(selectedPath)}` : null;
+	const detailKey = selectedPath ? cmsKeys.page(selectedPath) : cmsKeys.pageDetailFallback;
 	const fetchDetail = useCallback(() => {
 		if (!selectedPath) return Promise.reject(new Error("No page selected"));
-		return fetchJson<PageDetail>(`/api/cms/page?path=${encodeURIComponent(selectedPath)}`);
+		return fetchJson<PageDetail>(cmsKeys.page(selectedPath));
 	}, [selectedPath]);
-	const detailQuery = useCachedFetch<PageDetail>(detailKey ?? "pages:detail:none", fetchDetail, {
+	const detailQuery = useCachedFetch<PageDetail>(detailKey, fetchDetail, {
 		enabled: selectedPath !== null,
 		errorMessage: "Could not refresh page settings",
 	});
 	const detail = detailQuery.data;
 	const detailLoading = selectedPath !== null && detail === null && detailQuery.isLoading;
 
+	// Single reset point: any new path or fresh detail rebuilds the draft
+	// unconditionally. No mirror state, no second-guessing a previous path.
 	useEffect(() => {
-		if (detailQuery.error && detail === null) {
-			setDetailError(detailQuery.error);
-		} else if (detail !== null) {
-			setDetailError(null);
-		}
-	}, [detail, detailQuery.error]);
-
-	useEffect(() => {
-		if (!selectedPath) {
-			setDraft(null);
-			setDetailError(null);
-			setDetailPath(null);
-			setKeywordInput("");
-			return;
-		}
-		if (detailPath !== selectedPath) {
-			setDetailError(null);
-			setSaveError(null);
-			setConflict(false);
-			setDetailPath(selectedPath);
-			setDraft(toDraft(detail));
-			setKeywordInput("");
-			return;
-		}
-		if (detail && draft === null) {
-			setDraft(toDraft(detail));
-		}
-	}, [detail, detailPath, draft, selectedPath]);
+		setDetailError(detailQuery.error);
+		setSaveError(null);
+		setConflict(false);
+		setKeywordInput("");
+		setDraft(selectedPath ? toDraft(detail) : null);
+	}, [detail, detailQuery.error, selectedPath]);
 
 	const dirty = isDirty(detail, draft);
 
@@ -225,7 +202,7 @@ function PagesPage() {
 			if (detail.editable.description) seo.description = draft.description;
 			if (detail.editable.keywords) seo.keywords = draft.keywords;
 			try {
-				await fetchJson<SaveResponse>("/api/cms/page", {
+				await fetchJson<SaveResponse>(cmsKeys.pageBase, {
 					body: JSON.stringify({
 						force,
 						mtime: detail.mtime,
@@ -249,15 +226,6 @@ function PagesPage() {
 		},
 		[detail, draft, refreshDetail, refreshInventory],
 	);
-
-	useEffect(() => {
-		if (!detail || !draft || !dirty || conflict || saving) return;
-		if (detailQuery.isRefreshing) return;
-		const timer = setTimeout(() => {
-			void save(false);
-		}, 2000);
-		return () => clearTimeout(timer);
-	}, [conflict, detail, detailQuery.isRefreshing, dirty, draft, save, saving]);
 
 	function addSchema(type: string) {
 		const value = type.trim();
@@ -305,138 +273,252 @@ function PagesPage() {
 	);
 
 	return (
-		<div className="grid min-h-dvh grid-cols-1 lg:h-dvh lg:grid-cols-app-rail lg:overflow-hidden">
-			<section className="hidden min-h-0 flex-col lg:flex">
-				<div className="min-h-0 flex-1 overflow-y-auto p-5">
-					<div className="grid h-full min-h-80 place-items-center rounded-2xl border border-dashed border-border/80 bg-muted/25 p-8 text-center">
-						<div className="max-w-sm">
-							<span className="mx-auto inline-flex size-12 items-center justify-center rounded-xl bg-card text-brand shadow-soft">
-								<GlobeIcon className="size-5" />
-							</span>
-							<p className="mt-4 text-title font-bold tracking-heading">Webpage preview</p>
-							<p className="gb-sub mt-1.5 text-sm">
-								This canvas is reserved for the live {selectedPage?.route ?? "page"} preview. The
-								layout already owns the space; the renderer lands next.
-							</p>
-							<div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1 font-mono text-11 text-muted-foreground">
-								<FileTextIcon className="size-3" />
-								{selectedPage?.path ?? "No source selected"}
+		<>
+			<WorkbenchShell
+				sidebar={null}
+				stage={
+					<div className="min-h-0 flex-1 overflow-y-auto p-5">
+						<div className="grid h-full min-h-80 place-items-center rounded-2xl border border-dashed border-border/80 bg-muted/25 p-8 text-center">
+							<div className="max-w-sm">
+								<span className="mx-auto inline-flex size-12 items-center justify-center rounded-xl bg-card text-brand shadow-soft">
+									<GlobeIcon className="size-5" />
+								</span>
+								<p className="mt-4 text-title font-bold tracking-heading">Webpage preview</p>
+								<p className="gb-sub mt-1.5 text-sm">
+									This canvas is reserved for the live {selectedPage?.route ?? "page"} preview. The
+									layout already owns the space; the renderer lands next.
+								</p>
+								<div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1 font-mono text-11 text-muted-foreground">
+									<FileTextIcon className="size-3" />
+									{selectedPage?.path ?? "No source selected"}
+								</div>
 							</div>
 						</div>
 					</div>
-				</div>
-			</section>
+				}
+				rail={
+					detailLoading ? (
+						<div className="grid gap-2 p-4">
+							<Skeleton className="h-9 w-full" />
+							<Skeleton className="h-20 w-full" />
+							<Skeleton className="h-9 w-full" />
+							<Skeleton className="h-24 w-full" />
+						</div>
+					) : detailError ? (
+						<div className="p-4">
+							<Hint title="Failed to load page metadata" variant="danger">
+								{detailError}
+							</Hint>
+						</div>
+					) : detail ? (
+						<>
+							<div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-4 py-3">
+								<Button disabled={!dirty || saving} onClick={() => void save(false)} size="sm">
+									{saving ? "Saving…" : "Save"}
+								</Button>
+								<span className="text-11 text-muted-foreground">
+									{conflict
+										? "Source changed — review, then force save."
+										: dirty
+											? "Unsaved changes"
+											: "All changes saved"}
+								</span>
+							</div>
+							{saveError ? (
+								<div className="grid gap-2 p-4 pb-0">
+									<Hint title={conflict ? "Stale file" : "Save failed"} variant="danger">
+										{saveError}
+									</Hint>
+									{conflict ? (
+										<Button
+											className="justify-self-start"
+											onClick={() => void save(true)}
+											size="sm"
+											variant="outline"
+										>
+											Force save
+										</Button>
+									) : null}
+								</div>
+							) : null}
 
-			<aside className="min-h-0 border-border/70 lg:h-dvh lg:overflow-y-auto lg:border-l lg:bg-sidebar/50">
-				{detailLoading ? (
-					<div className="grid gap-2 p-4">
-						<Skeleton className="h-9 w-full" />
-						<Skeleton className="h-20 w-full" />
-						<Skeleton className="h-9 w-full" />
-						<Skeleton className="h-24 w-full" />
-					</div>
-				) : detailError ? (
-					<div className="p-4">
-						<Hint title="Failed to load page metadata" variant="danger">
-							{detailError}
-						</Hint>
-					</div>
-				) : detail ? (
-					<>
-						{saveError ? (
-							<div className="grid gap-2 p-4 pb-0">
-								<Hint title={conflict ? "Stale file" : "Save failed"} variant="danger">
-									{saveError}
-								</Hint>
-								{conflict ? (
-									<Button
-										className="justify-self-start"
-										onClick={() => void save(true)}
-										size="sm"
-										variant="outline"
-									>
-										Force save
-									</Button>
+							<section className="border-b border-border/70 px-4 py-5">
+								<div className="flex items-center gap-2">
+									<SearchIcon className="size-4 text-brand" />
+									<h2 className="text-sm font-bold tracking-heading">SEO</h2>
+								</div>
+								<FieldGroup className="mt-4 gap-4">
+									<Field data-invalid={!detail.editable.title}>
+										<div className="flex items-center justify-between gap-2">
+											<FieldLabel htmlFor="page-seo-title">Meta title</FieldLabel>
+											<span className="font-mono text-10 text-muted-foreground">
+												{draft?.title.length ?? 0}/60
+											</span>
+										</div>
+										<Input
+											disabled={!detail.editable.title}
+											id="page-seo-title"
+											onChange={(event) =>
+												setDraft((current) =>
+													current ? { ...current, title: event.target.value } : current,
+												)
+											}
+											placeholder={
+												detail.editable.title ? "Page title" : "Not defined as a const in source"
+											}
+											value={draft?.title ?? ""}
+										/>
+										{detail.editable.title ? null : (
+											<p className="text-11 text-muted-foreground">
+												This page derives its title from data, so there is no{" "}
+												<code>const title</code> to write.
+											</p>
+										)}
+									</Field>
+
+									<Field data-invalid={!detail.editable.description}>
+										<div className="flex items-center justify-between gap-2">
+											<FieldLabel htmlFor="page-seo-description">Meta description</FieldLabel>
+											<span className="font-mono text-10 text-muted-foreground">
+												{draft?.description.length ?? 0}/160
+											</span>
+										</div>
+										<Textarea
+											disabled={!detail.editable.description}
+											id="page-seo-description"
+											onChange={(event) =>
+												setDraft((current) =>
+													current ? { ...current, description: event.target.value } : current,
+												)
+											}
+											placeholder={
+												detail.editable.description
+													? "Search result description"
+													: "Not defined as a const in source"
+											}
+											rows={4}
+											value={draft?.description ?? ""}
+										/>
+									</Field>
+
+									<Field data-invalid={!detail.editable.keywords}>
+										<div className="flex items-center justify-between gap-2">
+											<FieldLabel htmlFor="page-seo-keywords">Keywords</FieldLabel>
+											<span className="font-mono text-10 text-muted-foreground">
+												{draft?.keywords.length ?? 0} keywords
+											</span>
+										</div>
+										{(draft?.keywords.length ?? 0) > 0 ? (
+											<div className="flex flex-wrap gap-1.5">
+												{draft?.keywords.map((keyword) => (
+													<Badge className="gap-1 pr-1 font-mono" key={keyword} variant="outline">
+														{keyword}
+														{detail.editable.keywords ? (
+															<button
+																aria-label={`Remove ${keyword}`}
+																className="rounded-full p-0.5 transition-colors hover:bg-muted hover:text-destructive"
+																onClick={() => removeKeyword(keyword)}
+																type="button"
+															>
+																<XIcon className="size-3" />
+															</button>
+														) : null}
+													</Badge>
+												))}
+											</div>
+										) : (
+											<p className="text-11 text-muted-foreground">No keywords yet.</p>
+										)}
+										<div className="flex gap-2">
+											<Input
+												disabled={!detail.editable.keywords}
+												id="page-seo-keywords"
+												onBlur={() => {
+													if (keywordInput.trim()) addKeywords(keywordInput);
+												}}
+												onChange={(event) => setKeywordInput(event.target.value)}
+												onKeyDown={(event) => {
+													if (event.key === "Enter" || event.key === ",") {
+														event.preventDefault();
+														addKeywords(keywordInput);
+													} else if (
+														event.key === "Backspace" &&
+														keywordInput === "" &&
+														(draft?.keywords.length ?? 0) > 0
+													) {
+														removeKeyword(draft?.keywords.at(-1) ?? "");
+													}
+												}}
+												onPaste={(event) => {
+													const text = event.clipboardData.getData("text");
+													if (text.includes(",")) {
+														event.preventDefault();
+														addKeywords(text);
+													}
+												}}
+												placeholder="Add keyword and press Enter"
+												value={keywordInput}
+											/>
+											<Button
+												disabled={!detail.editable.keywords || !keywordInput.trim()}
+												onClick={() => addKeywords(keywordInput)}
+												size="default"
+												type="button"
+												variant="outline"
+											>
+												Add
+											</Button>
+										</div>
+									</Field>
+								</FieldGroup>
+								{!detail.editable.title &&
+								!detail.editable.description &&
+								!detail.editable.keywords ? (
+									<Hint className="mt-4" title="Derived SEO" variant="info">
+										This route reads SEO from entry data. Edit the collection entry instead — the
+										page source has no literal consts to patch.
+									</Hint>
 								) : null}
-							</div>
-						) : null}
+							</section>
 
-						<section className="border-b border-border/70 px-4 py-5">
-							<div className="flex items-center gap-2">
-								<SearchIcon className="size-4 text-brand" />
-								<h2 className="text-sm font-bold tracking-heading">SEO</h2>
-							</div>
-							<FieldGroup className="mt-4 gap-4">
-								<Field data-invalid={!detail.editable.title}>
-									<div className="flex items-center justify-between gap-2">
-										<FieldLabel htmlFor="page-seo-title">Meta title</FieldLabel>
-										<span className="font-mono text-10 text-muted-foreground">
-											{draft?.title.length ?? 0}/60
-										</span>
-									</div>
-									<Input
-										disabled={!detail.editable.title}
-										id="page-seo-title"
-										onChange={(event) =>
-											setDraft((current) =>
-												current ? { ...current, title: event.target.value } : current,
-											)
-										}
-										placeholder={
-											detail.editable.title ? "Page title" : "Not defined as a const in source"
-										}
-										value={draft?.title ?? ""}
-									/>
-									{detail.editable.title ? null : (
-										<p className="text-11 text-muted-foreground">
-											This page derives its title from data, so there is no <code>const title</code>{" "}
-											to write.
-										</p>
-									)}
-								</Field>
-
-								<Field data-invalid={!detail.editable.description}>
-									<div className="flex items-center justify-between gap-2">
-										<FieldLabel htmlFor="page-seo-description">Meta description</FieldLabel>
-										<span className="font-mono text-10 text-muted-foreground">
-											{draft?.description.length ?? 0}/160
-										</span>
-									</div>
-									<Textarea
-										disabled={!detail.editable.description}
-										id="page-seo-description"
-										onChange={(event) =>
-											setDraft((current) =>
-												current ? { ...current, description: event.target.value } : current,
-											)
-										}
-										placeholder={
-											detail.editable.description
-												? "Search result description"
-												: "Not defined as a const in source"
-										}
-										rows={4}
-										value={draft?.description ?? ""}
-									/>
-								</Field>
-
-								<Field data-invalid={!detail.editable.keywords}>
-									<div className="flex items-center justify-between gap-2">
-										<FieldLabel htmlFor="page-seo-keywords">Keywords</FieldLabel>
-										<span className="font-mono text-10 text-muted-foreground">
-											{draft?.keywords.length ?? 0} keywords
-										</span>
-									</div>
-									{(draft?.keywords.length ?? 0) > 0 ? (
-										<div className="flex flex-wrap gap-1.5">
-											{draft?.keywords.map((keyword) => (
-												<Badge className="gap-1 pr-1 font-mono" key={keyword} variant="outline">
-													{keyword}
-													{detail.editable.keywords ? (
+							<section className="border-b border-border/70 px-4 py-5">
+								<div className="flex items-center gap-2">
+									<Code2Icon className="size-4 text-brand" />
+									<h2 className="text-sm font-bold tracking-heading">Schema Markup</h2>
+								</div>
+								{detail.schemaMode === "none" ? (
+									<p className="mt-3 text-xs text-muted-foreground">
+										No <code>schema_markup</code> declaration in this page.
+									</p>
+								) : (
+									<>
+										<div className="mt-3 grid justify-items-start gap-1.5">
+											{(detail.schemaMode === "list"
+												? (draft?.schema ?? [])
+												: detail.schemaTypes
+											).map((type) => (
+												<Badge
+													className="max-w-full gap-1 pr-1 font-mono"
+													key={type}
+													variant="outline"
+												>
+													<button
+														className="min-w-0 flex-1 cursor-pointer truncate text-left hover:underline"
+														onClick={() => setActiveSchema(type)}
+														title={`View ${type} schema`}
+														type="button"
+													>
+														{type}
+													</button>
+													{detail.editable.schema ? (
 														<button
-															aria-label={`Remove ${keyword}`}
-															className="rounded-full p-0.5 transition-colors hover:bg-muted hover:text-destructive"
-															onClick={() => removeKeyword(keyword)}
+															aria-label={`Remove ${type}`}
+															className="shrink-0 rounded-full p-0.5 transition-colors hover:bg-muted hover:text-destructive"
+															onClick={(event) => {
+																event.stopPropagation();
+																removeSchema(type);
+															}}
+															onKeyDown={(event) => event.stopPropagation()}
 															type="button"
 														>
 															<XIcon className="size-3" />
@@ -444,204 +526,90 @@ function PagesPage() {
 													) : null}
 												</Badge>
 											))}
+											{detail.schemaMode === "list" && (draft?.schema.length ?? 0) === 0 ? (
+												<p className="text-xs text-muted-foreground">No schema types selected.</p>
+											) : null}
 										</div>
-									) : (
-										<p className="text-11 text-muted-foreground">No keywords yet.</p>
-									)}
-									<div className="flex gap-2">
-										<Input
-											disabled={!detail.editable.keywords}
-											id="page-seo-keywords"
-											onBlur={() => {
-												if (keywordInput.trim()) addKeywords(keywordInput);
-											}}
-											onChange={(event) => setKeywordInput(event.target.value)}
-											onKeyDown={(event) => {
-												if (event.key === "Enter" || event.key === ",") {
-													event.preventDefault();
-													addKeywords(keywordInput);
-												} else if (
-													event.key === "Backspace" &&
-													keywordInput === "" &&
-													(draft?.keywords.length ?? 0) > 0
-												) {
-													removeKeyword(draft?.keywords.at(-1) ?? "");
-												}
-											}}
-											onPaste={(event) => {
-												const text = event.clipboardData.getData("text");
-												if (text.includes(",")) {
-													event.preventDefault();
-													addKeywords(text);
-												}
-											}}
-											placeholder="Add keyword and press Enter"
-											value={keywordInput}
-										/>
-										<Button
-											disabled={!detail.editable.keywords || !keywordInput.trim()}
-											onClick={() => addKeywords(keywordInput)}
-											size="default"
-											type="button"
-											variant="outline"
-										>
-											Add
-										</Button>
-									</div>
-								</Field>
-							</FieldGroup>
-							{!detail.editable.title &&
-							!detail.editable.description &&
-							!detail.editable.keywords ? (
-								<Hint className="mt-4" title="Derived SEO" variant="info">
-									This route reads SEO from entry data. Edit the collection entry instead — the page
-									source has no literal consts to patch.
-								</Hint>
-							) : null}
-						</section>
+										{detail.editable.schema ? (
+											<Select onValueChange={(value) => value && addSchema(value)} value="">
+												<SelectTrigger className="mt-3 w-full">
+													<SelectValue placeholder="Add a schema type…" />
+												</SelectTrigger>
+												<SelectContent>
+													{schemaOptions.map((option) => (
+														<SelectItem key={option} value={option}>
+															{option}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										) : (
+											<Hint className="mt-3" title="Dynamic schema" variant="info">
+												Built with <code>SchemaMarkup.generate()</code>. Edit the generator inputs
+												in the page source.
+											</Hint>
+										)}
+									</>
+								)}
+							</section>
 
-						<section className="border-b border-border/70 px-4 py-5">
-							<div className="flex items-center gap-2">
-								<Code2Icon className="size-4 text-brand" />
-								<h2 className="text-sm font-bold tracking-heading">Schema Markup</h2>
-							</div>
-							{detail.schemaMode === "none" ? (
-								<p className="mt-3 text-xs text-muted-foreground">
-									No <code>schema_markup</code> declaration in this page.
-								</p>
-							) : (
-								<>
-									<div className="mt-3 grid justify-items-start gap-1.5">
-										{(detail.schemaMode === "list"
-											? (draft?.schema ?? [])
-											: detail.schemaTypes
-										).map((type) => (
+							<section className="px-4 py-5">
+								<div className="flex items-center gap-2">
+									<FileTextIcon className="size-4 text-brand" />
+									<h2 className="text-sm font-bold tracking-heading">Page metadata</h2>
+									<Badge className="ml-auto" variant="outline">
+										read-only
+									</Badge>
+								</div>
+								<dl className="mt-4 grid gap-3 text-xs">
+									<div className="grid grid-cols-page-meta items-start gap-2">
+										<dt className="text-muted-foreground">File path</dt>
+										<dd className="font-mono break-all">{detail.path}</dd>
+									</div>
+									<div className="grid grid-cols-page-meta items-start gap-2">
+										<dt className="text-muted-foreground">Route</dt>
+										<dd className="font-mono break-all">{detail.route}</dd>
+									</div>
+									<div className="grid grid-cols-page-meta items-center gap-2">
+										<dt className="text-muted-foreground">Prerender</dt>
+										<dd>
 											<Badge
-												className="max-w-full gap-1 pr-1 font-mono"
-												key={type}
-												variant="outline"
+												className="font-mono"
+												variant={detail.prerender === "true" ? "success" : "secondary"}
 											>
-												<button
-													className="min-w-0 flex-1 cursor-pointer truncate text-left hover:underline"
-													onClick={() => setActiveSchema(type)}
-													title={`View ${type} schema`}
-													type="button"
-												>
-													{type}
-												</button>
-												{detail.editable.schema ? (
-													<button
-														aria-label={`Remove ${type}`}
-														className="shrink-0 rounded-full p-0.5 transition-colors hover:bg-muted hover:text-destructive"
-														onClick={(event) => {
-															event.stopPropagation();
-															removeSchema(type);
-														}}
-														onKeyDown={(event) => event.stopPropagation()}
-														type="button"
-													>
-														<XIcon className="size-3" />
-													</button>
-												) : null}
+												{detail.prerender === "true" ? "Yes" : "No"}
 											</Badge>
-										))}
-										{detail.schemaMode === "list" && (draft?.schema.length ?? 0) === 0 ? (
-											<p className="text-xs text-muted-foreground">No schema types selected.</p>
-										) : null}
+										</dd>
 									</div>
-									{detail.editable.schema ? (
-										<Select onValueChange={(value) => value && addSchema(value)} value="">
-											<SelectTrigger className="mt-3 w-full">
-												<SelectValue placeholder="Add a schema type…" />
-											</SelectTrigger>
-											<SelectContent>
-												{schemaOptions.map((option) => (
-													<SelectItem key={option} value={option}>
-														{option}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									) : (
-										<Hint className="mt-3" title="Dynamic schema" variant="info">
-											Built with <code>SchemaMarkup.generate()</code>. Edit the generator inputs in
-											the page source.
-										</Hint>
-									)}
-								</>
-							)}
-						</section>
-
-						<section className="px-4 py-5">
-							<div className="flex items-center gap-2">
-								<FileTextIcon className="size-4 text-brand" />
-								<h2 className="text-sm font-bold tracking-heading">Page metadata</h2>
-								<Badge className="ml-auto" variant="outline">
-									read-only
-								</Badge>
-							</div>
-							<dl className="mt-4 grid gap-3 text-xs">
-								<div className="grid grid-cols-page-meta items-start gap-2">
-									<dt className="text-muted-foreground">File path</dt>
-									<dd className="font-mono break-all">{detail.path}</dd>
-								</div>
-								<div className="grid grid-cols-page-meta items-start gap-2">
-									<dt className="text-muted-foreground">Route</dt>
-									<dd className="font-mono break-all">{detail.route}</dd>
-								</div>
-								<div className="grid grid-cols-page-meta items-center gap-2">
-									<dt className="text-muted-foreground">Prerender</dt>
-									<dd>
-										<Badge className="font-mono" variant={prerenderVariant(detail.prerender)}>
-											{detail.prerender === "true" ? "Yes" : "No"}
-										</Badge>
-									</dd>
-								</div>
-							</dl>
-						</section>
-					</>
-				) : (
-					<div className="p-4">
-						<EmptyState
-							compact
-							description="Pick a page from the list to edit its SEO."
-							icon={FileTextIcon}
-							title="No page selected"
-						/>
-					</div>
-				)}
-			</aside>
+								</dl>
+							</section>
+						</>
+					) : (
+						<div className="p-4">
+							<EmptyState
+								compact
+								description="Pick a page from the list to edit its SEO."
+								icon={FileTextIcon}
+								title="No page selected"
+							/>
+						</div>
+					)
+				}
+			/>
 			{activeSchema ? (
 				<SchemaDialog onClose={() => setActiveSchema(null)} type={activeSchema} />
 			) : null}
-		</div>
+		</>
 	);
 }
 
 function SchemaDialog({ onClose, type }: { onClose: () => void; type: string }) {
-	const [schemaDetail, setSchemaDetail] = useState<SchemaDetail | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
-
-	useEffect(() => {
-		let alive = true;
-		setLoading(true);
-		setError(null);
-		setSchemaDetail(null);
-		fetchJson<SchemaDetail>(`/api/cms/schema?type=${encodeURIComponent(type)}`)
-			.then((json) => {
-				if (alive) setSchemaDetail(json);
-			})
-			.catch((e: unknown) => {
-				if (alive) setError(e instanceof Error ? e.message : String(e));
-			})
-			.finally(() => {
-				if (alive) setLoading(false);
-			});
-		return () => {
-			alive = false;
-		};
-	}, [type]);
+	const fetchSchema = useCallback(() => fetchJson<SchemaDetail>(cmsKeys.schema(type)), [type]);
+	const schemaQuery = useCachedFetch(cmsKeys.schema(type), fetchSchema, {
+		errorMessage: "Could not load schema",
+		toastOnBackgroundError: false,
+	});
+	const schemaDetail = schemaQuery.data;
 
 	return (
 		<Dialog onOpenChange={(open) => !open && onClose()} open>
@@ -652,14 +620,14 @@ function SchemaDialog({ onClose, type }: { onClose: () => void; type: string }) 
 						{schemaDetail?.sourceFile ?? "Schema markup encoded for this page"}
 					</DialogDescription>
 				</DialogHeader>
-				{loading ? (
+				{schemaQuery.isLoading ? (
 					<div className="grid gap-2">
 						<Skeleton className="h-6 w-full" />
 						<Skeleton className="h-40 w-full" />
 					</div>
-				) : error ? (
+				) : schemaQuery.error && !schemaDetail ? (
 					<Hint title="Could not load schema" variant="danger">
-						{error}
+						{schemaQuery.error}
 					</Hint>
 				) : schemaDetail ? (
 					<div className="grid gap-3">

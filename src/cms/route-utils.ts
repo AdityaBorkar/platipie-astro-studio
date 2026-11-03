@@ -21,6 +21,8 @@ export function routeFor(relativePath: string): { dynamic: boolean; route: strin
 
 export function titleFor(segments: string[], dynamic: boolean): string {
 	const last = segments.findLast(Boolean);
+	if (last === "404") return "404 Not Found";
+	if (last === "500") return "500 Server Error";
 	if (!last) return "Home";
 	if (dynamic) {
 		const parent = segments

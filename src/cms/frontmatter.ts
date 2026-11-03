@@ -5,18 +5,64 @@ export interface ParsedFile {
 	body: string;
 	hasFrontmatter: boolean;
 	rawFrontmatterText: string | null;
+	/**
+	 * True when the YAML block failed to parse. frontmatter is {} in that
+	 * case — callers must NOT treat it as real data (save paths throw 422).
+	 */
+	corrupt: boolean;
+	parseError: string | null;
+}
+
+export interface FrontmatterBounds {
+	end: number;
+	start: number;
+}
+
+// Byte offsets of the frontmatter body (between the `---` fences), or null
+// when the file has no frontmatter block. Single source for bounds so the
+// page editor and the generic parser cannot drift apart.
+export function frontmatterBounds(text: string): FrontmatterBounds | null {
+	if (!text.startsWith("---")) return null;
+	const firstLineEnd = text.indexOf("\n");
+	if (firstLineEnd === -1) return null;
+	const start = firstLineEnd + 1;
+	const rest = text.slice(start);
+	const closeOffset = rest.search(/^---[ \t]*\r?$/mu);
+	if (closeOffset === -1) return null;
+	return { end: start + closeOffset, start };
 }
 
 export function parseFileContent(text: string): ParsedFile {
 	if (!text.startsWith("---")) {
-		return { body: text, frontmatter: {}, hasFrontmatter: false, rawFrontmatterText: null };
+		return {
+			body: text,
+			corrupt: false,
+			frontmatter: {},
+			hasFrontmatter: false,
+			parseError: null,
+			rawFrontmatterText: null,
+		};
 	}
 	const nl = text.indexOf("\n");
 	if (nl === -1)
-		return { body: text, frontmatter: {}, hasFrontmatter: false, rawFrontmatterText: null };
+		return {
+			body: text,
+			corrupt: false,
+			frontmatter: {},
+			hasFrontmatter: false,
+			parseError: null,
+			rawFrontmatterText: null,
+		};
 	const lines = text.split("\n");
 	if (lines[0].trim() !== "---") {
-		return { body: text, frontmatter: {}, hasFrontmatter: false, rawFrontmatterText: null };
+		return {
+			body: text,
+			corrupt: false,
+			frontmatter: {},
+			hasFrontmatter: false,
+			parseError: null,
+			rawFrontmatterText: null,
+		};
 	}
 	let closeIdx = -1;
 	for (let i = 1; i < lines.length; i++) {
@@ -26,21 +72,39 @@ export function parseFileContent(text: string): ParsedFile {
 		}
 	}
 	if (closeIdx === -1) {
-		return { body: text, frontmatter: {}, hasFrontmatter: false, rawFrontmatterText: null };
+		return {
+			body: text,
+			corrupt: false,
+			frontmatter: {},
+			hasFrontmatter: false,
+			parseError: null,
+			rawFrontmatterText: null,
+		};
 	}
 	const rawYaml = lines.slice(1, closeIdx).join("\n");
 	let data: unknown = {};
+	let parseError: string | null = null;
 	try {
 		data = load(rawYaml) ?? {};
-	} catch {
+	} catch (e) {
+		// Never silently degrade to {}: a corrupt block must block saves so
+		// an unrelated edit cannot wipe the real frontmatter.
 		data = {};
+		parseError = e instanceof Error ? e.message : String(e);
 	}
 	const frontmatter = (typeof data === "object" && data !== null ? data : {}) as Record<
 		string,
 		unknown
 	>;
 	const body = lines.slice(closeIdx + 1).join("\n");
-	return { body, frontmatter, hasFrontmatter: true, rawFrontmatterText: rawYaml };
+	return {
+		body,
+		corrupt: parseError !== null,
+		frontmatter,
+		hasFrontmatter: true,
+		parseError,
+		rawFrontmatterText: rawYaml,
+	};
 }
 
 export function stringifyFileContent(

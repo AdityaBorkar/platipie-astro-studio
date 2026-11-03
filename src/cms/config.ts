@@ -17,18 +17,41 @@ export const ALLOWED_IMAGE_MIME = new Set([
 	"image/avif",
 ]);
 
-export const IMAGE_EXTS = new Set([
-	".png",
-	".jpg",
-	".jpeg",
-	".webp",
-	".gif",
-	".svg",
-	".avif",
-	".ico",
-]);
+// Single source for servable media types (extension -> MIME). The media API
+// route and the uploader derive from this instead of hand maps.
+export const MEDIA_TYPES: Record<string, string> = {
+	".avif": "image/avif",
+	".gif": "image/gif",
+	".ico": "image/x-icon",
+	".jpeg": "image/jpeg",
+	".jpg": "image/jpeg",
+	".mov": "video/quicktime",
+	".mp4": "video/mp4",
+	".ogv": "video/ogg",
+	".png": "image/png",
+	".svg": "image/svg+xml",
+	".webm": "video/webm",
+	".webp": "image/webp",
+};
+
+export const IMAGE_EXTS = new Set(
+	Object.entries(MEDIA_TYPES)
+		.filter(([, mime]) => ALLOWED_IMAGE_MIME.has(mime))
+		.map(([ext]) => ext),
+);
+
+let projectRootOverride: string | null = null;
+
+// Explicit override for the project jail (project switcher, sync CLI).
+// Prefer this over mutating process.env so switches stay scoped and testable.
+// Not safe for concurrent roots: the override is process-global. The server is
+// single-project, so concurrent roots never happen in production.
+export function setProjectRoot(root: string | null): void {
+	projectRootOverride = root ? path.resolve(root) : null;
+}
 
 export function getProjectRoot(): string {
+	if (projectRootOverride) return projectRootOverride;
 	const raw = process.env.PROJECT_PATH?.trim() || process.cwd();
 	return path.resolve(raw);
 }
@@ -114,10 +137,18 @@ export function toRepoRel(abs: string): string {
 
 export function envStatus() {
 	const projectRoot = getProjectRoot();
+	let port = DEFAULT_PORT;
+	let portValid = true;
+	try {
+		port = resolvePort();
+	} catch {
+		portValid = false;
+	}
 	return {
 		aiEnabled: isAiEnabled(),
 		astroUrl: getAstroUrl(),
-		port: getPort(),
+		port,
+		portValid,
 		projectReachable: existsSync(projectRoot),
 		trashTtlDays: getTrashTtlDays(),
 	};

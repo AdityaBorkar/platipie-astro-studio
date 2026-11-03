@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { CSSProperties, ElementType, ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "#/lib/utils";
 
@@ -8,12 +8,10 @@ interface RevealProps {
 	className?: string;
 	/** Stagger in milliseconds. Keep sequences under ~400ms. */
 	delay?: number;
-	as?: ElementType;
 }
 
-export function Reveal({ children, className, delay = 0, as }: RevealProps) {
-	const ref = useRef<HTMLElement | null>(null);
-	const Tag = (as ?? "div") as ElementType;
+export function Reveal({ children, className, delay = 0 }: RevealProps) {
+	const ref = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		const el = ref.current;
@@ -43,12 +41,12 @@ export function Reveal({ children, className, delay = 0, as }: RevealProps) {
 	}, []);
 
 	return (
-		<Tag
+		<div
 			className={cn("gb-reveal", className)}
 			ref={ref}
 			style={{ "--gb-reveal-delay": `${delay}ms` } as CSSProperties}
 		>
 			{children}
-		</Tag>
+		</div>
 	);
 }

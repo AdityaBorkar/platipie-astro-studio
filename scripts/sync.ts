@@ -1,7 +1,6 @@
-// Usage: bun scripts/sync.ts [--once] [--scope=<scope>] [--machine-stats=N] [--root=<path>] [--db=<path>]
+// Usage: bun scripts/sync.ts [--once] [--scope=<scope>] [--root=<path>] [--db=<path>]
 //   --once runs one sync then exits (default: watch); --scope needs --once.
-//   --machine-stats=N prints CPU/mem/disk every N seconds.
-import { runSyncCommand } from "#/cms/sync/command.ts";
+import { parseSyncArgs, runSyncCommand } from "#/cms/sync/command.ts";
 import { SYNC_SCOPES } from "#/cms/sync/index.ts";
 
 function usage(): void {
@@ -12,18 +11,9 @@ Usage:
 Options:
   --once               run one sync then exit (default: watch)
   --scope=<scope>      sync only one scope with --once (${SYNC_SCOPES.join("|")})
-  --machine-stats=N    print CPU / memory / disk usage every N seconds
   --root=<path>        override PROJECT_PATH for this run
   --db=<path>          override the SQLite file (CMS_DB_PATH)
   --help               show this help`);
-}
-
-function flagValue(name: string): string | null {
-	const prefix = `--${name}=`;
-	for (const arg of process.argv.slice(2)) {
-		if (arg.startsWith(prefix)) return arg.slice(prefix.length);
-	}
-	return null;
 }
 
 function hasFlag(name: string): boolean {
@@ -35,15 +25,13 @@ if (hasFlag("help")) {
 	process.exit(0);
 }
 
+const controller = new AbortController();
+process.once("SIGINT", () => controller.abort());
+process.once("SIGTERM", () => controller.abort());
+
 let code = 1;
 try {
-	code = await runSyncCommand({
-		db: flagValue("db") ?? undefined,
-		machineStats: flagValue("machine-stats") ?? undefined,
-		once: hasFlag("once"),
-		root: flagValue("root") ?? undefined,
-		scope: flagValue("scope") ?? undefined,
-	});
+	code = await runSyncCommand(parseSyncArgs(process.argv.slice(2)), controller.signal);
 } catch (error) {
 	console.error((error as Error).message ?? error);
 }

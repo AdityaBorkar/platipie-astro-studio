@@ -1,4 +1,5 @@
 // Stale-write → 409 unless force.
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -14,7 +15,9 @@ import {
 	clientsSchema,
 	mockupsSchema,
 	testimonialsSchema,
+	validateSlug,
 	type CollectionId,
+	type CreatableCollectionId,
 } from "./schemas.ts";
 
 export interface EntryRef {
@@ -53,6 +56,9 @@ export interface LoadedEntry {
 	hasFrontmatter: boolean;
 	readOnly: boolean;
 	readOnlyReason?: string;
+	/** True when the on-disk YAML block failed to parse (saves are blocked). */
+	corrupt: boolean;
+	parseError?: string;
 }
 
 export async function loadEntry(repoRel: string): Promise<LoadedEntry> {
@@ -60,51 +66,48 @@ export async function loadEntry(repoRel: string): Promise<LoadedEntry> {
 	let st;
 	try {
 		st = await fs.stat(abs);
-	} catch {
-		throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+	} catch (e) {
+		if (e instanceof CmsError) throw e;
+		// Only a missing file is a 404; every other stat failure must surface.
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+		}
+		throw e;
 	}
 	const collection = collectionForPath(repoRel);
-	if (repoRel.endsWith(".json")) {
-		const text = await fs.readFile(abs, "utf8");
-		return {
-			body: text,
-			frontmatter: {},
-			hasFrontmatter: false,
-			mtime: st.mtimeMs,
-			readOnly: st.size > LARGE_FILE_BYTES,
-			readOnlyReason: st.size > LARGE_FILE_BYTES ? "File >1 MB — read-only" : undefined,
-			ref: { collection, path: repoRel },
-		};
-	}
-	if (repoRel === "cms/constants.ts") {
-		const text = await fs.readFile(abs, "utf8");
-		return {
-			body: text,
-			frontmatter: {},
-			hasFrontmatter: false,
-			mtime: st.mtimeMs,
-			readOnly: st.size > LARGE_FILE_BYTES,
-			readOnlyReason: st.size > LARGE_FILE_BYTES ? "File >1 MB — read-only" : undefined,
-			ref: { collection, path: repoRel },
-		};
-	}
+	const readOnly = st.size > LARGE_FILE_BYTES;
+	const readOnlyReason = readOnly ? "File >1 MB — read-only" : undefined;
 	const text = await fs.readFile(abs, "utf8");
+	const ref = { collection, path: repoRel };
+	if (repoRel.endsWith(".json") || repoRel === "cms/constants.ts") {
+		return {
+			body: text,
+			corrupt: false,
+			frontmatter: {},
+			hasFrontmatter: false,
+			mtime: st.mtimeMs,
+			readOnly,
+			readOnlyReason,
+			ref,
+		};
+	}
 	const parsed = parseFileContent(text);
 	return {
 		body: parsed.body,
+		corrupt: parsed.corrupt,
 		frontmatter: parsed.frontmatter,
 		hasFrontmatter: parsed.hasFrontmatter,
 		mtime: st.mtimeMs,
-		readOnly: Buffer.byteLength(text, "utf8") > LARGE_FILE_BYTES,
-		readOnlyReason:
-			Buffer.byteLength(text, "utf8") > LARGE_FILE_BYTES
-				? "File >1 MB — opens read-only (§13)"
-				: undefined,
-		ref: { collection, path: repoRel },
+		parseError: parsed.parseError ?? undefined,
+		readOnly,
+		readOnlyReason,
+		ref,
 	};
 }
 
 export async function backupFile(abs: string): Promise<void> {
+	// Best-effort rotation only: concurrent writers are last-writer-wins and
+	// may interleave .bak rotation. Accepted: the CMS is single-user local.
 	try {
 		const text = await fs.readFile(abs, "utf8").catch(() => null);
 		if (text === null) return;
@@ -129,7 +132,8 @@ export async function backupFile(abs: string): Promise<void> {
 
 export async function atomicWrite(abs: string, content: string): Promise<void> {
 	await fs.mkdir(path.dirname(abs), { recursive: true });
-	const tmp = `${abs}.tmp-${process.pid}-${Date.now()}`;
+	// randomUUID suffix: pid+Date.now() collides for same-ms writes.
+	const tmp = `${abs}.tmp-${randomUUID()}`;
 	await fs.writeFile(tmp, content, "utf8");
 	await fs.rename(tmp, abs);
 }
@@ -195,8 +199,12 @@ export async function saveEntry(
 		}
 		oldParsed = parseFileContent(oldText);
 	} catch (e) {
-		if (e instanceof CmsError && e.code === "CONFLICT") throw e;
-		throw new CmsError("NOT_FOUND", `Not found: ${ref.path}`, { status: 404 });
+		if (e instanceof CmsError) throw e;
+		// Only a missing file is a 404; every other read/stat failure must surface.
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${ref.path}`, { status: 404 });
+		}
+		throw e;
 	}
 
 	if (ref.path.endsWith(".json")) {
@@ -271,6 +279,14 @@ async function saveMdEntry(
 ): Promise<SaveResult> {
 	const collection = collectionForPath(ref.path);
 	let warnings: string[] = [];
+	// A corrupt on-disk YAML block must block the save: oldCore would read as
+	// {} and the rewrite would wipe the real frontmatter on an unrelated edit.
+	if (oldParsed?.corrupt) {
+		throw new CmsError("VALIDATION", "Frontmatter YAML is corrupt — fix it before saving", {
+			fields: { frontmatter: oldParsed.parseError ?? "Unparsable YAML" },
+			status: 422,
+		});
+	}
 	if (collection === "projects" || collection === "blog") {
 		const errs = hardErrorsForFrontmatter(collection, payload.frontmatter);
 		if (Object.keys(errs).length > 0) {
@@ -334,9 +350,10 @@ export function slugToFilename(slug: string, ext = ".md"): string {
 	return `${slug}${ext}`;
 }
 
-export function validateNewSlug(slug: string): void {
-	if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(slug)) {
-		throw new CmsError("VALIDATION", "Slug must match ^[a-z0-9]+(?:-[a-z0-9]+)*$", {
+function assertValidSlug(slug: string): void {
+	const message = validateSlug(slug);
+	if (message) {
+		throw new CmsError("VALIDATION", message, {
 			fields: { slug: "Invalid slug" },
 			status: 400,
 		});
@@ -344,7 +361,7 @@ export function validateNewSlug(slug: string): void {
 }
 
 export async function createEntry(
-	collection: Extract<CollectionId, "projects" | "blog">,
+	collection: CreatableCollectionId,
 	slug: string,
 	opts?: {
 		fromTemplate?: boolean;
@@ -353,7 +370,7 @@ export async function createEntry(
 		ext?: ".md" | ".mdx";
 	},
 ): Promise<SaveResult> {
-	validateNewSlug(slug);
+	assertValidSlug(slug);
 	const ext = opts?.ext ?? ".md";
 	if (ext === ".mdx") {
 		// Caller surfaces the MDX loader warning.
@@ -369,17 +386,23 @@ export async function createEntry(
 		});
 	} catch (e) {
 		if (e instanceof CmsError) throw e;
-		// ENOENT → free to create.
+		// Only a missing file is free to create; every other stat failure
+		// (EACCES, ENOSPC, …) must surface.
+		if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") throw e;
 	}
 	let frontmatter: Record<string, unknown> = { status: "draft", title: slug };
 	let body = `\n# ${slug}\n`;
 	if (opts?.fromTemplate && collection === "projects") {
 		try {
+			// Canonical name first; the trailing-dot `-template.md.` variant is
+			// a legacy oddity kept as fallback only.
 			const tpl =
 				(await fs
-					.readFile(resolveRepoPath("cms/projects/-template.md."), "utf8")
+					.readFile(resolveRepoPath("cms/projects/-template.md"), "utf8")
 					.catch(() => null)) ??
-				(await fs.readFile(resolveRepoPath("cms/projects/-template.md"), "utf8").catch(() => null));
+				(await fs
+					.readFile(resolveRepoPath("cms/projects/-template.md."), "utf8")
+					.catch(() => null));
 			if (tpl) {
 				const p = parseFileContent(tpl);
 				frontmatter = { ...p.frontmatter, status: "draft", title: slug };
@@ -428,10 +451,18 @@ export async function duplicateEntry(repoRel: string): Promise<SaveResult> {
 		throw new CmsError("VALIDATION", `Copy target exists: ${copyRel}`, { status: 400 });
 	} catch (e) {
 		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") throw e;
 	}
-	const text = await fs.readFile(abs, "utf8").catch(() => {
-		throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
-	});
+	let text: string;
+	try {
+		text = await fs.readFile(abs, "utf8");
+	} catch (e) {
+		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+		}
+		throw e;
+	}
 	await atomicWrite(copyAbs, text);
 	const st = await fs.stat(copyAbs);
 	return {
@@ -447,7 +478,7 @@ export async function renameEntry(
 	oldRel: string,
 	newSlug: string,
 ): Promise<{ ok: true; path: string; mtime: number; warnings: string[] }> {
-	validateNewSlug(newSlug);
+	assertValidSlug(newSlug);
 	const parsed = path.parse(oldRel);
 	const dir = parsed.dir;
 	if (!dir.startsWith("cms/projects") && !dir.startsWith("cms/blog")) {
@@ -466,10 +497,17 @@ export async function renameEntry(
 		});
 	} catch (e) {
 		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") throw e;
 	}
-	await fs.stat(oldAbs).catch(() => {
-		throw new CmsError("NOT_FOUND", `Not found: ${oldRel}`, { status: 404 });
-	});
+	try {
+		await fs.stat(oldAbs);
+	} catch (e) {
+		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${oldRel}`, { status: 404 });
+		}
+		throw e;
+	}
 	await backupFile(oldAbs);
 	await fs.rename(oldAbs, newAbs);
 	const st = await fs.stat(newAbs);
@@ -492,11 +530,26 @@ export async function softDelete(
 	const ts = new Date().toISOString().replaceAll(/[:.]/gu, "-");
 	if (rowId && repoRel.endsWith(".json")) {
 		const abs = resolveRepoPath(repoRel);
-		const text = await fs.readFile(abs, "utf8").catch(() => {
-			throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
-		});
-		const arr = JSON.parse(text);
-		if (!Array.isArray(arr)) throw new CmsError("IO", "JSON is not an array", { status: 500 });
+		let text: string;
+		try {
+			text = await fs.readFile(abs, "utf8");
+		} catch (e) {
+			if (e instanceof CmsError) throw e;
+			if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+				throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+			}
+			throw e;
+		}
+		let arr: unknown;
+		try {
+			arr = JSON.parse(text);
+		} catch {
+			throw new CmsError("VALIDATION", "JSON is corrupt — fix the file before editing", {
+				status: 400,
+			});
+		}
+		if (!Array.isArray(arr))
+			throw new CmsError("VALIDATION", "JSON must be an array", { status: 400 });
 		const idx = arr.findIndex((r) => (r as { id?: unknown })?.id === rowId);
 		if (idx === -1) throw new CmsError("NOT_FOUND", `Row not found: ${rowId}`, { status: 404 });
 		const [removed] = arr.splice(idx, 1);
@@ -523,9 +576,15 @@ export async function softDelete(
 		return { ok: true, trashPath: envelopeRel };
 	}
 	const abs = resolveRepoPath(repoRel);
-	await fs.stat(abs).catch(() => {
-		throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
-	});
+	try {
+		await fs.stat(abs);
+	} catch (e) {
+		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${repoRel}`, { status: 404 });
+		}
+		throw e;
+	}
 	const destRel = `.cms-trash/${ts}/${repoRel}`;
 	const destAbs = resolveRepoPath(destRel);
 	await fs.mkdir(path.dirname(destAbs), { recursive: true });
@@ -571,11 +630,30 @@ export async function restoreTrash(trashPath: string): Promise<{ ok: true; path:
 		throw new CmsError("VALIDATION", "Not a trash path", { status: 400 });
 	const envelope = trashAbs.endsWith(".json") && trashPath.includes("#");
 	if (envelope) {
-		const data = JSON.parse(await fs.readFile(trashAbs, "utf8"));
+		let data: { path?: unknown; row?: unknown };
+		try {
+			data = JSON.parse(await fs.readFile(trashAbs, "utf8")) as {
+				path?: unknown;
+				row?: unknown;
+			};
+		} catch {
+			throw new CmsError("VALIDATION", "Trash envelope is corrupt", { status: 400 });
+		}
 		const origRel = data.path as string;
+		if (typeof origRel !== "string" || origRel.length === 0)
+			throw new CmsError("VALIDATION", "Trash envelope is corrupt", { status: 400 });
 		const abs = resolveRepoPath(origRel);
 		const text = await fs.readFile(abs, "utf8").catch(() => "[]");
-		const arr = JSON.parse(text);
+		let arr: unknown;
+		try {
+			arr = JSON.parse(text);
+		} catch {
+			throw new CmsError("VALIDATION", "Target JSON is corrupt — cannot restore row", {
+				status: 400,
+			});
+		}
+		if (!Array.isArray(arr))
+			throw new CmsError("VALIDATION", "Target JSON must be an array", { status: 400 });
 		arr.push(data.row);
 		await atomicWrite(abs, JSON.stringify(arr, null, 2) + "\n");
 		await fs.rm(trashAbs, { force: true });
@@ -595,6 +673,7 @@ export async function restoreTrash(trashPath: string): Promise<{ ok: true; path:
 		throw new CmsError("CONFLICT", `Restore target exists: ${origRel}`, { status: 409 });
 	} catch (e) {
 		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") throw e;
 	}
 	await fs.mkdir(path.dirname(destAbs), { recursive: true });
 	await fs.rename(trashAbs, destAbs);

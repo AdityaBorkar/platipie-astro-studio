@@ -28,7 +28,9 @@ export const requestLogMiddleware = cmsBase.middleware(async ({ context, next, p
 	try {
 		return await next();
 	} finally {
-		console.debug(`[orpc] ${context.requestId} ${path.join("/")} ${Date.now() - start}ms`);
+		if (process.env.DEBUG) {
+			console.debug(`[orpc] ${context.requestId} ${path.join("/")} ${Date.now() - start}ms`);
+		}
 	}
 });
 
@@ -46,11 +48,9 @@ const AI_WINDOW_MS = 60_000;
 
 export const aiRateLimitMiddleware = cmsBase.middleware(({ context, next }) => {
 	const now = Date.now();
-	// Sweep expired entries or leak one per distinct IP forever.
-	if (aiBucket.size > 500) {
-		for (const [ip, entry] of aiBucket) {
-			if (now > entry.resetAt) aiBucket.delete(ip);
-		}
+	// Sweep expired buckets on every request so one IP per request cannot leak memory.
+	for (const [ip, entry] of aiBucket) {
+		if (now > entry.resetAt) aiBucket.delete(ip);
 	}
 	const current = aiBucket.get(context.ip);
 	if (!current || now > current.resetAt) {

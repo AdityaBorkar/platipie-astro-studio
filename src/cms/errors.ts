@@ -59,9 +59,15 @@ export function toErrorPayload(e: unknown): {
 	return { code: "IO", message, status: 500 };
 }
 
-/** Redact `sk-...` secrets so error messages never leak the AI key. */
+/** Redact secrets so error messages never leak the AI key or tokens. */
 export function sanitizeErrorMessage(message: string): string {
-	return message.replaceAll(/sk-[A-Za-z0-9-_]+/gu, "[redacted]");
+	return message
+		.replaceAll(/sk-[A-Za-z0-9-_]+/gu, "[redacted]")
+		.replaceAll(/("?authorization"?\s*[:=]\s*)(bearer\s+)?[^\s",;]+/giu, "$1[redacted]")
+		.replaceAll(
+			/["']?(api[_-]?key|access[_-]?token|secret)["']?\s*[:=]\s*["']?[^"',\s;}]+["']?/giu,
+			"[redacted]",
+		);
 }
 
 export function jsonError(e: unknown): Response {

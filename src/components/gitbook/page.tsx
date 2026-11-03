@@ -1,3 +1,4 @@
+import { RefreshCwIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -10,25 +11,30 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
+import { formatRelativeAge } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
-function relativeAge(timestamp: number): string {
-	const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-	if (seconds < 60) return "just now";
-	const minutes = Math.round(seconds / 60);
-	if (minutes < 60) return `${minutes}m ago`;
-	const hours = Math.round(minutes / 60);
-	if (hours < 24) return `${hours}h ago`;
-	return `${Math.round(hours / 24)}d ago`;
-}
-
+/**
+ * Unified freshness badge. Pass `lastSync` for the synced timestamp view;
+ * pass `refreshing` for the transient updating view (LiveBadge behaviour).
+ */
 export function SyncBadge({
 	className,
 	lastSync,
+	refreshing = false,
 }: {
 	className?: string;
 	lastSync: number | null;
+	refreshing?: boolean;
 }) {
+	if (refreshing && lastSync === null) {
+		return (
+			<Badge aria-live="polite" className={cn("font-mono", className)} variant="outline">
+				<RefreshCwIcon className="size-3 animate-spin" />
+				Updating…
+			</Badge>
+		);
+	}
 	const exact = lastSync ? new Date(lastSync).toLocaleString() : "Not synced yet";
 	return (
 		<Badge
@@ -37,7 +43,7 @@ export function SyncBadge({
 			title={exact}
 			variant={lastSync ? "success" : "destructive"}
 		>
-			{lastSync ? `synced ${relativeAge(lastSync)}` : "never synced"}
+			{lastSync ? `synced ${formatRelativeAge(lastSync)}` : "never synced"}
 		</Badge>
 	);
 }
@@ -48,7 +54,9 @@ export function PageShell({ children, className }: { children: ReactNode; classN
 
 interface PageHeaderProps {
 	actions?: ReactNode;
+	as?: "h1" | "h2";
 	className?: string;
+	compact?: boolean;
 	description?: ReactNode;
 	eyebrow: string;
 	meta?: ReactNode;
@@ -57,25 +65,45 @@ interface PageHeaderProps {
 
 export function PageHeader({
 	actions,
+	as = "h1",
 	className,
+	compact = false,
 	description,
 	eyebrow,
 	meta,
 	title,
 }: PageHeaderProps) {
+	const TitleTag = as;
 	return (
 		<>
 			<header
-				className={cn("animate-rise flex flex-wrap items-end justify-between gap-5", className)}
+				className={cn(
+					compact
+						? "flex flex-wrap items-end justify-between gap-3"
+						: "animate-rise flex flex-wrap items-end justify-between gap-5",
+					className,
+				)}
 			>
-				<div className="max-w-2xl min-w-0">
+				<div className={compact ? "max-w-2xl" : "max-w-2xl min-w-0"}>
 					<p className="text-11 font-bold tracking-14 text-brand uppercase">{eyebrow}</p>
-					<h1 className="gb-display mt-2 text-3xl sm:text-display-sm">{title}</h1>
-					{description ? <p className="gb-sub mt-3 max-w-xl text-base">{description}</p> : null}
+					{as === "h1" ? (
+						<TitleTag className="gb-display mt-2 text-3xl sm:text-display-sm">{title}</TitleTag>
+					) : (
+						<TitleTag className="mt-2 text-title font-bold tracking-heading">{title}</TitleTag>
+					)}
+					{description ? (
+						compact ? (
+							<p className="mt-1 text-sm text-muted-foreground">{description}</p>
+						) : (
+							<p className="gb-sub mt-3 max-w-xl text-base">{description}</p>
+						)
+					) : null}
 				</div>
 				{actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
 			</header>
-			{meta ? <div className="mt-5 flex flex-wrap items-center gap-1.5">{meta}</div> : null}
+			{meta && !compact ? (
+				<div className="mt-5 flex flex-wrap items-center gap-1.5">{meta}</div>
+			) : null}
 		</>
 	);
 }
@@ -88,6 +116,7 @@ interface SectionHeaderProps {
 	title: ReactNode;
 }
 
+/** Compact section header. Prefer PageHeader with as="h2" for new code. */
 export function SectionHeader({
 	actions,
 	className,
@@ -96,14 +125,15 @@ export function SectionHeader({
 	title,
 }: SectionHeaderProps) {
 	return (
-		<div className={cn("flex flex-wrap items-end justify-between gap-3", className)}>
-			<div className="max-w-2xl">
-				<p className="text-11 font-bold tracking-14 text-brand uppercase">{eyebrow}</p>
-				<h2 className="mt-2 text-title font-bold tracking-heading">{title}</h2>
-				{description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
-			</div>
-			{actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-		</div>
+		<PageHeader
+			actions={actions}
+			as="h2"
+			className={className}
+			compact
+			description={description}
+			eyebrow={eyebrow}
+			title={title}
+		/>
 	);
 }
 
@@ -116,6 +146,7 @@ interface EmptyStateProps {
 	title: string;
 }
 
+/** Thin wrapper over Empty. Prefer Empty directly for new code. */
 export function EmptyState({
 	action,
 	className,
@@ -126,10 +157,8 @@ export function EmptyState({
 }: EmptyStateProps) {
 	return (
 		<Empty
-			className={cn(
-				compact ? "border-0 bg-transparent px-4 py-8" : "border-border/80 bg-muted/20",
-				className,
-			)}
+			className={cn(compact ? "border-0 bg-transparent px-4 py-8" : undefined, className)}
+			variant={compact ? "default" : "muted"}
 		>
 			<EmptyHeader>
 				{Icon ? (

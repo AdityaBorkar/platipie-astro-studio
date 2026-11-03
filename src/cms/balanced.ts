@@ -101,7 +101,40 @@ export function stripTypeSuffix(raw: string): string {
 }
 
 export function stripComments(body: string): string {
-	return body.replaceAll(/\/\*[\s\S]*?\*\//gu, "").replaceAll(/\/\/[^\n]*/gu, "");
+	let out = "";
+	let instr: string | null = null;
+	let escaped = false;
+	let i = 0;
+	while (i < body.length) {
+		const ch = body[i];
+		if (instr) {
+			out += ch;
+			if (escaped) escaped = false;
+			else if (ch === "\\") escaped = true;
+			else if (ch === instr) instr = null;
+			i++;
+			continue;
+		}
+		if (ch === '"' || ch === "'" || ch === "`") {
+			instr = ch;
+			out += ch;
+			i++;
+			continue;
+		}
+		if (ch === "/" && body[i + 1] === "/") {
+			while (i < body.length && body[i] !== "\n") i++;
+			continue;
+		}
+		if (ch === "/" && body[i + 1] === "*") {
+			i += 2;
+			while (i < body.length && !(body[i] === "*" && body[i + 1] === "/")) i++;
+			i += 2;
+			continue;
+		}
+		out += ch;
+		i++;
+	}
+	return out;
 }
 
 export function arrayBody(raw: string): string | null {
@@ -117,8 +150,10 @@ export function topLevelKeys(body: string): string[] {
 	let instr: string | null = null;
 	let segment = "";
 	const flush = () => {
-		const match = /^\s*([A-Za-z_$][\w$]*)\s*:/u.exec(segment);
-		if (match?.[1] && !keys.includes(match[1])) keys.push(match[1]);
+		// Quoted keys included: shared with schema-detail JSON-LD parsing.
+		const match = /^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*))\s*:/u.exec(segment);
+		const key = match?.[1] ?? match?.[2] ?? match?.[3];
+		if (key && !keys.includes(key)) keys.push(key);
 		segment = "";
 	};
 	for (const ch of body) {
@@ -174,4 +209,9 @@ export function topLevelListItems(body: string): string[] {
 	}
 	flush();
 	return items;
+}
+
+// Escape user-controlled text before interpolating into a RegExp.
+export function escapeRegExp(value: string): string {
+	return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

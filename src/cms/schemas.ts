@@ -97,6 +97,11 @@ export const COLLECTION_IDS: CollectionId[] = [
 	"settings",
 ];
 
+// Single source for collections that support entry creation (md file-per-entry).
+export const CREATABLE_COLLECTION_IDS = ["blog", "projects"] as const;
+
+export type CreatableCollectionId = (typeof CREATABLE_COLLECTION_IDS)[number];
+
 export function validateSlug(slug: string): string | null {
 	if (!SLUG_RE.test(slug)) return "Slug must match ^[a-z0-9]+(?:-[a-z0-9]+)*$";
 	return null;

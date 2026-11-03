@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { COLLECTION_IDS, SLUG_RE } from "#/cms/schemas.ts";
+import { COLLECTION_IDS, CREATABLE_COLLECTION_IDS, SLUG_RE } from "#/cms/schemas.ts";
 import { SYNC_SCOPES } from "#/cms/sync/index.ts";
 
 export const slugSchema = z
@@ -30,7 +30,7 @@ export const entriesListSchema = z.object({
 
 export const entriesCreateSchema = z.object({
 	body: z.string().max(1_048_576).optional(),
-	collection: z.enum(["blog", "projects"]),
+	collection: z.enum(CREATABLE_COLLECTION_IDS),
 	ext: z.enum([".md", ".mdx"]).optional(),
 	fromTemplate: z.boolean().optional(),
 	frontmatter: frontmatterSchema.optional(),
@@ -108,13 +108,35 @@ export const syncRunSchema = z.object({
 	scope: syncScopeSchema.optional(),
 });
 
+const INVENTORY_SCOPES = [...SYNC_SCOPES, "all"] as const;
+
 export const inventoryGetSchema = z.object({
-	scope: z.string().min(1).max(200).optional(),
+	// Comma-separated `?scope=pages,assets` (or "all") is split before validation,
+	// so the router never needs manual scope checks or casts.
+	scope: z
+		.preprocess(
+			(value) => {
+				if (value === undefined || value === null) return;
+				const list = Array.isArray(value) ? value : [value];
+				const scopes = list
+					.flatMap((entry) => String(entry).split(","))
+					.map((entry) => entry.trim())
+					.filter((entry) => entry.length > 0);
+				if (scopes.length === 0) return;
+				return scopes;
+			},
+			z.array(z.enum(INVENTORY_SCOPES)).optional(),
+		)
+		.optional(),
 });
 
 export const diffGetSchema = z.object({
 	path: repoPathSchema,
-	rev: z.string().min(1).max(60).optional(),
+	rev: z
+		.string()
+		.regex(/^(bak|\d+)$/u, "rev must be 'bak' or a numeric revision")
+		.max(60)
+		.optional(),
 });
 
 export const duplicateSchema = z.object({

@@ -3,7 +3,9 @@ import path from "node:path";
 
 import { getProjectRoot, resolveRepoPath } from "./config.ts";
 import { parseFileContent } from "./frontmatter.ts";
+import { mapChunked } from "./fs-walk.ts";
 import type { CollectionId } from "./schemas.ts";
+import { listSitePages } from "./workspace.ts";
 
 export interface CollectionMeta {
 	id: CollectionId;
@@ -40,35 +42,37 @@ async function listMdDir(dirRel: string, collection: CollectionId): Promise<Entr
 	let names: string[];
 	try {
 		names = await fs.readdir(dir);
-	} catch {
-		return [];
+	} catch (e) {
+		// Only a missing dir is empty; EACCES/ENOSPC must surface.
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+		throw e;
 	}
 	const candidates = names
 		.toSorted()
 		.filter((name) => !isTemplateName(name) && (name.endsWith(".md") || name.endsWith(".mdx")));
-	// Small collections: concurrent stat+read is safe; Promise.all keeps sorted order.
-	const rows = await Promise.all(
-		candidates.map(async (name): Promise<EntrySummary | null> => {
-			const abs = path.join(dir, name);
-			let st: { mtimeMs: number; isFile(): boolean };
-			try {
-				st = await fs.stat(abs);
-				if (!st.isFile()) return null;
-			} catch {
-				return null;
-			}
-			const id = name.replace(/\.(md|mdx)$/u, "");
-			let title: string | undefined;
-			try {
-				const text = await fs.readFile(abs, "utf8");
-				const parsed = parseFileContent(text);
-				title = typeof parsed.frontmatter.title === "string" ? parsed.frontmatter.title : id;
-			} catch {
-				title = id;
-			}
-			return { collection, id, mtime: st.mtimeMs, path: `${dirRel}/${name}`, title };
-		}),
-	);
+	// Bounded parallelism: 5k-file dirs must not exhaust fds (see fs-walk mapChunked).
+	const rows = await mapChunked(candidates, async (name): Promise<EntrySummary | null> => {
+		const abs = path.join(dir, name);
+		let st: { mtimeMs: number; isFile(): boolean };
+		try {
+			st = await fs.stat(abs);
+			if (!st.isFile()) return null;
+		} catch (e) {
+			if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+			console.warn(`[collections] stat failed for ${abs}: ${(e as Error).message}`);
+			return null;
+		}
+		const id = name.replace(/\.(md|mdx)$/u, "");
+		let title: string | undefined;
+		try {
+			const text = await fs.readFile(abs, "utf8");
+			const parsed = parseFileContent(text);
+			title = typeof parsed.frontmatter.title === "string" ? parsed.frontmatter.title : id;
+		} catch {
+			title = id;
+		}
+		return { collection, id, mtime: st.mtimeMs, path: `${dirRel}/${name}`, title };
+	});
 	return rows.filter((row): row is EntrySummary => row !== null);
 }
 
@@ -84,38 +88,26 @@ async function listJsonRows(fileRel: string, collection: CollectionId): Promise<
 			const id = typeof r.id === "string" ? r.id : String(i);
 			return { collection, id, mtime: st.mtimeMs, path: `${fileRel}#${id}`, title: id };
 		});
-	} catch {
-		return [];
+	} catch (e) {
+		// Only a missing file is empty; corrupt JSON / EACCES must surface.
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+		throw e;
 	}
 }
 
 async function listLegal(): Promise<EntrySummary[]> {
-	const dir = resolveRepoPath("src/pages/legal");
-	let names: string[] = [];
-	try {
-		names = await fs.readdir(dir);
-	} catch {
-		return [];
-	}
-	const out: EntrySummary[] = [];
-	for (const name of names.toSorted()) {
-		if (!name.endsWith(".mdx")) continue;
-		const abs = path.join(dir, name);
-		try {
-			const st = await fs.stat(abs);
-			if (!st.isFile()) continue;
-			out.push({
-				collection: "legal",
-				id: name.replace(/\.mdx$/u, ""),
-				mtime: st.mtimeMs,
-				path: `src/pages/legal/${name}`,
-				title: name,
-			});
-		} catch {
-			continue;
-		}
-	}
-	return out;
+	// Maps over the single listSitePages enumerator instead of re-walking legal/.
+	const sitePages = await listSitePages(getProjectRoot()).catch(() => []);
+	return sitePages
+		.filter((page) => page.path.startsWith("src/pages/legal/") && page.path.endsWith(".mdx"))
+		.map((page) => ({
+			collection: "legal" as const,
+			id: path.basename(page.path, ".mdx"),
+			mtime: page.mtime,
+			path: page.path,
+			title: path.basename(page.path),
+		}))
+		.toSorted((a, b) => a.id.localeCompare(b.id));
 }
 
 async function listSettings(): Promise<EntrySummary[]> {
@@ -130,8 +122,9 @@ async function listSettings(): Promise<EntrySummary[]> {
 				title: "Site constants",
 			},
 		];
-	} catch {
-		return [];
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+		throw e;
 	}
 }
 
@@ -152,9 +145,7 @@ export function listEntries(collection: CollectionId): Promise<EntrySummary[]> {
 
 export async function collectionCounts(): Promise<Record<CollectionId, number>> {
 	const ids = COLLECTIONS.map((meta) => meta.id);
-	const counts = await Promise.all(
-		ids.map(async (id) => [id, (await listEntries(id)).length] as const),
-	);
+	const counts = await mapChunked(ids, async (id) => [id, (await listEntries(id)).length] as const);
 	return Object.fromEntries(counts) as Record<CollectionId, number>;
 }
 
@@ -180,11 +171,15 @@ export async function driftWarnings(): Promise<DriftWarning[]> {
 				message: "testimonials.json has `project` key missing from Zod schema",
 			});
 		}
-	} catch {
-		/* ignore */
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException)?.code !== "ENOENT")
+			console.warn(`[drift] testimonials check: ${(e as Error).message}`);
 	}
 	try {
-		const names = await fs.readdir(resolveRepoPath("cms/projects")).catch(() => [] as string[]);
+		const names = await fs.readdir(resolveRepoPath("cms/projects")).catch((e: unknown) => {
+			if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [] as string[];
+			throw e;
+		});
 		const odd = names.filter((n) => n.startsWith("-template"));
 		if (odd.length > 0) {
 			out.push({
@@ -193,8 +188,8 @@ export async function driftWarnings(): Promise<DriftWarning[]> {
 				message: `Found template file(s): ${odd.join(", ")} — hidden from lists`,
 			});
 		}
-	} catch {
-		/* ignore */
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") throw e;
 	}
 	try {
 		const candidates = ["src/pages/blog", "src/pages/writings", "src/pages/craft"];
@@ -207,8 +202,8 @@ export async function driftWarnings(): Promise<DriftWarning[]> {
 					"No blog/writings/craft route renders cms/blog/ (NAV links have no matching pages)",
 			});
 		}
-	} catch {
-		/* ignore */
+	} catch (e) {
+		console.warn(`[drift] blog-route check: ${(e as Error).message}`);
 	}
 	return out;
 }

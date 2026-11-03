@@ -2,24 +2,12 @@ import { Editor } from "@monaco-editor/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
-import {
-	ArrowLeftIcon,
-	CircleCheckIcon,
-	CircleXIcon,
-	CopyIcon,
-	FileTextIcon,
-	HistoryIcon,
-	SaveIcon,
-	SparklesIcon,
-	Trash2Icon,
-	TriangleAlertIcon,
-} from "lucide-react";
-import { marked } from "marked";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeftIcon, CopyIcon, HistoryIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Hint } from "#/components/gitbook/hint";
-import { EmptyState, PageHeader, PageShell } from "#/components/gitbook/page";
+import { PageHeader, PageShell } from "#/components/gitbook/page";
 import { LiveBadge } from "#/components/live-badge";
 import {
 	AlertDialog,
@@ -33,80 +21,113 @@ import {
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
-import { Checkbox } from "#/components/ui/checkbox";
-import { Field, FieldError, FieldGroup, FieldLabel } from "#/components/ui/field";
+import { Field, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "#/components/ui/input-group";
 import { ScrollArea } from "#/components/ui/scroll-area";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "#/components/ui/select";
-import { Separator } from "#/components/ui/separator";
 import { Skeleton } from "#/components/ui/skeleton";
-import { Spinner } from "#/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
-import { Textarea } from "#/components/ui/textarea";
 import { fetchJson, useCachedFetch } from "#/hooks/use-cached-fetch";
 import { useTheme } from "#/hooks/use-theme";
+import { cmsKeys } from "./cms-keys";
+import { FaithfulPreview } from "./edit/faithful-preview";
+import { FrontmatterForm } from "./edit/frontmatter-form";
+import type { Frontmatter, MediaItem } from "./edit/helpers";
+import {
+	deleteEntry,
+	duplicateEntry,
+	fetchEntryDiff,
+	parseEntryRef,
+	putEntry,
+	renameEntry,
+	slugStem,
+} from "./edit/helpers";
+import { JsonTableEditor } from "./edit/json-table-editor";
+import type { JsonRow } from "./edit/json-table-editor";
+import { SeoPane } from "./edit/seo-pane";
+import type { SeoResponse } from "./edit/seo-pane";
+import { formatMtimeTime } from "./format-mtime";
+import { markdownToSafeHtml } from "./markdown";
 
 export const Route = createFileRoute("/edit/$collection/$id")({
 	component: UnifiedEditor,
 	head: ({ params }) => ({ meta: [{ title: `${params.id} · platipie-cms` }] }),
-	validateSearch: (s: Record<string, unknown>) => ({ path: (s.path as string) ?? "" }),
+	validateSearch: (s: Record<string, unknown>) => ({
+		path:
+			typeof s.path === "string" ? s.path : Array.isArray(s.path) ? String(s.path[0] ?? "") : "",
+	}),
 });
 
 interface Loaded {
-	ref: { collection: string; path: string };
-	frontmatter: Record<string, unknown>;
 	body: string;
-	mtime: number;
+	frontmatter: Frontmatter;
 	hasFrontmatter: boolean;
+	mtime: number;
 	readOnly?: boolean;
+	ref: { collection: string; path: string };
 }
 
 const WP_FIELDS = new Set([
-	"title",
+	"author",
+	"benefits",
+	"canonicalUrl",
+	"categories",
+	"date",
 	"description",
 	"excerpt",
-	"status",
-	"publishDate",
-	"date",
-	"modifiedDate",
-	"author",
-	"categories",
-	"tags",
 	"featuredImage",
+	"filter_category",
 	"hero_image",
-	"canonicalUrl",
-	"metaTitle",
-	"metaDescription",
+	"hero_tag",
+	"index",
 	"keywords",
+	"links",
+	"metaDescription",
+	"metaTitle",
+	"modifiedDate",
+	"nofollow",
+	"noindex",
 	"ogImage",
 	"ogType",
-	"twitterCard",
-	"noindex",
-	"nofollow",
-	"schemaType",
+	"publishDate",
 	"schemaFields",
-	"hero_tag",
-	"filter_category",
-	"links",
-	"benefits",
+	"schemaType",
+	"status",
+	"tags",
 	"timeline",
+	"twitterCard",
 	"year",
-	"index",
 ]);
 
+function safeDecodeOnce(value: string): string {
+	// TanStack already decodes search/params; decoding again corrupts literal
+	// `%` and throws on malformed input. Only decode when a `%` escape is
+	// present, and never throw.
+	if (!value.includes("%")) return value;
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return value;
+	}
+}
+
 function useQueryPath(): string {
-	const search = Route.useSearch() as { path?: string };
-	const params = Route.useParams() as { collection: string; id: string };
-	if (search.path) return decodeURIComponent(search.path);
+	const search = Route.useSearch() as { path?: unknown };
+	const params = Route.useParams() as { collection: string; id: string | string[] };
+	const rawPath =
+		typeof search.path === "string"
+			? search.path
+			: Array.isArray(search.path)
+				? String(search.path[0] ?? "")
+				: "";
+	// validateSearch is the primary selector; search.path arrives decoded, so
+	// only strip a stray single encoding instead of blind-decoding.
+	if (rawPath) return safeDecodeOnce(rawPath);
 	const coll = params.collection;
-	const id = decodeURIComponent(params.id);
+	const rawId = Array.isArray(params.id) ? String(params.id[0] ?? "") : params.id;
+	const id = safeDecodeOnce(rawId);
+	// Backend path mapping duplicated here for instant (no-index-fetch)
+	// resolution; mirrors the collections endpoint. Prefer an index lookup
+	// once loaded, but keep this synchronous fallback for first paint.
 	if (coll === "projects" || coll === "blog") return `cms/${coll}/${id}.md`;
 	if (coll === "legal") return `src/pages/legal/${id}.mdx`;
 	if (coll === "settings") return `cms/constants.ts`;
@@ -115,8 +136,9 @@ function useQueryPath(): string {
 
 function UnifiedEditor() {
 	const filePath = useQueryPath();
+	const navigate = Route.useNavigate();
 	const { resolved } = useTheme();
-	const [fm, setFm] = useState<Record<string, unknown>>({});
+	const [fm, setFm] = useState<Frontmatter>({});
 	const [body, setBody] = useState("");
 	const [mode, setMode] = useState<"markdown" | "visual">("markdown");
 	const [mtime, setMtime] = useState(0);
@@ -128,17 +150,16 @@ function UnifiedEditor() {
 	const [aiBusy, setAiBusy] = useState(false);
 	const [aiDraft, setAiDraft] = useState<string | null>(null);
 	const [deleteOpen, setDeleteOpen] = useState(false);
-	const [editorKey, setEditorKey] = useState<string | null>(null);
+	const appliedRef = useRef<string | null>(null);
 
-	const isJsonFile = filePath.endsWith(".json");
-	const [jsonRows, setJsonRows] = useState<any[]>([]);
+	const { fp, rowFrag } = parseEntryRef(filePath);
+	const isJsonFile = fp.endsWith(".json");
+	const [jsonRows, setJsonRows] = useState<JsonRow[]>([]);
 	const [jsonRowId, setJsonRowId] = useState<string | null>(null);
 	const [slugEdit, setSlugEdit] = useState("");
 
-	const [fp] = filePath.split("#");
-	const rowFrag = filePath.includes("#") ? filePath.split("#")[1] : null;
-	const entryKey = `/api/cms/entry?path=${encodeURIComponent(fp)}`;
-	const fetchEntry = useCallback(() => fetchJson<Loaded>(entryKey), [entryKey]);
+	const entryKey = cmsKeys.entry(fp);
+	const fetchEntry = useCallback(() => fetchJson<Loaded>(cmsKeys.entry(fp)), [fp]);
 	const entryQuery = useCachedFetch(entryKey, fetchEntry, {
 		errorMessage: "Could not refresh entry",
 	});
@@ -147,19 +168,16 @@ function UnifiedEditor() {
 	const entryRefreshing = loaded !== null && entryQuery.isRefreshing;
 
 	const isMarkdown = fp.endsWith(".md") || fp.endsWith(".mdx");
-	const seoKey = `/api/cms/seo?path=${encodeURIComponent(fp)}`;
-	const fetchSeo = useCallback(() => fetchJson<any>(seoKey), [seoKey]);
+	const seoKey = cmsKeys.seo(fp);
+	const fetchSeo = useCallback(() => fetchJson<SeoResponse>(cmsKeys.seo(fp)), [fp]);
 	const seoQuery = useCachedFetch(seoKey, fetchSeo, {
 		enabled: isMarkdown,
 		toastOnBackgroundError: false,
 	});
 	const seo = seoQuery.data;
 
-	const fetchMedia = useCallback(
-		() => fetchJson<{ media: { path: string }[] }>("/api/cms/media"),
-		[],
-	);
-	const mediaQuery = useCachedFetch("/api/cms/media", fetchMedia, {
+	const fetchMedia = useCallback(() => fetchJson<{ media: MediaItem[] }>(cmsKeys.media), []);
+	const mediaQuery = useCachedFetch(cmsKeys.media, fetchMedia, {
 		toastOnBackgroundError: false,
 	});
 	const media = mediaQuery.data?.media ?? [];
@@ -174,102 +192,66 @@ function UnifiedEditor() {
 
 	useEffect(() => {
 		if (!loaded) return;
-		if (editorKey === loaded.ref.path) return;
-		setEditorKey(loaded.ref.path);
+		if (appliedRef.current === loaded.ref.path) return;
+		appliedRef.current = loaded.ref.path;
 		setErr(null);
 		setMsg(null);
 		setFm(loaded.frontmatter ?? {});
 		setBody(loaded.body ?? "");
 		setMtime(loaded.mtime);
-		const stem =
-			fp
-				.split("/")
-				.pop()
-				?.replace(/\.(md|mdx|json|ts)$/u, "") ?? "";
-		setSlugEdit(stem);
+		setSlugEdit(slugStem(fp));
 		if (fp.endsWith(".json")) {
 			try {
-				const arr = JSON.parse(loaded.body ?? "[]");
-				setJsonRows(Array.isArray(arr) ? arr : []);
+				const arr: unknown = JSON.parse(loaded.body ?? "[]");
+				setJsonRows(Array.isArray(arr) ? (arr as JsonRow[]) : []);
 				setJsonRowId(rowFrag);
 			} catch {
 				setJsonRows([]);
 			}
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [fp, loaded]);
+	}, [fp, loaded, rowFrag]);
 
 	const unknownKeys = useMemo(() => Object.keys(fm).filter((k) => !WP_FIELDS.has(k)), [fm]);
-	const previewHtml = useMemo(() => {
-		try {
-			return marked.parse(body ?? "") as string;
-		} catch {
-			return `<pre>${(body ?? "").slice(0, 2000)}</pre>`;
-		}
-	}, [body]);
+	const previewHtml = useMemo(() => markdownToSafeHtml(body), [body]);
 
+	// Visual mode is a read-only preview: TipTap never writes back into the
+	// canonical Markdown body, so MDX/JSX round-trips stay lossless.
 	const tiptap = useEditor(
 		{
-			content: `<p>${(body ?? "").slice(0, 2000).replaceAll("<", "&lt;")}</p>`,
+			content: "",
+			editable: false,
 			extensions: [StarterKit],
-			onUpdate: ({ editor }) => {
-				// HTML->markdown is lossy; full fidelity lives in Markdown mode.
-				setBody(editor.getText());
-			},
 		},
 		[loaded?.ref.path],
 	);
+
+	useEffect(() => {
+		if (mode === "visual" && tiptap && !tiptap.isDestroyed) {
+			tiptap.commands.setContent(markdownToSafeHtml(body));
+		}
+	}, [body, mode, tiptap]);
 
 	async function save(force = false) {
 		setErr(null);
 		setMsg(null);
 		setFieldErrors({});
 		try {
-			if (isJsonFile) {
-				const text = JSON.stringify(jsonRows, null, 2) + "\n";
-				const j = await fetchJson<{
-					diff?: string;
-					mtime: number;
-					path: string;
-					warnings?: string[];
-				}>("/api/cms/entry", {
-					body: JSON.stringify({
-						force,
-						payload: { body: text, frontmatter: {}, mtime },
-						ref: { collection: loaded?.ref.collection, path: fp },
-					}),
-					headers: { "Content-Type": "application/json" },
-					method: "PUT",
-				});
-				setMtime(j.mtime);
-				setDiff(j.diff ?? "");
-				setWarnings(j.warnings ?? []);
-				setMsg(`Saved ${j.path}`);
-				toast.success(`Saved ${j.path}`);
-				entryQuery.refresh();
-				return;
-			}
-			const j = await fetchJson<{
-				diff?: string;
-				mtime: number;
-				path: string;
-				warnings?: string[];
-			}>("/api/cms/entry", {
-				body: JSON.stringify({
-					force,
-					payload: { body, frontmatter: fm, mtime },
-					ref: { collection: loaded?.ref.collection, path: fp },
-				}),
-				headers: { "Content-Type": "application/json" },
-				method: "PUT",
+			const text = isJsonFile ? `${JSON.stringify(jsonRows, null, 2)}\n` : body;
+			const j = await putEntry({
+				body: text,
+				collection: loaded?.ref.collection,
+				force,
+				fp,
+				frontmatter: isJsonFile ? {} : fm,
+				mtime,
 			});
 			setMtime(j.mtime);
 			setDiff(j.diff ?? "");
 			setWarnings(j.warnings ?? []);
-			setMsg(`Saved ${j.path} · modifiedDate touched`);
+			setMsg(isJsonFile ? `Saved ${j.path}` : `Saved ${j.path} · modifiedDate touched`);
 			toast.success(`Saved ${j.path}`);
 			entryQuery.refresh();
-			seoQuery.refresh();
+			if (!isJsonFile) seoQuery.refresh();
 		} catch (e: unknown) {
 			const code = (e as { code?: unknown }).code;
 			const fields = (e as { fields?: Record<string, string> }).fields;
@@ -335,7 +317,12 @@ function UnifiedEditor() {
 		<PageShell>
 			<PageHeader
 				actions={
-					<Button nativeButton={false} render={<Link to="/content" />} size="sm" variant="outline">
+					<Button
+						nativeButton={false}
+						render={<Link search={{ collection: undefined, entry: undefined }} to="/content" />}
+						size="sm"
+						variant="outline"
+					>
 						<ArrowLeftIcon className="size-3.5" />
 						Back to content
 					</Button>
@@ -354,7 +341,7 @@ function UnifiedEditor() {
 							{String(fm.status ?? "draft")}
 						</Badge>
 						<Badge className="font-mono" variant="outline">
-							updated {new Date(mtime).toLocaleTimeString()}
+							updated {formatMtimeTime(mtime)}
 						</Badge>
 						<LiveBadge refreshing={entryRefreshing} />
 					</>
@@ -374,9 +361,8 @@ function UnifiedEditor() {
 						</Button>
 						<Button
 							onClick={() => {
-								fetch("/api/cms/diff?path=" + encodeURIComponent(filePath.split("#")[0]))
-									.then((r) => r.json())
-									.then((j) => setDiff(j.diff ?? ""))
+								void fetchEntryDiff(fp)
+									.then((text) => setDiff(text))
 									.catch((e: unknown) => toast.error(String(e)));
 							}}
 							size="sm"
@@ -387,19 +373,16 @@ function UnifiedEditor() {
 						</Button>
 						<Button
 							onClick={() => {
-								fetch("/api/cms/duplicate", {
-									body: JSON.stringify({ path: filePath.split("#")[0] }),
-									headers: { "Content-Type": "application/json" },
-									method: "POST",
-								})
-									.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-									.then(({ body: res, ok }) => {
-										const message = ok ? `Duplicated → ${res.path}` : res.message;
-										setMsg(message);
-										if (ok) toast.success(message);
-										else toast.error(message);
+								void duplicateEntry(fp)
+									.then((path) => {
+										setMsg(`Duplicated → ${path}`);
+										toast.success(`Duplicated → ${path}`);
 									})
-									.catch((e: unknown) => toast.error(String(e)));
+									.catch((e: unknown) => {
+										const message = e instanceof Error ? e.message : String(e);
+										setMsg(message);
+										toast.error(message);
+									});
 							}}
 							size="sm"
 							variant="outline"
@@ -460,23 +443,20 @@ function UnifiedEditor() {
 							</Field>
 							<Button
 								onClick={() => {
-									fetch("/api/cms/rename", {
-										body: JSON.stringify({ newSlug: slugEdit, path: fp }),
-										headers: { "Content-Type": "application/json" },
-										method: "POST",
-									})
-										.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-										.then(({ body: res, ok }) => {
-											if (ok) {
-												setMsg(`Renamed → ${res.path}`);
-												toast.success(`Renamed → ${res.path}`);
-												window.location.href = `/edit/${collection}/${encodeURIComponent(slugEdit)}?path=${encodeURIComponent(res.path)}`;
-											} else {
-												setErr(res.message);
-												toast.error(res.message);
-											}
+									void renameEntry(fp, slugEdit)
+										.then((path) => {
+											setMsg(`Renamed → ${path}`);
+											toast.success(`Renamed → ${path}`);
+											void navigate({
+												params: { collection, id: slugEdit },
+												search: { path },
+											});
 										})
-										.catch((e: unknown) => toast.error(String(e)));
+										.catch((e: unknown) => {
+											const message = e instanceof Error ? e.message : String(e);
+											setErr(message);
+											toast.error(message);
+										});
 								}}
 								size="sm"
 								variant="outline"
@@ -495,7 +475,7 @@ function UnifiedEditor() {
 						setRowId={setJsonRowId}
 						setRows={setJsonRows}
 					/>
-				) : filePath.endsWith(".ts") ? (
+				) : fp.endsWith(".ts") ? (
 					<Card>
 						<CardHeader>
 							<CardTitle>Settings file</CardTitle>
@@ -560,8 +540,8 @@ function UnifiedEditor() {
 										<TabsContent value="visual">
 											{tiptap && <EditorContent editor={tiptap} />}
 											<p className="mt-2 text-xs text-muted-foreground">
-												Uneditable blocks preserved as opaque placeholders — switch to Markdown for
-												JSX.
+												Visual is a read-only preview — edit in Markdown so MDX and JSX round-trip
+												byte-for-byte.
 											</p>
 										</TabsContent>
 									</CardContent>
@@ -658,21 +638,17 @@ function UnifiedEditor() {
 							<Button
 								onClick={() => {
 									setDeleteOpen(false);
-									fetch("/api/cms/entry", {
-										body: JSON.stringify({ path: fp, rowId: jsonRowId ?? undefined }),
-										headers: { "Content-Type": "application/json" },
-										method: "DELETE",
-									})
-										.then(async (r) => ({ body: await r.json(), ok: r.ok }))
-										.then(({ body: res, ok }) => {
-											const message = ok
-												? `Trashed → ${res.trashPath}`
-												: `Delete failed: ${res.message}`;
+									void deleteEntry(fp, jsonRowId ?? undefined)
+										.then((trashPath) => {
+											const message = `Trashed → ${trashPath}`;
 											setMsg(message);
-											if (ok) toast.success(message);
-											else toast.error(message);
+											toast.success(message);
 										})
-										.catch((e: unknown) => toast.error(String(e)));
+										.catch((e: unknown) => {
+											const message = e instanceof Error ? e.message : String(e);
+											setMsg(`Delete failed: ${message}`);
+											toast.error(message);
+										});
 								}}
 								variant="destructive"
 							>
@@ -683,652 +659,5 @@ function UnifiedEditor() {
 				</AlertDialog>
 			</div>
 		</PageShell>
-	);
-}
-
-function FrontmatterForm({ fm, setFm, fieldErrors, media, aiDraft }: any) {
-	const set = (k: string, v: unknown) => setFm((p: any) => ({ ...p, [k]: v }));
-	const tag = (k: string, v: string) =>
-		set(
-			k,
-			v
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean),
-		);
-	return (
-		<FieldGroup>
-			{aiDraft ? (
-				<Hint title="AI draft" variant="info">
-					AI-drafted until edited: {aiDraft}
-				</Hint>
-			) : null}
-			<Field data-invalid={Boolean(fieldErrors.title)}>
-				<FieldLabel htmlFor="fm-title">title</FieldLabel>
-				<Input
-					id="fm-title"
-					onChange={(e) => set("title", e.target.value)}
-					value={String(fm.title ?? "")}
-				/>
-				{fieldErrors.title && <FieldError>{fieldErrors.title}</FieldError>}
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-description">description</FieldLabel>
-				<Textarea
-					id="fm-description"
-					onChange={(e) =>
-						set(fm.description === undefined ? "excerpt" : "description", e.target.value)
-					}
-					value={String(fm.description ?? fm.excerpt ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-excerpt">excerpt</FieldLabel>
-				<Textarea
-					id="fm-excerpt"
-					onChange={(e) => set("excerpt", e.target.value)}
-					value={String(fm.excerpt ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-status">status</FieldLabel>
-				<Select onValueChange={(v) => set("status", v)} value={String(fm.status ?? "draft")}>
-					<SelectTrigger id="fm-status">
-						<SelectValue placeholder="Select status" />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="draft">draft</SelectItem>
-						<SelectItem value="published">published</SelectItem>
-						<SelectItem value="scheduled">scheduled</SelectItem>
-					</SelectContent>
-				</Select>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-publish-date">publishDate</FieldLabel>
-				<Input
-					id="fm-publish-date"
-					onChange={(e) => set("publishDate", e.target.value)}
-					type="date"
-					value={String(fm.publishDate ?? fm.date ?? "").slice(0, 10)}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-modified">modifiedDate</FieldLabel>
-				<Input
-					id="fm-modified"
-					onChange={(e) => set("modifiedDate", e.target.value)}
-					value={String(fm.modifiedDate ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-author">author</FieldLabel>
-				<Input
-					id="fm-author"
-					onChange={(e) => set("author", e.target.value)}
-					value={String(fm.author ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-categories">categories (comma)</FieldLabel>
-				<Input
-					id="fm-categories"
-					onChange={(e) =>
-						tag(fm.categories === undefined ? "filter_category" : "categories", e.target.value)
-					}
-					value={(fm.categories ?? fm.filter_category ?? []).join?.(", ") ?? ""}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-tags">tags (comma)</FieldLabel>
-				<Input
-					id="fm-tags"
-					onChange={(e) => tag("tags", e.target.value)}
-					value={(fm.tags ?? []).join?.(", ") ?? ""}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-keywords">keywords (comma)</FieldLabel>
-				<Input
-					id="fm-keywords"
-					onChange={(e) => tag("keywords", e.target.value)}
-					value={(fm.keywords ?? []).join?.(", ") ?? ""}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-hero">hero_image / featuredImage</FieldLabel>
-				<Input
-					id="fm-hero"
-					onChange={(e) =>
-						set(fm.hero_image === undefined ? "featuredImage" : "hero_image", e.target.value)
-					}
-					value={String(fm.hero_image ?? fm.featuredImage ?? "")}
-				/>
-				<MediaPicker
-					media={media}
-					onPick={(p: string) =>
-						set(fm.hero_image === undefined ? "featuredImage" : "hero_image", p)
-					}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-og-image">ogImage</FieldLabel>
-				<Input
-					id="fm-og-image"
-					onChange={(e) => set("ogImage", e.target.value)}
-					value={String(fm.ogImage ?? "")}
-				/>
-				<MediaPicker media={media} onPick={(p: string) => set("ogImage", p)} />
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-canonical">canonicalUrl</FieldLabel>
-				<Input
-					id="fm-canonical"
-					onChange={(e) => set("canonicalUrl", e.target.value)}
-					value={String(fm.canonicalUrl ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-meta-title">metaTitle</FieldLabel>
-				<Input
-					id="fm-meta-title"
-					onChange={(e) => set("metaTitle", e.target.value)}
-					value={String(fm.metaTitle ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-meta-desc">metaDescription</FieldLabel>
-				<Textarea
-					id="fm-meta-desc"
-					onChange={(e) => set("metaDescription", e.target.value)}
-					value={String(fm.metaDescription ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-og-type">ogType</FieldLabel>
-				<Input
-					id="fm-og-type"
-					onChange={(e) => set("ogType", e.target.value)}
-					value={String(fm.ogType ?? "article")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-twitter">twitterCard</FieldLabel>
-				<Input
-					id="fm-twitter"
-					onChange={(e) => set("twitterCard", e.target.value)}
-					value={String(fm.twitterCard ?? "summary_large_image")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-hero-tag">hero_tag</FieldLabel>
-				<Select onValueChange={(v) => set("hero_tag", v || null)} value={String(fm.hero_tag ?? "")}>
-					<SelectTrigger id="fm-hero-tag">
-						<SelectValue placeholder="(none)" />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="">(none)</SelectItem>
-						<SelectItem value="featured">featured</SelectItem>
-						<SelectItem value="open-source">open-source</SelectItem>
-						<SelectItem value="ongoing">ongoing</SelectItem>
-					</SelectContent>
-				</Select>
-			</Field>
-			<Field orientation="horizontal">
-				<Checkbox
-					checked={Boolean(fm.noindex)}
-					id="fm-noindex"
-					onCheckedChange={(checked) => set("noindex", checked === true)}
-				/>
-				<FieldLabel htmlFor="fm-noindex">noindex</FieldLabel>
-				<Checkbox
-					checked={Boolean(fm.nofollow)}
-					id="fm-nofollow"
-					onCheckedChange={(checked) => set("nofollow", checked === true)}
-				/>
-				<FieldLabel htmlFor="fm-nofollow">nofollow</FieldLabel>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-schema">schemaType</FieldLabel>
-				<Select onValueChange={(v) => set("schemaType", v)} value={String(fm.schemaType ?? "")}>
-					<SelectTrigger id="fm-schema">
-						<SelectValue placeholder="(none)" />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="">(none)</SelectItem>
-						{[
-							"BlogPosting",
-							"Article",
-							"HowTo",
-							"WebPage",
-							"WebPage/About",
-							"WebPage/FAQ",
-							"SoftwareApplication",
-							"Review",
-							"Organization",
-							"Person",
-							"Product",
-						].map((t) => (
-							<SelectItem key={t} value={t}>
-								{t}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-schema-fields">schemaFields (JSON)</FieldLabel>
-				<Textarea
-					className="font-mono"
-					id="fm-schema-fields"
-					onChange={(e) => {
-						try {
-							set("schemaFields", JSON.parse(e.target.value));
-						} catch {
-							set("schemaFields", e.target.value);
-						}
-					}}
-					value={
-						typeof fm.schemaFields === "object"
-							? JSON.stringify(fm.schemaFields, null, 2)
-							: String(fm.schemaFields ?? "")
-					}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-github">links.github</FieldLabel>
-				<Input
-					id="fm-github"
-					onChange={(e) => set("links", { ...(fm.links as any), github: e.target.value })}
-					value={String((fm.links as any)?.github ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-preview">links.preview</FieldLabel>
-				<Input
-					id="fm-preview"
-					onChange={(e) => set("links", { ...(fm.links as any), preview: e.target.value })}
-					value={String((fm.links as any)?.preview ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-timeline">timeline</FieldLabel>
-				<Input
-					id="fm-timeline"
-					onChange={(e) => set("timeline", e.target.value)}
-					value={String(fm.timeline ?? "")}
-				/>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="fm-year">year</FieldLabel>
-				<Input
-					id="fm-year"
-					onChange={(e) => set("year", Number(e.target.value))}
-					type="number"
-					value={Number(fm.year ?? 2024)}
-				/>
-			</Field>
-		</FieldGroup>
-	);
-}
-
-function MediaPicker({
-	media,
-	onPick,
-}: {
-	media: { path: string }[];
-	onPick: (p: string) => void;
-}) {
-	return (
-		<Select onValueChange={(v) => v && onPick(v)} value="">
-			<SelectTrigger>
-				<SelectValue placeholder="Pick media…" />
-			</SelectTrigger>
-			<SelectContent>
-				{media.slice(0, 200).map((m) => (
-					<SelectItem key={m.path} value={m.path}>
-						{m.path}
-					</SelectItem>
-				))}
-			</SelectContent>
-		</Select>
-	);
-}
-
-function FaithfulPreview({ slug, collection }: { slug: string; collection: string }) {
-	const [astroUrl, setAstroUrl] = useState<string | null>(null);
-	useEffect(() => {
-		fetch("/api/cms/settings")
-			.then((r) => r.json())
-			.then((j) => setAstroUrl(j.env?.astroUrl ?? null))
-			.catch(() => {});
-	}, []);
-	if (!astroUrl) {
-		return (
-			<Hint title="Faithful preview needs ASTRO_URL" variant="info">
-				Start the Astro dev server and set <code>ASTRO_URL</code> for a pixel-faithful iframe. The
-				local render above always works.
-			</Hint>
-		);
-	}
-	const previewPath =
-		collection === "blog" ? `blog/${slug}` : collection === "projects" ? `work/${slug}` : "legal";
-	return (
-		<iframe
-			sandbox="allow-scripts"
-			src={`${astroUrl}/${previewPath}`}
-			style={{ height: 480, width: "100%" }}
-			title="faithful"
-		/>
-	);
-}
-
-function SeoPane({ seo, fm, setFm, setAiDraft, setAiBusy, aiBusy, body }: any) {
-	const [suggest, setSuggest] = useState<string[]>([]);
-	if (!seo) return <p className="text-sm text-muted-foreground">Loading SEO…</p>;
-	return (
-		<div className="grid gap-3 text-sm">
-			<div className="flex flex-wrap items-center gap-1.5">
-				<Badge variant="brand">Score: {seo.score}/100</Badge>
-				<Badge variant="outline">Flesch {seo.readability?.flesch}</Badge>
-				<Badge variant="outline">keywords {seo.keywordCoverage}%</Badge>
-			</div>
-			<p className="text-xs text-muted-foreground">
-				title {seo.counts?.titleLen} · desc {seo.counts?.descriptionLen} · words{" "}
-				{seo.counts?.wordCount}
-			</p>
-			<ul className="grid gap-1">
-				{seo.checks?.map((c: any) => (
-					<li className="flex items-start gap-1.5 text-13" key={c.id}>
-						{c.status === "pass" ? (
-							<CircleCheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />
-						) : c.status === "warn" ? (
-							<TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
-						) : (
-							<CircleXIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-						)}
-						<span>
-							{c.label}
-							{c.detail ? ` — ${c.detail}` : ""}
-						</span>
-					</li>
-				))}
-			</ul>
-			<details>
-				<summary className="text-xs font-medium text-muted-foreground hover:text-foreground">
-					JSON-LD preview
-				</summary>
-				<pre className="code-surface mt-2 max-h-45dvh overflow-auto p-3 font-mono text-xs">
-					{JSON.stringify(seo.jsonLd, null, 2)?.slice(0, 2000)}
-				</pre>
-			</details>
-			<Separator />
-			<InputGroup>
-				<InputGroupAddon>
-					<SparklesIcon />
-				</InputGroupAddon>
-				<InputGroupInput
-					aria-label="AI suggestion prompt context"
-					placeholder="AI suggestions write back into the form…"
-					readOnly
-					value={suggest[0] ?? ""}
-				/>
-			</InputGroup>
-			<div className="flex flex-wrap items-center gap-2">
-				<Button
-					disabled={!seo.aiEnabled || aiBusy}
-					onClick={() => {
-						setAiBusy(true);
-						fetch("/api/cms/seo/ai", {
-							body: JSON.stringify({ action: "excerpt", body, frontmatter: fm }),
-							headers: { "Content-Type": "application/json" },
-							method: "POST",
-						})
-							.then(async (r) => {
-								const j = await r.json();
-								if (!r.ok) throw new Error(j.message);
-								return j;
-							})
-							.then((j) => {
-								setSuggest(j.suggestions ?? []);
-								if (j.suggestions?.[0]) {
-									setFm((p: any) => ({ ...p, excerpt: j.suggestions[0] }));
-									setAiDraft("excerpt (AI-drafted)");
-								}
-							})
-							.catch((e: any) => toast.error(e.message))
-							.finally(() => setAiBusy(false));
-					}}
-					size="sm"
-					title={seo.aiEnabled ? "" : "Set AI_BASE_URL + AI_API_KEY to enable"}
-					variant="outline"
-				>
-					{aiBusy && <Spinner />}
-					Suggest excerpt
-				</Button>
-				<Button
-					disabled={!seo.aiEnabled || aiBusy}
-					onClick={() => {
-						setAiBusy(true);
-						fetch("/api/cms/seo/ai", {
-							body: JSON.stringify({ action: "titles", body, frontmatter: fm }),
-							headers: { "Content-Type": "application/json" },
-							method: "POST",
-						})
-							.then(async (r) => {
-								const j = await r.json();
-								if (!r.ok) throw new Error(j.message);
-								return j;
-							})
-							.then((j) => {
-								setSuggest(j.suggestions ?? []);
-							})
-							.catch((e: any) => toast.error(e.message))
-							.finally(() => setAiBusy(false));
-					}}
-					size="sm"
-					title={seo.aiEnabled ? "" : "Set AI_BASE_URL + AI_API_KEY to enable"}
-					variant="outline"
-				>
-					{aiBusy && <Spinner />}
-					Suggest titles
-				</Button>
-				{!seo.aiEnabled && (
-					<p className="text-xs text-muted-foreground">
-						AI off — set <code>AI_BASE_URL</code> + <code>AI_API_KEY</code> (BYOK)
-					</p>
-				)}
-			</div>
-			{suggest.length > 0 && (
-				<ul className="grid gap-1">
-					{suggest.map((s) => (
-						<li className="text-13" key={s}>
-							{s}
-						</li>
-					))}
-				</ul>
-			)}
-			<p className="font-mono text-xs text-muted-foreground">Never blocks save.</p>
-		</div>
-	);
-}
-
-function JsonTableEditor({ rows, setRows, rowId, setRowId, media }: any) {
-	const sel = rows.find((r: any) => String(r.id) === String(rowId)) ?? rows[0];
-	const [rowDeleteOpen, setRowDeleteOpen] = useState(false);
-	const setRow = (patch: any) => {
-		setRows((prev: any[]) =>
-			prev.map((r) => (String(r.id) === String(sel?.id) ? { ...r, ...patch } : r)),
-		);
-	};
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>Table editor ({rows.length} rows)</CardTitle>
-			</CardHeader>
-			<CardContent className="grid gap-3">
-				<div className="flex flex-wrap items-center gap-2">
-					<Select onValueChange={(v) => setRowId(v)} value={String(sel?.id ?? "")}>
-						<SelectTrigger className="w-52">
-							<SelectValue placeholder="Select row" />
-						</SelectTrigger>
-						<SelectContent>
-							{rows.map((r: any) => (
-								<SelectItem key={String(r.id)} value={String(r.id)}>
-									{String(r.id)}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-					<Button
-						onClick={() => {
-							const id = `new-${Date.now()}`;
-							setRows((p: any[]) => [...p, { id }]);
-							setRowId(id);
-						}}
-						size="sm"
-						variant="outline"
-					>
-						Add row
-					</Button>
-					<Button
-						disabled={!sel}
-						onClick={() => {
-							if (sel) setRowDeleteOpen(true);
-						}}
-						size="sm"
-						variant="destructive"
-					>
-						Delete row
-					</Button>
-				</div>
-				{sel ? (
-					<FieldGroup>
-						<Field>
-							<FieldLabel htmlFor="json-id">id</FieldLabel>
-							<Input
-								id="json-id"
-								onChange={(e) => setRow({ id: e.target.value })}
-								value={String(sel.id ?? "")}
-							/>
-						</Field>
-						{(sel.logo !== undefined || sel.img !== undefined) && (
-							<Field>
-								<FieldLabel htmlFor="json-logo">
-									{sel.logo === undefined ? "img" : "logo"}
-								</FieldLabel>
-								<Input
-									id="json-logo"
-									onChange={(e) =>
-										setRow(
-											sel.logo === undefined ? { img: e.target.value } : { logo: e.target.value },
-										)
-									}
-									value={String(sel.logo ?? sel.img ?? "")}
-								/>
-								<Select
-									onValueChange={(v) =>
-										v && setRow(sel.logo === undefined ? { img: v } : { logo: v })
-									}
-									value=""
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="— pick media —" />
-									</SelectTrigger>
-									<SelectContent>
-										{media.slice(0, 200).map((m: any) => (
-											<SelectItem key={m.path} value={m.path}>
-												{m.path}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</Field>
-						)}
-						{sel.role !== undefined && (
-							<Field>
-								<FieldLabel htmlFor="json-role">role</FieldLabel>
-								<Input
-									id="json-role"
-									onChange={(e) => setRow({ role: e.target.value })}
-									value={String(sel.role ?? "")}
-								/>
-							</Field>
-						)}
-						{sel.text !== undefined && (
-							<Field>
-								<FieldLabel htmlFor="json-text">text</FieldLabel>
-								<Textarea
-									id="json-text"
-									onChange={(e) => setRow({ text: e.target.value })}
-									value={String(sel.text ?? "")}
-								/>
-							</Field>
-						)}
-						{sel.className !== undefined && (
-							<Field>
-								<FieldLabel htmlFor="json-class">className</FieldLabel>
-								<Input
-									id="json-class"
-									onChange={(e) => setRow({ className: e.target.value })}
-									value={String(sel.className ?? "")}
-								/>
-							</Field>
-						)}
-						<Field>
-							<FieldLabel htmlFor="json-proof">proof (JSON)</FieldLabel>
-							<Textarea
-								className="font-mono"
-								id="json-proof"
-								onChange={(e) => {
-									try {
-										const v = JSON.parse(e.target.value);
-										if (sel.proof !== undefined || e.target.value.includes("proof"))
-											setRow({ proof: v });
-										else setRow({ project: v });
-									} catch {
-										/* keep typing */
-									}
-								}}
-								value={JSON.stringify(sel.proof ?? sel.project ?? "", null, 2)}
-							/>
-						</Field>
-						<ScrollArea className="max-h-45dvh">
-							<pre className="code-surface p-3 font-mono text-xs">
-								{JSON.stringify(sel, null, 2).slice(0, 2000)}
-							</pre>
-						</ScrollArea>
-					</FieldGroup>
-				) : (
-					<EmptyState
-						compact
-						description="Add a row to get started."
-						icon={FileTextIcon}
-						title="No rows"
-					/>
-				)}
-			</CardContent>
-			<AlertDialog onOpenChange={setRowDeleteOpen} open={rowDeleteOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Delete row {sel?.id}?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This removes the row from the table. Save to persist.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<Button
-							onClick={() => {
-								setRowDeleteOpen(false);
-								if (sel) setRows((p: any[]) => p.filter((r) => String(r.id) !== String(sel.id)));
-							}}
-							variant="destructive"
-						>
-							Delete row
-						</Button>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-		</Card>
 	);
 }

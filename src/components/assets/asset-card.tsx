@@ -2,7 +2,7 @@ import { CopyIcon } from "lucide-react";
 
 import { Button } from "#/components/ui/button";
 import { cn } from "#/lib/utils";
-import { AssetKindGlyph } from "./asset-kind-icon";
+import { AssetIcon } from "./asset-kind-icon";
 import type { AssetRow } from "./types";
 import { formatBytes, isPreviewableImage, mediaUrl } from "./utils";
 
@@ -18,12 +18,12 @@ export function AssetCard({ asset, className, onCopy, onOpen, showPath = true }:
 	return (
 		<li
 			className={cn(
-				"group overflow-hidden rounded-xl border border-border bg-card transition-card hover:border-foreground/20 hover:shadow-soft",
+				"group relative overflow-hidden rounded-xl border border-border bg-card transition-card hover:border-foreground/20 hover:shadow-soft",
 				className,
 			)}
 		>
 			<button
-				className="block w-full text-left outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+				className="block w-full text-left outline-none after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 				onClick={() => onOpen(asset)}
 				type="button"
 			>
@@ -37,7 +37,7 @@ export function AssetCard({ asset, className, onCopy, onOpen, showPath = true }:
 						/>
 					) : (
 						<span className="flex flex-col items-center gap-1 text-muted-foreground">
-							<AssetKindGlyph className="size-8" kind={asset.kind} />
+							<AssetIcon className="size-8" ext={asset.ext} kind={asset.kind} />
 							<span className="font-mono text-10">{asset.ext.replace(".", "")}</span>
 						</span>
 					)}
@@ -62,6 +62,7 @@ export function AssetCard({ asset, className, onCopy, onOpen, showPath = true }:
 				</span>
 				<Button
 					aria-label={`Copy ${asset.path}`}
+					className="relative"
 					onClick={() => onCopy(asset.path)}
 					size="icon-xs"
 					variant="ghost"

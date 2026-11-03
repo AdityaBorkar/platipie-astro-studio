@@ -1,17 +1,28 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
 
-function Empty({ className, ...props }: React.ComponentProps<"div">) {
-	return (
-		<div
-			data-slot="empty"
-			className={cn(
-				"flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border/80 bg-muted/20 p-6 text-center text-balance",
-				className,
-			)}
-			{...props}
-		/>
-	);
+import { cn } from "#/lib/utils";
+
+const emptyVariants = cva(
+	"flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center text-balance",
+	{
+		variants: {
+			variant: {
+				default: "rounded-none border-dashed",
+				muted: "rounded-2xl border border-dashed border-border/80 bg-muted/20",
+			},
+		},
+		defaultVariants: {
+			variant: "default",
+		},
+	},
+);
+
+function Empty({
+	className,
+	variant,
+	...props
+}: React.ComponentProps<"div"> & VariantProps<typeof emptyVariants>) {
+	return <div data-slot="empty" className={cn(emptyVariants({ variant, className }))} {...props} />;
 }
 
 function EmptyHeader({ className, ...props }: React.ComponentProps<"div">) {
@@ -30,7 +41,7 @@ const emptyMediaVariants = cva(
 		variants: {
 			variant: {
 				default: "bg-transparent",
-				icon: "flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground [&_svg:not([class*='size-'])]:size-4",
+				icon: "flex size-8 shrink-0 items-center justify-center rounded-none bg-muted text-foreground [&_svg:not([class*='size-'])]:size-4",
 			},
 		},
 		defaultVariants: {

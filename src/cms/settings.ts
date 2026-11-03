@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 
-import { findStatementEnd, stripTypeSuffix } from "./balanced.ts";
+import { findStatementEnd, stripComments, stripTypeSuffix } from "./balanced.ts";
 import { resolveRepoPath } from "./config.ts";
 import { CmsError } from "./errors.ts";
 import { isStaleWrite } from "./mtime.ts";
@@ -21,9 +21,16 @@ export const KNOWN_KEYS = [
 
 export async function readSettingsRaw(): Promise<{ raw: string; mtime: number }> {
 	const abs = resolveRepoPath(SETTINGS_PATH);
-	const raw = await fs.readFile(abs, "utf8").catch(() => {
-		throw new CmsError("NOT_FOUND", `Not found: ${SETTINGS_PATH}`, { status: 404 });
-	});
+	let raw: string;
+	try {
+		raw = await fs.readFile(abs, "utf8");
+	} catch (e) {
+		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${SETTINGS_PATH}`, { status: 404 });
+		}
+		throw e;
+	}
 	const st = await fs.stat(abs);
 	return { mtime: st.mtimeMs, raw };
 }
@@ -38,9 +45,10 @@ function validateTsSyntax(raw: string): void {
 			status: 400,
 		});
 	}
-	// Guard: must still export all known keys (additive safety).
+	// Guard: must still export all known keys (additive safety). Anchored to
+	// line start so `// export const X` comments cannot satisfy the check.
 	for (const k of KNOWN_KEYS) {
-		if (!raw.includes(`export const ${k}`)) {
+		if (!new RegExp(`^export\\s+const\\s+${k}\\b`, "mu").test(raw)) {
 			throw new CmsError("VALIDATION", `Raw TS drops required export: ${k}`, {
 				fields: { raw: `Missing ${k}` },
 				status: 400,
@@ -74,9 +82,16 @@ export async function writeSettingsRaw(
 ): Promise<{ mtime: number }> {
 	validateTsSyntax(raw);
 	const abs = resolveRepoPath(SETTINGS_PATH);
-	const st = await fs.stat(abs).catch(() => {
-		throw new CmsError("NOT_FOUND", `Not found: ${SETTINGS_PATH}`, { status: 404 });
-	});
+	let st;
+	try {
+		st = await fs.stat(abs);
+	} catch (e) {
+		if (e instanceof CmsError) throw e;
+		if ((e as NodeJS.ErrnoException)?.code === "ENOENT") {
+			throw new CmsError("NOT_FOUND", `Not found: ${SETTINGS_PATH}`, { status: 404 });
+		}
+		throw e;
+	}
 	if (!opts?.force && isStaleWrite(st.mtimeMs, mtime)) {
 		throw new CmsError("CONFLICT", "Stale write: constants.ts changed", { status: 409 });
 	}
@@ -84,27 +99,6 @@ export async function writeSettingsRaw(
 	await atomicWrite(abs, raw);
 	const st2 = await fs.stat(abs);
 	return { mtime: st2.mtimeMs };
-}
-
-function patchSiteUrlValue(next: string, key: string, val: string): string {
-	if (!next.includes("process.env.NODE_ENV")) {
-		return replaceExportBlock(next, key, `export const ${key} = ${JSON.stringify(val)};`);
-	}
-	if (val.includes("localhost") || val.includes("127.0.0.1")) {
-		return next.replaceAll(/https?:\/\/localhost:\d+/gu, val);
-	}
-	const blockStart = next.indexOf("export const SITE_URL");
-	const blockEnd = next.indexOf(";", blockStart);
-	const block = next.slice(blockStart, blockEnd);
-	const prodMatch = block.match(/https:\/\/[^"']+/u);
-	if (prodMatch) {
-		return next.slice(0, blockStart) + block.replace(prodMatch[0], val) + next.slice(blockEnd);
-	}
-	return replaceExportBlock(
-		next,
-		key,
-		`export const ${key} =\n\tprocess.env.NODE_ENV === "production" ? "${val}" : "https://localhost:3050";`,
-	);
 }
 
 export async function patchSettingsValues(
@@ -116,10 +110,6 @@ export async function patchSettingsValues(
 	let next = raw;
 	for (const [key, val] of Object.entries(values)) {
 		if (!(KNOWN_KEYS as readonly string[]).includes(key)) continue;
-		if (key === "SITE_URL" && typeof val === "string") {
-			next = patchSiteUrlValue(next, key, val);
-			continue;
-		}
 		next = replaceExportBlock(next, key, `export const ${key} = ${serializeValue(val)};`);
 	}
 	validateTsSyntax(next);
@@ -127,35 +117,174 @@ export async function patchSettingsValues(
 	return { mtime: res.mtime, raw: next };
 }
 
+class TsLiteralParser {
+	private index = 0;
+	private depth = 0;
+
+	constructor(private readonly text: string) {
+		// Size cap: constants.ts values are small; reject pathological inputs.
+		if (text.length > 1_048_576) throw new Error("literal too large");
+	}
+
+	eof(): boolean {
+		return this.index >= this.text.length;
+	}
+
+	skipWs(): void {
+		while (this.index < this.text.length && /\s/u.test(this.text[this.index])) this.index++;
+	}
+
+	parseValue(): unknown {
+		this.skipWs();
+		const ch = this.text[this.index];
+		if (ch === undefined) throw new Error("unexpected end");
+		if (ch === '"' || ch === "'" || ch === "`") return this.parseString();
+		if (ch === "[") return this.parseArray();
+		if (ch === "{") return this.parseObject();
+		const rest = this.text.slice(this.index);
+		const keyword = /^(true|false|null)(?=[\s,\]}]|$)/u.exec(rest);
+		if (keyword) {
+			this.index += keyword[1].length;
+			if (keyword[1] === "true") return true;
+			if (keyword[1] === "false") return false;
+			return null;
+		}
+		const num = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/u.exec(rest);
+		if (num) {
+			this.index += num[0].length;
+			return Number(num[0]);
+		}
+		throw new Error(`unsupported literal at: ${rest.slice(0, 24)}`);
+	}
+
+	private parseString(): string {
+		const quote = this.text[this.index];
+		let out = "";
+		let i = this.index + 1;
+		for (; i < this.text.length; i++) {
+			const ch = this.text[i];
+			if (ch === "\\") {
+				const next = this.text[i + 1];
+				if (next === undefined) break;
+				if (next === "n") out += "\n";
+				else if (next === "t") out += "\t";
+				else if (next === "r") out += "\r";
+				else out += next;
+				i++;
+			} else if (ch === quote) {
+				this.index = i + 1;
+				if (quote === "`" && out.includes("${")) throw new Error("template rejected");
+				return out;
+			} else {
+				out += ch;
+			}
+		}
+		throw new Error("unterminated string");
+	}
+
+	private parseArray(): unknown[] {
+		if (++this.depth > 50) throw new Error("nesting too deep");
+		try {
+			this.index++;
+			const out: unknown[] = [];
+			for (;;) {
+				this.skipWs();
+				if (this.text[this.index] === "]") {
+					this.index++;
+					return out;
+				}
+				out.push(this.parseValue());
+				this.skipWs();
+				if (this.text[this.index] === ",") this.index++;
+				else if (this.text[this.index] !== "]") throw new Error("expected , or ]");
+			}
+		} finally {
+			this.depth--;
+		}
+	}
+
+	private parseObject(): Record<string, unknown> {
+		if (++this.depth > 50) throw new Error("nesting too deep");
+		try {
+			this.index++;
+			const out: Record<string, unknown> = {};
+			for (;;) {
+				this.skipWs();
+				if (this.text[this.index] === "}") {
+					this.index++;
+					return out;
+				}
+				const key = this.parseKey();
+				this.skipWs();
+				if (this.text[this.index] !== ":") throw new Error("expected :");
+				this.index++;
+				out[key] = this.parseValue();
+				this.skipWs();
+				if (this.text[this.index] === ",") this.index++;
+				else if (this.text[this.index] !== "}") throw new Error("expected , or }");
+			}
+		} finally {
+			this.depth--;
+		}
+	}
+
+	private parseKey(): string {
+		this.skipWs();
+		const ch = this.text[this.index];
+		if (ch === '"' || ch === "'") return this.parseString();
+		const id = /^[A-Za-z_$][\w$]*/u.exec(this.text.slice(this.index));
+		if (!id) throw new Error("expected key");
+		this.index += id[0].length;
+		return id[0];
+	}
+}
+
+// Safe literal parser for CMS-written constants (strings, numbers, booleans,
+// null, arrays, plain objects). Never evaluates code — non-literal expressions
+// (ternaries, calls, references) are rejected and the key stays unread.
+function parseLiteralValue(expr: string): unknown {
+	const parser = new TsLiteralParser(stripComments(expr).trim());
+	const value = parser.parseValue();
+	parser.skipWs();
+	if (!parser.eof()) throw new Error("trailing input");
+	return value;
+}
+
 export function parseSettingsValues(raw: string): Record<string, unknown> {
-	const out: Record<string, unknown> = {};
+	return parseSettingsDetailed(raw).values;
+}
+
+/**
+ * Per-key parse report: `values` holds what parsed, `errors` distinguishes
+ * missing exports from unparsable ones (previously indistinguishable —
+ * both just left the key out).
+ */
+export function parseSettingsDetailed(raw: string): {
+	values: Record<string, unknown>;
+	errors: Record<string, string>;
+} {
+	const values: Record<string, unknown> = {};
+	const errors: Record<string, string> = {};
 	for (const key of KNOWN_KEYS) {
 		try {
 			const marker = `export const ${key}`;
 			const idx = raw.indexOf(marker);
-			if (idx === -1) continue;
+			if (idx === -1) {
+				errors[key] = "missing export";
+				continue;
+			}
 			const eq = raw.indexOf("=", idx);
 			const semi = findStatementEnd(raw, eq + 1);
 			const end = semi === -1 ? raw.length : semi;
-			let expr = raw.slice(eq + 1, end).trim();
-			if (key === "SITE_URL") {
-				const m = expr.match(/"(https:\/\/[^"]+)"/u);
-				if (m) out[key] = m[1];
-				continue;
-			}
-			expr = stripTypeSuffix(expr);
-			// new Function can execute arbitrary code, so regex gate restricts evaluation to literals.
-			if (
-				/^[{[].*[}\]]$/su.test(expr) ||
-				/^["']/u.test(expr) ||
-				/^(true|false|null|\d)/u.test(expr)
-			) {
-				const fn = new Function(`return (${expr});`);
-				out[key] = fn() as unknown;
-			}
-		} catch {
-			/* leave missing */
+			const expr = stripTypeSuffix(raw.slice(eq + 1, end).trim());
+			values[key] = parseLiteralValue(expr);
+		} catch (e) {
+			errors[key] = e instanceof Error ? e.message : "unparsable literal";
 		}
 	}
-	return out;
+	return { errors, values };
+}
+
+export function parseSettingsErrors(raw: string): Record<string, string> {
+	return parseSettingsDetailed(raw).errors;
 }
